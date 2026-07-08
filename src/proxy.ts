@@ -1,8 +1,9 @@
-// src/proxy.ts
+// src/middleware.ts أو src/proxy.ts (المهم حط الكود ده)
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { runWithContext, type RequestContext } from '@/lib/context';
+
+// 🔥 إجبار الـ Compiler على تشغيل الملف بالكامل في بيئة الـ Edge ليرضي Cloudflare
 export const runtime = 'edge';
 
 // ============================================================
@@ -38,26 +39,47 @@ export async function proxy(request: NextRequest) {
 
   let sessionData: { userId?: string; merchantId?: string; role?: string } = {};
 
-  // جلب الجلسة للمسارات المحمية
+  // جلب الجلسة للمسارات المحمية عبر الـ API مباشرة لتفادي الـ Node.js Drivers Node 
+  // جلب الجلسة للمسارات المحمية عبر الـ API مباشرة
   if (!isPublicPath(pathname)) {
     try {
-      const session = await auth.api.getSession({ headers: request.headers });
+      const authUrl = new URL('/api/auth/get-session', request.url);
+      const sessionRes = await fetch(authUrl.toString(), {
+        headers: {
+          cookie: request.headers.get('cookie') || '',
+          authorization: request.headers.get('authorization') || '',
+        },
+      });
 
-      if (session?.user) {
-        const user = session.user; // 👈 التيبات هنا مقروءة تلقائياً من src/lib/auth-types.d.ts
-        
-        // طرد الـ null تماماً وتحويله لـ undefined ليتوافق مع الـ RequestContext والـ Standard
-        sessionData = {
-          userId: user.id,
-          merchantId: user.merchantId || undefined,
-          role: user.role || undefined,
+      if (sessionRes.ok) {
+        // 💡 هنا التعديل: بنقول للـ TypeScript إن الـ JSON اللي راجع جواه كائن الـ user والبيانات بتاعته
+        const session = (await sessionRes.json()) as {
+          user?: {
+            id: string;
+            merchantId?: string | null;
+            role?: string | null;
+          };
         };
+        
+        if (session && session.user) {
+          const user = session.user;
+          
+          sessionData = {
+            userId: user.id,
+            merchantId: user.merchantId || undefined,
+            role: user.role || undefined,
+          };
 
-        requestHeaders.set('x-user-id', user.id);
-        if (user.merchantId) requestHeaders.set('x-merchant-id', user.merchantId);
-        if (user.role) requestHeaders.set('x-user-role', user.role);
+          requestHeaders.set('x-user-id', user.id);
+          if (user.merchantId) requestHeaders.set('x-merchant-id', user.merchantId);
+          if (user.role) requestHeaders.set('x-user-role', user.role);
+        } else {
+          return new NextResponse(
+            JSON.stringify({ error: 'AUTH_401: Unauthorized access to protected resource' }), 
+            { status: 401, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
       } else {
-        // 🔒 حماية فورية بأكواد الـ Standard
         return new NextResponse(
           JSON.stringify({ error: 'AUTH_401: Unauthorized access to protected resource' }), 
           { status: 401, headers: { 'Content-Type': 'application/json' } }
@@ -98,6 +120,8 @@ export async function proxy(request: NextRequest) {
 function generateCorrelationId(): string {
   return `pro-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
 }
+
+export default proxy;
 
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico)$).*)'],
