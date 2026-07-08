@@ -1,0 +1,304 @@
+🏛️ دكاني - البلو برينت المعماري للفرونت اند والتصميم الذري (الإصدار 3.0 - الإصدار النهائي المُحكَم)
+الإصدار: 3.0 (الإصدار المعماري النهائي المُحكَم للواجهات)
+الهوية: نظام تصميم متكامل للواجهات الأمامية (Storefront, Dashboard, Mini App)، يعتمد على منهجية التصميم الذري (Atomic Design)، مع عزل تام بين أنظمة العرض، وأداء فائق، وتجربة مستخدم سلسة، ودعم كامل للـ SEO، والتدويل (i18n)، والتكامل مع Telegram Mini App، مع مراعاة قيود بيئة Cloudflare Edge.
+
+📜 الديباجة: فلسفة "العزل البصري المُحكَم" (Visual Isolation Reinforced)
+في هذا البلو برينت، نطبق مبدأ العزل البصري الموازي للعزل المعماري في الخلفية، مع مراعاة قيود بيئة Cloudflare Edge Runtime بشكل صارم. كل واجهة (متجر، داشبورد، تطبيق مصغر) تعمل كـ "جزيرة بصرية" مستقلة، لها نظام تصميمها الخاص، ومكوناتها الذرية، واستراتيجية تحميلها، مع الحفاظ على هوية بصرية موحدة للمنصة من خلال طبقة أساسية مشتركة من المتغيرات (Design Tokens).
+
+المبادئ الحاكمة المُحدَّثة:
+
+العزل التام: واجهة المتجر لا تعرف شيئاً عن واجهة الداشبورد، والعكس صحيح. كل نظام له مكوناته الذرية الخاصة به.
+
+الحد الأدنى من JavaScript: جزر تفاعلية (Islands) صغيرة جداً (< 5KB لكل جزيرة)، مع تحميل كسول (Lazy Loading) للمكونات الثقيلة.
+
+التصميم الذري: بناء الواجهات من وحدات صغيرة قابلة لإعادة الاستخدام (ذرات، جزيئات، كائنات، قوالب، صفحات).
+
+التكامل السلس: واجهات تعمل بتناغم مع الخدمات الخلفية (D1, Workers, R2, Redis) عبر API موحدة.
+
+Edge-First: جميع الواجهات تعمل على runtime = 'edge' مع تفعيل compatibility_flags = ["nodejs_compat"].
+
+الأداء الفائق: زمن تحميل أولي < 1.5 ثانية، وأوق استجابة تفاعلية < 100ms.
+
+إمكانية الوصول: الامتثال لـ WCAG 2.1 AA (ARIA، لوحة المفاتيح، تباين الألوان).
+
+التجاوبية: تصميم متجاوب (Mobile-First) يعمل على جميع الأجهزة.
+
+SEO أولاً: مدمج في التصميم منذ اليوم الأول (Sitemaps، OpenGraph، JSON-LD).
+
+التدويل (i18n): دعم كامل للغتين العربية والإنجليزية مع RTL.
+
+التكامل مع Telegram: دعم Mini App، Webhook، و Magic Links.
+
+🌍 الباب الأول: الفلسفة المعمارية للفرونت اند (المُصحَّح)
+1.1 التقسيم العضوي للمسارات (مع مراعاة البيئة Edge-First)
+جميع المسارات تعمل بـ runtime = 'edge' (لا استثناءات).
+
+لا نستخدم runtime = 'nodejs' لأنه غير متوفر في نموذج النشر الموحد على Cloudflare Pages/Workers.
+
+تفعيل compatibility_flags = ["nodejs_compat"] في wrangler.toml لضمان عمل المكتبات التي تعتمد على APIs Node.js.
+
+استراتيجية الكاش:
+
+المتجر (Storefront): Stale-While-Revalidate عبر Cache Headers (Cache-Control: stale-while-revalidate=86400).
+
+الداشبورد (Dashboard): ديناميكي (Force-dynamic) مع تخزين مؤقت قصير عبر Redis.
+
+الميني أب (Mini App): Cache على الحافة (5 ثوانٍ) مع runtime = 'edge'.
+
+المصادقة (Auth): لا كاش (أمان كامل).
+
+استخدام output: 'standalone' في next.config.ts لتقليل حجم البناء وتحسين Cold Starts.
+
+1.2 آلية الكاش الذكي (المُصحَّحة)
+نعتمد على الـ Cache Handler المدمج في @opennextjs/cloudflare، ولا نقوم بكتابة Custom Handler يدوي.
+
+التنفيذ العملي:
+
+في open-next.config.mjs، نفعّل الـ Cache Handler التلقائي للـ KV.
+
+نضبط revalidateTag و revalidatePath عبر الـ API الداخلية لـ Next.js.
+
+نكتفي بضبط fetch مع next: { tags: [...] } و next: { revalidate: ... }.
+
+1.3 التدويل (i18n) – دعم العربية والإنجليزية
+المكتبة: next-intl (متوافقة مع Edge).
+
+الهيكل: مسارات /[locale]/[storeSlug]/... حيث locale = ar أو en.
+
+RTL: استخدام dir="rtl" على العنصر الجذر عند التبديل للعربية.
+
+الترجمات: تُخزّن في ملفات JSON (لكل لغة) داخل messages/.
+
+اكتشاف اللغة: في الـ Middleware، نقرأ Accept-Language أو نستخدم إعدادات التاجر.
+
+مكونات RTL-aware: جميع المكونات تستخدم useLocale من next-intl لتطبيق الاتجاه الصحيح (RTL/LTR) على التباعد، الهوامش، والمحاذاة.
+
+1.4 تحسين محركات البحث (SEO)
+Sitemaps الديناميكية: Worker يولّد sitemap.xml لكل متجر، يُحدّث تلقائياً عند إضافة منتج جديد.
+
+OpenGraph و Twitter Cards: تُحقن في <head> ديناميكياً لكل منتج (og:title, og:image, twitter:card).
+
+JSON-LD Schema.org: إضافة Product Schema لكل صفحة منتج.
+
+Meta Tags ديناميكية: title, description, keywords تُستخرج من بيانات المنتج.
+
+Robots.txt و Canonical URLs: تُضاف تلقائياً في next.config.ts.
+
+🧩 الباب الثاني: نظام التصميم الذري (المُحدَّث)
+2.1 الذرات (Atoms)
+مجلد shared/ مخصص فقط للمكونات الصرفة:
+
+Container: حاوية بسيطة (لا تحتوي على Logic).
+
+Typography: نصوص منسقة (تعتمد فقط على Tailwind مع دعم RTL).
+
+IconWrapper: غلاف لأيقونات (لا يستورد أي مكتبة أيقونات).
+
+قاعدة حديدية: ممنوع استيراد أي شيء من shared/ في (miniapp) إذا كان يحتوي على Logic (يتم التحقق منه في CI/CD).
+
+2.2 الجزر التفاعلية (Client Islands) – مع حدود الأداء
+الجزيرة	الحجم التقريبي	الوظيفة
+CartCounter	< 2KB	تحديث عداد السلة فوراً (بدون إعادة تحميل الصفحة).
+SearchBar	< 5KB	بحث فوري مع اقتراحات (Debounced).
+AddToCartButton	< 3KB	إضافة للسلة مع useOptimistic (تحديث وهمي فوري).
+ProductCarousel	< 8KB	عرض صور المنتج في معرض متحرك.
+InfiniteScroll	< 4KB	تحميل منتجات غير محدود عند التمرير.
+2.3 قيود حجم الحزمة (Bundle Size Budget)
+المتجر (Storefront): < 100KB (JavaScript الإجمالي).
+
+الداشبورد (Dashboard): < 300KB (JavaScript الإجمالي).
+
+الميني أب (Mini App): < 50KB (JavaScript الإجمالي).
+
+آلية التحقق: يتم تشغيل @next/bundle-analyzer في CI/CD، وإذا تجاوز الحجم الحدود، يفشل البناء (Build Fail).
+
+⚡ الباب الثالث: استراتيجية الأداء والتحميل (المُحدَّث)
+3.1 تحميل DuckDB-WASM (Chunked Loading + Server Fallback)
+المشكلة: DuckDB-WASM حجمه ~20MB، وتحميله دفعة واحدة قد يسبب تجميد الواجهة على الأجهزة الضعيفة.
+
+الحل:
+
+Chunked Loading: تحميل DuckDB-WASM على أجزاء (Chunks) باستخدام await import() مع webpackChunkName.
+
+Prefetching: تحميل DuckDB في الخلفية عند فتح Dashboard (وليس عند فتح صفحة التحليلات).
+
+Server Fallback: في حال فشل تحميل DuckDB (متصفح قديم أو اتصال ضعيف)، يتم إرسال طلب إلى Worker لجلب البيانات المحلّلة مسبقاً (JSON) من R2.
+
+آلية العمل:
+
+typescript
+// تحميل DuckDB بشكل متقطع
+const loadDuckDB = async () => {
+  try {
+    const module = await import('@duckdb/duckdb-wasm');
+    // تهيئة DuckDB على أجزاء
+    return module;
+  } catch (error) {
+    // Fallback: طلب JSON من السيرفر
+    return await fetch('/api/analytics/fallback?period=month');
+  }
+};
+3.2 تحميل الصور (النظام الهجين)
+لا نستخدم next/image مع التحميل التلقائي في بيئة Edge.
+
+بدلاً من ذلك:
+
+رفع الصورة (Upload):
+
+يرفع التاجر الصورة مباشرةً إلى Cloudinary (عبر Presigned URL) مع الاحتفاظ بالجودة الأصلية (Raw).
+
+المعالجة الديناميكية (Processing):
+
+عند أول طلب للصورة، يقوم Worker بتمرير الصورة إلى Cloudinary Proxy لتحويلها (ضغط، تحسين، تحويل إلى WebP/AVIF).
+
+التخزين الدائم (Caching):
+
+Worker يسحب النسخة المُعالجة ويحفظها في R2 كملف دائم.
+
+العرض (Rendering):
+
+نستخدم Custom Image Loader في next.config.ts لتوجيه الطلبات إلى CDN (R2) مباشرةً.
+
+لا نستخدم next/image التحسين التلقائي، بل نعتمد على <img> مع src مباشر.
+
+🛒 الباب الرابع: إدارة الحالة والمزامنة (المُصحَّح)
+4.1 إدارة حالة السلة (Cart State)
+السلة محلية بالكامل (Client-Side Only):
+
+تُخزَّن في Zustand مع persist (localStorage).
+
+المزامنة مع الخادم تحدث فقط في حالتين:
+
+عند الضغط على زر "اتمام الشراء" (Checkout):
+يتم إرسال بيانات السلة كاملة إلى POST /api/v1/orders للتحقق من المخزون وإنشاء الطلب.
+عند مغادرة المستخدم الموقع (onBeforeUnload):
+في حالة المستخدم المسجل دخوله، يتم حفظ السلة في الخادم (اختياري) لاستعادتها في جلسات لاحقة.
+ما تم إلغاؤه: إلغاء المزامنة الدورية كل 30 ثانية تماماً، وإلغاء أي طلبات API غير ضرورية أثناء التصفح.
+
+4.2 التعامل مع الأخطاء (Error Boundaries + Fallbacks)
+Suspense + Fallback: استخدام Suspense مع fallback (مثل Skeleton) لمنع الـ CLS.
+
+Error Boundaries: تغليف الأقسام الحرجة بـ ErrorBoundary مع عرض رسالة خطأ ودية وزر "إعادة المحاولة".
+
+Retry Logic: إعادة المحاولة التلقائية (Exponential Backoff) للطلبات الفاشلة (حتى 3 محاولات).
+
+هيكل الـ Error Boundaries:
+
+typescript
+// مثال: ErrorBoundary للصفحة الرئيسية
+<ErrorBoundary fallback={<ErrorPage />}>
+  <Suspense fallback={<PageSkeleton />}>
+    <StorefrontPage />
+  </Suspense>
+</ErrorBoundary>
+🔌 الباب الخامس: التكامل مع الخدمات الخلفية (المُحدَّث)
+5.1 تكامل Telegram Mini App
+المكتبة: @twa-dev/sdk.
+
+التحقق: Worker يتحقق من initData (التوقيع) للتأكد من أن الطلب قادم من تطبيق تليجرام.
+
+التوجيه: مسار /miniapp/[storeSlug] مع runtime = 'edge'.
+
+التصميم: خفيف جداً، بدون Header/Footer ثقيل، مع شريط سفلي (Tab Bar).
+
+نطاق Service Worker: لا نستخدم Service Worker في الميني أب (لتجنب التعارض مع WebView الخاص بتليجرام).
+
+5.2 Service Worker – النطاق المحدود
+Service Worker يستخدم فقط للمتجر العام (Storefront)، وليس للميني أب (لتجنب التعارض مع Telegram WebView).
+
+آلية العمل: تسجيل Service Worker فقط في مسار /(storefront)/ عبر next-pwa أو مخصص، مع تحديد scope: '/[storeSlug]/'.
+
+5.3 عميل API الموحد (API Client)
+جلب البيانات (Data Fetching): استخدام fetch مع cache: 'force-cache' أو next: { revalidate } في Server Components.
+
+العمليات الحساسة (Mutations): استخدام Server Actions للتعامل مع العمليات الحرجة (مخزون، دفع، طلبات).
+
+إدارة الأخطاء: استخدام try/catch مع safeExecute (نظام الأخطاء v5.0).
+
+إعادة المحاولة (Retry): إعادة المحاولة التلقائية (Exponential Backoff) للطلبات الفاشلة (باستخدام swr أو react-query).
+
+🎨 الباب السادس: التصميم والثيمات (المُحدَّث)
+6.1 المتغيرات الأساسية (Design Tokens) مع دعم RTL
+تُخزَّن جميع متغيرات التصميم في globals.css كـ CSS Variables، وتُحقن في الصفحات عبر :root و .store-theme.
+
+دعم RTL: نستخدم CSS Logical Properties (margin-inline-start بدلاً من margin-left) لضمان التصميم المتجاوب مع RTL/LTR.
+
+6.2 الثيمات (Templates) – مع حل مشكلة Cache
+الثيم الافتراضي (Elegant): يُخزّن في Cache (CDN) لمدة عام (لأنه ثابت).
+
+الثيمات المخصصة: تُحقن كـ Inline Styles في الصفحة (غير قابلة للكاش) لتجنب مشاكل التخزين المؤقت.
+
+آلية التطبيق:
+
+يُقرأ template_name من ui_preferences في الخلفية.
+
+يُحقن اسم الثيم في className للعنصر الجذر (<html class="theme-elegant">).
+
+الثيم المخصص يُحقن كـ <style> مضمّن في <head> (بحجم ~200 بايت).
+
+🧪 الباب السابع: الاختبارات والجودة (المُحدَّث)
+7.1 اختبارات الوحدة (Unit Tests)
+الأداة: Vitest.
+
+ما يُختبر: دوال cn, getContrastRatio, classifyError, ومكونات الذرات.
+
+7.2 اختبارات التكامل (Integration Tests)
+الأداة: Vitest + React Testing Library.
+
+ما يُختبر: التفاعل بين المكونات، جلب البيانات، وإدارة الحالة.
+
+7.3 اختبارات E2E (End-to-End)
+الأداة: Playwright.
+
+السيناريوهات:
+
+تسجيل تاجر جديد (عبر تليجرام).
+إضافة منتج في الداشبورد.
+تصفح المتجر وشراء منتج.
+تغيير تصميم المتجر والتحقق من التحديث.
+7.4 اختبارات الأداء (Performance Tests)
+الأداة: Lighthouse (في CI/CD) + Web Vitals (في الإنتاج).
+
+المقاييس: FCP, LCP, CLS, TTI.
+
+7.5 اختبارات إمكانية الوصول (Accessibility Tests)
+الأداة: Axe + eslint-plugin-jsx-a11y.
+
+التحقق: ARIA Labels، التنقل عبر لوحة المفاتيح، تباين الألوان.
+
+🔒 الباب الثامن: الأمان في الفرونت اند
+الهجوم	آلية الحماية
+XSS	React (يهرب المحتوى)، DOMPurify للمدخلات.
+CSRF	Anti-CSRF Tokens في طلبات POST.
+Clickjacking	X-Frame-Options: DENY.
+تسريب المعلومات	Cookies مع HttpOnly, Secure, SameSite=Lax.
+حقن CSS	استخدام Tailwind CSS (يمنع حقن CSS غير الآمن).
+🏁 الباب التاسع: الخاتمة – الميزة التنافسية للفرونت اند
+بهذا البلو برينت المُحكَم، تحصل واجهات "دكاني" على:
+
+عزل تام بين أنظمة العرض (متجر، داشبورد، ميني أب) مع أنظمة تصميم مستقلة.
+
+أداء فائق (تحميل أولي < 1.5 ثانية، تفاعل < 100ms، جزر تفاعلية < 5KB).
+
+تجربة مستخدم سلسة (تصميم ذري، ثيمات ديناميكية، تحميل كسول، تخزين مؤقت ذكي).
+
+إمكانية وصول شاملة (امتثال لـ WCAG 2.1 AA، دعم لوحة المفاتيح، تباين عالٍ).
+
+تكامل سلس مع الخدمات الخلفية عبر API موحدة و Server Actions.
+
+قابلية للتوسع والصيانة (هيكل مجلدات نظيف، مكونات قابلة لإعادة الاستخدام، اختبارات شاملة).
+
+تصميم متجاوب (Mobile-First، يعمل على جميع الأجهزة).
+
+أمان قوي (XSS, CSRF, Clickjacking, وغيرها).
+
+SEO مُحسَّن (Sitemaps، OpenGraph، JSON-LD).
+
+دعم كامل للغة العربية (i18n + RTL).
+
+تكامل متقدم مع Telegram (Mini App، Webhook، Magic Links).
+
+توافق كامل مع Cloudflare Edge (جميع الواجهات على Edge Runtime).
+
+حدود أداء صارمة (حجم حزمة < 100KB للمتجر).
+

@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["es2022"],
+    "types": ["@cloudflare/workers-types"],
+    "moduleResolution": "bundler",
+    "paths": {
+      "@/*": ["../../src/*"]
+    }
+  },
+  "include": [
+    "**/*.ts" // 🚀 هيقرا ملف index.ts وأي ملفات فرعية هنا
+  ],
+  "exclude": [
+    "node_modules" // 🚀 الحل السنيور: تصفير الـ exclude القديمة وكتابة node_modules المحلية فقط لمنع التعارض مع الـ Root
+  ]
+}

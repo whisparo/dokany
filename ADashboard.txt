@@ -1,0 +1,71 @@
+-- migrations/000_triggers.sql
+-- 📌 ملف شامل للـ Triggers الأساسية (الأمان والوقت)
+-- ⚠️ يُنفَّذ بعد إنشاء الجداول (001_schema.sql)
+
+-- ============================================
+-- 🛡️ 1. Triggers الأمان والـ Immutability (سجلات المراجعة)
+-- ============================================
+
+-- منع أي عملية تعديل (UPDATE) على جدول الـ audit_logs نهائياً
+CREATE TRIGGER IF NOT EXISTS audit_logs_prevent_update
+BEFORE UPDATE ON audit_logs
+BEGIN
+  SELECT RAISE(ABORT, 'SEC_403: Audit logs are immutable - updates not allowed');
+END;
+
+-- منع أي عملية حذف (DELETE) من جدول الـ audit_logs نهائياً
+CREATE TRIGGER IF NOT EXISTS audit_logs_prevent_delete
+BEFORE DELETE ON audit_logs
+BEGIN
+  SELECT RAISE(ABORT, 'SEC_403: Audit logs are immutable - deletes not allowed');
+END;
+
+
+-- ============================================
+-- 🔄 2. Triggers تحديث الـ updated_at تلقائياً
+-- ============================================
+
+-- جدول الحسابات والمستخدمين (Users / Merchants)
+CREATE TRIGGER IF NOT EXISTS users_updated_at
+AFTER UPDATE ON users
+FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at OR NEW.updated_at IS NULL
+BEGIN
+  UPDATE users SET updated_at = (unixepoch() * 1000) WHERE id = NEW.id;
+END;
+
+-- جدول المتاجر (Stores)
+CREATE TRIGGER IF NOT EXISTS stores_updated_at
+AFTER UPDATE ON stores
+FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at OR NEW.updated_at IS NULL
+BEGIN
+  UPDATE stores SET updated_at = (unixepoch() * 1000) WHERE id = NEW.id;
+END;
+
+-- جدول المنتجات (Products)
+CREATE TRIGGER IF NOT EXISTS products_updated_at
+AFTER UPDATE ON products
+FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at OR NEW.updated_at IS NULL
+BEGIN
+  UPDATE products SET updated_at = (unixepoch() * 1000) WHERE id = NEW.id;
+END;
+
+-- جدول التصنيفات (Categories)
+CREATE TRIGGER IF NOT EXISTS categories_updated_at
+AFTER UPDATE ON categories
+FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at OR NEW.updated_at IS NULL
+BEGIN
+  UPDATE categories SET updated_at = (unixepoch() * 1000) WHERE id = NEW.id;
+END;
+
+-- جدول الطلبات (Orders)
+CREATE TRIGGER IF NOT EXISTS orders_updated_at
+AFTER UPDATE ON orders
+FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at OR NEW.updated_at IS NULL
+BEGIN
+  UPDATE orders SET updated_at = (unixepoch() * 1000) WHERE id = NEW.id;
+END;
