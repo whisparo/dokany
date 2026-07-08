@@ -13,13 +13,17 @@ const nextConfig: NextConfig = {
   },
 
   experimental: {
+    // 💡 بنسيب الـ Rust React Compiler لأنه ممتاز وسريع جداً
+    turbopackRustReactCompiler: true,
+    
+    // ⚠️ نصيحة: لو الـ Build الجاي اشتكى، هنوقف الـ Turbopack Features دي مؤقتاً أثناء الـ Build 
+    // لأن OpenNext يعتمد على الـ Webpack build output القياسي لعمل الـ Tracing.
     turbopackMemoryEviction: 'full',
     turbopackFileSystemCacheForBuild: true,
-    turbopackRustReactCompiler: true,
     turbopackLocalPostcssConfig: true,
   },
 
-  // منع تجميع مكتبات السيرفر مع الـ Bundle الأمامي
+  // منع تجميع مكتبات السيرفر مع الـ Bundle الأمامي (ممتاز جداً للـ Edge والـ Multi-tenancy)
   serverExternalPackages: [
     '@neondatabase/serverless',
     'bcrypt-ts',
