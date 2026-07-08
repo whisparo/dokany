@@ -3,9 +3,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runWithContext, type RequestContext } from '@/lib/context';
 
-// 🔥 إجبار الـ Compiler على تشغيل الملف بالكامل في بيئة الـ Edge ليرضي Cloudflare
-export const runtime = 'edge';
-
 // ============================================================
 // 📌 الإعدادات والمسارات العامة (تستخدم Set لأداء أسرع O(1))
 // ============================================================
