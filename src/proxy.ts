@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { runWithContext, type RequestContext } from '@/lib/context';
+export const runtime = 'edge';
 
 // ============================================================
 // 📌 الإعدادات والمسارات العامة (تستخدم Set لأداء أسرع O(1))
