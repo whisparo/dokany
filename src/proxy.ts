@@ -1,4 +1,4 @@
-// src/middleware.ts أو src/proxy.ts (المهم حط الكود ده)
+//src/proxy.ts (المهم حط الكود ده)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { runWithContext, type RequestContext } from '@/lib/context';
