@@ -1,7 +1,7 @@
 // src/lib/telegram/memory.ts
 
 import { eq, and, desc, isNull } from 'drizzle-orm';
-import type { DbInstance } from '@/lib/db'; // ✅ استيراد النوع الموحد
+import type { DbInstance } from '@/lib/db'; // ✅ النوع الصحيح
 import { chatSessions } from '@/lib/db/schema/chat-sessions';
 
 type ChatSessionState = typeof chatSessions.$inferSelect['state'];
@@ -14,11 +14,8 @@ export interface SessionResult {
   };
 }
 
-/**
- * تحميل جلسة مستخدم من قاعدة البيانات
- */
 export async function loadSession(
-  db: DbInstance, // ✅ استخدام DbInstance بدلاً من DrizzleD1Database
+  db: DbInstance, // ✅ الآن يتطابق مع ما يُرجعه getDb
   platform: 'telegram' | 'web',
   externalId: string
 ): Promise<SessionResult> {
@@ -55,11 +52,8 @@ export async function loadSession(
   }
 }
 
-/**
- * حفظ أو تحديث جلسة مستخدم في قاعدة البيانات
- */
 export async function saveSession(
-  db: DbInstance, // ✅ استخدام DbInstance
+  db: DbInstance, // ✅ نوع دقيق
   platform: 'telegram' | 'web',
   externalId: string,
   sessionData: ChatSessionState,
@@ -94,9 +88,6 @@ export async function saveSession(
   }
 }
 
-/**
- * تحديث جلسة مستخدم موجودة
- */
 export async function updateSession(
   db: DbInstance,
   platform: 'telegram' | 'web',
@@ -106,9 +97,6 @@ export async function updateSession(
   await saveSession(db, platform, externalId, sessionData);
 }
 
-/**
- * حذف جلسة مستخدم (soft delete)
- */
 export async function deleteSession(
   db: DbInstance,
   platform: 'telegram' | 'web',

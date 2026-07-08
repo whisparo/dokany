@@ -1,12 +1,48 @@
 // src/lib/validations/payment.ts
+
 import { z } from 'zod';
-import { PAYMENT_STATUSES, PAYMENT_METHODS, CURRENCIES } from '@/lib/db/schema/enums';
 
 // ╔════════════════════════════════════════════════════════════╗
 // ║  💳 PAYMENT – نظام التحقق من المدفوعات                     ║
-// ║  📌 جميع القيم مُستوردة من enums.ts لضمان الاتساق التلقائي. ║
+// ║  📌 جميع القيم مُعرّفة هنا لتطابق الـ Schema مباشرةً.      ║
 // ║     التحقق من الملكية (IDOR) وعزل البيانات يتم في الخدمة.   ║
 // ╚════════════════════════════════════════════════════════════╝
+
+// ============================================================
+// 📦 الثوابت المطابقة لـ schema/payments.ts
+// ============================================================
+
+export const PAYMENT_STATUSES = [
+  'pending',
+  'paid',
+  'failed',
+  'refunded',
+  'partially_refunded',
+  'expired',
+  'cancelled',
+] as const;
+
+export const PAYMENT_METHODS = [
+  'cash',
+  'card',
+  'wallet',
+  'vodafone_cash',
+  'instapay',
+  'installment',
+  'bank_transfer',
+] as const;
+
+export const CURRENCIES = [
+  'EGP',
+  'USD',
+  'EUR',
+  'SAR',
+  'AED',
+  'KWD',
+  'BHD',
+  'OMR',
+  'QAR',
+] as const;
 
 // 📌 الثوابت
 const PROVIDER_MAX = 50;
@@ -27,7 +63,7 @@ export const createPaymentSchema = z.object({
   method: z.enum(PAYMENT_METHODS),
   provider: z.string().trim().max(PROVIDER_MAX).optional(),
   providerTransactionId: z.string().trim().max(TRANSACTION_ID_MAX).optional(),
-  // 📌 تطهير webhookPayload من البيانات الضخمة/الحساسة يتم في الخدمة قبل التخزين
+  // تطهير webhookPayload من البيانات الضخمة/الحساسة يتم في الخدمة
   webhookPayload: z.record(z.string(), z.unknown()).nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 }).strict();
@@ -40,7 +76,6 @@ export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
 export const updatePaymentSchema = z.object({
   status: z.enum(PAYMENT_STATUSES).optional(),
   providerTransactionId: z.string().trim().max(TRANSACTION_ID_MAX).optional(),
-  // 📌 تاريخ الدفع يجب ألا يكون في المستقبل. يُتحقق منه فقط إذا تم إرساله.
   paidAt: z.coerce
     .date()
     .refine((date) => date <= new Date(), 'تاريخ الدفع لا يمكن أن يكون في المستقبل')

@@ -5,10 +5,11 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { createStore } from './create-store';
 import { extractCountryCode, CODE_TO_GEO } from './onboarding-helpers';
 import { saveSession } from '../memory';
+import { getDb } from '@/lib/db';
 
-// توسيع الـ Context لضمان تمرير الـ D1 Database Instance من الراوتر الرئيسي لبوت التليجرام
+// توسيع الـ Context لضمان تمرير الـ env من الراوتر الرئيسي
 interface SecureHandlerContext extends HandlerContext {
-  d1Database?: D1Database;
+  env: { DB: D1Database };
 }
 
 export async function handleNicheStep(ctx: SecureHandlerContext): Promise<HandlerResult> {
@@ -37,10 +38,11 @@ export async function handleNicheStep(ctx: SecureHandlerContext): Promise<Handle
       const nextSession = {
         ...ctx.session,
         step: 'niche' as const,
-        storeName: `__custom__::${currentStoreName}`, 
+        storeName: `__custom__::${currentStoreName}`,
       };
-      
-      await saveSession(ctx.platform, ctx.externalId, nextSession);
+
+      const db = getDb(ctx.env);
+      await saveSession(db, ctx.platform, ctx.externalId, nextSession);
 
       return {
         reply: '📦 ممتاز! يرجى كتابة اسم تخصص متجرك الآن في رسالة نصية (مثال: عطور، أدوات منزلية، ألعاب):',
@@ -52,7 +54,7 @@ export async function handleNicheStep(ctx: SecureHandlerContext): Promise<Handle
 
   // 🎯 حالة إن المستخدم كتب النيش المخصص بإيده
   if (isWaitingForCustom) {
-    selectedNiche = input; 
+    selectedNiche = input;
   }
 
   // الحماية من المدخلات العشوائية
@@ -64,8 +66,8 @@ export async function handleNicheStep(ctx: SecureHandlerContext): Promise<Handle
   }
 
   // استخراج اسم المتجر النظيف
-  let realStoreName = isWaitingForCustom 
-    ? currentStoreName.replace('__custom__::', '') 
+  let realStoreName = isWaitingForCustom
+    ? currentStoreName.replace('__custom__::', '')
     : currentStoreName;
 
   // 🎯 خندق الدفاع الأخير: لو السيشين اتصفر والاسم طالع فاضي، امنعه من كسر قيد الداتابيز
@@ -73,9 +75,9 @@ export async function handleNicheStep(ctx: SecureHandlerContext): Promise<Handle
     realStoreName = ctx.session?.name ? `متجر ${ctx.session.name}` : 'متجري الإلكتروني';
   }
 
-  // خروج مبكر آمن في حالة غياب الـ D1 Instance من الـ Context لو البوت مش متهندل صح في الـ Router
-  if (!ctx.d1Database) {
-    console.error('❌ [handleNicheStep] Critical Fatal: d1Database instance is completely missing from HandlerContext');
+  // خروج مبكر آمن في حالة غياب الـ DB من الـ env
+  if (!ctx.env?.DB) {
+    console.error('❌ [handleNicheStep] Critical Fatal: DB is missing from env');
     return {
       reply: '❌ عذراً، النظام غير جاهز حالياً لمعالجة الطلبات. يرجى إرسال /start مجدداً بعد دقيقة.',
       session: ctx.session,
@@ -86,14 +88,14 @@ export async function handleNicheStep(ctx: SecureHandlerContext): Promise<Handle
   try {
     const merchantName = ctx.session?.name || 'تاجرنا العزيز';
 
-    // ✅ قفلنا الـ Compiler Error: مررنا الـ d1Database كمعامل أول، والأوبجكت كمعامل ثاني متطابق 100%
-    const result = await createStore(ctx.d1Database, {
+    // ✅ نمرر ctx.env.DB مباشرةً إلى createStore (كما كان يعمل سابقاً)
+    const result = await createStore(ctx.env.DB, {
       phone: ctx.session?.phone || '',
       name: ctx.session?.name || '',
       storeName: realStoreName,
       telegramUserId: ctx.telegramUserId,
     });
-    
+
     const countryCode = extractCountryCode(ctx.session?.phone || '');
     const geoInfo = CODE_TO_GEO[countryCode] || { country: 'غير محدد', currency: 'العملة المحلية' };
 

@@ -1,11 +1,35 @@
+// src/lib/validations/haggle.ts
+
 import { z } from 'zod';
-import { HAGGLE_STATUSES } from '@/lib/db/schema/enums';
 
 // ╔════════════════════════════════════════════════════════════╗
 // ║  💬 HAGGLE – نظام التحقق من جلسات الفصال الذكى            ║
 // ║  📌 يتحقق من "الشكل" والقيود المنطقية الثابتة.              ║
 // ║     استراتيجية البوت والانتقالات في الخدمة.                 ║
+// ║  📌 القيم مُعرّفة هنا لتطابق الـ Schema مباشرةً.           ║
 // ╚════════════════════════════════════════════════════════════╝
+
+// ============================================================
+// 📦 الثوابت المطابقة لـ schema/haggle-sessions.ts
+// ============================================================
+
+export const HAGGLE_STATUSES = [
+  'active',
+  'counter_offered',
+  'accepted',
+  'rejected',
+  'expired',
+  'cancelled',
+] as const;
+
+export const HAGGLE_STRATEGIES = [
+  'aggressive',
+  'friendly',
+  'middle_ground',
+] as const;
+
+// الحالات النهائية (لا يمكن تغييرها بعد ذلك)
+const FINAL_STATUSES: readonly string[] = ['accepted', 'rejected', 'expired', 'cancelled'];
 
 // 📌 الثوابت
 const STRATEGY_MAX = 50;
@@ -14,7 +38,6 @@ const EXPIRY_TOLERANCE_MS = 5000; // هامش تسامح زمني (5 ثوانٍ)
 
 // ✅ تحويل Tuple آمن
 const STATUS_TUPLE = HAGGLE_STATUSES as unknown as readonly [string, ...string[]];
-const FINAL_STATUSES: readonly string[] = ['accepted', 'converted', 'rejected', 'expired', 'withdrawn'];
 
 // ============================================================
 // 🆕 CREATE HAGGLE – بدء جلسة فصال جديدة
@@ -114,15 +137,15 @@ export const updateHaggleSchema = z.object({
     },
     { message: 'العرض الحالي لا يمكن أن يقل عن الحد الأدنى', path: ['currentOffer'] }
   )
-  // 🛡️ عند القبول أو التحويل، يجب وجود سعر نهائي
+  // 🛡️ عند القبول، يجب وجود سعر نهائي (ملاحظة: الـ 'converted' غير موجود في الـ Schema)
   .refine(
     (d) => {
-      if ((d.status === 'accepted' || d.status === 'converted') && !d.finalPrice) {
+      if (d.status === 'accepted' && !d.finalPrice) {
         return false;
       }
       return true;
     },
-    { message: 'يجب إرسال السعر النهائي عند قبول أو تحويل الجلسة', path: ['finalPrice'] }
+    { message: 'يجب إرسال السعر النهائي عند قبول الجلسة', path: ['finalPrice'] }
   )
   // 🛡️ مبلغ الخصم يرسل فقط مع حالة منتهية
   .refine(
