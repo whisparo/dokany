@@ -1,26 +1,26 @@
 // src/lib/telegram/handlers/name-step.ts
 
-import { drizzle } from 'drizzle-orm/d1';
 import type { D1Database } from '@cloudflare/workers-types';
-import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import type { HandlerContext, HandlerResult } from '@/lib/telegram/types';
-import { saveSession } from '../memory'; 
+import { getDb } from '@/lib/db';
+import { users } from '@/lib/db/schema';
+import { saveSession } from '../memory';
 
-// بنوسع الـ HandlerContext عشان نضمن إن الـ env أو الـ d1Database ممررين ومقروئين صح
+// ✅ توسيع الـ Context ليشمل env (الذي يحتوي على DB)
 interface SecureHandlerContext extends HandlerContext {
-  d1Database?: D1Database; // حقن الـ D1Instance داخل الـ Context من الـ Router الرئيسي
+  env: { DB: D1Database };
 }
 
 export async function handleNameStep(ctx: SecureHandlerContext): Promise<HandlerResult> {
   const name = ctx.message.trim();
 
-  // 🎯 لو كتب الأوامر العامة دي سيبه يعدي ومتحظرش الاسم عشان الـ onboarding-flow يلقطها
+  // أوامر التنقل
   if (name === 'رجوع' || name === '/start' || name === 'إلغاء') {
-    return { reply: '', session: ctx.session }; 
+    return { reply: '', session: ctx.session };
   }
 
-  // 1️⃣ تأمين الـ Session عند الخطأ
+  // التحقق من صحة الاسم
   if (name.length < 1 || name.length > 40) {
     return {
       reply: '❌ الاسم غير صالح (يجب أن يكون بين 1 و 40 حرفاً). يرجى إدخال اسم صحيح:',
@@ -28,36 +28,35 @@ export async function handleNameStep(ctx: SecureHandlerContext): Promise<Handler
     };
   }
 
-  // 2️⃣ 🎯 تحديث الاسم في قاعدة البيانات ديناميكياً باستخدام الـ Telegram ID
-  if (ctx.d1Database && ctx.telegramUserId) {
+  // ✅ الحصول على كائن Drizzle الموحد
+  const db = getDb(ctx.env);
+
+  // تحديث الاسم في جدول users (باستخدام telegramId)
+  if (ctx.telegramUserId) {
     try {
-      const db = drizzle(ctx.d1Database);
-      
-      // 🧠 لقطة سنيور: بنحدث بناءً على الـ telegramId لأن الـ user.id هو UUID لسه ماتعملش في الخطوة دي
       await db
         .update(users)
-        .set({ name: name, updatedAt: new Date() })
+        .set({ name, updatedAt: new Date() })
         .where(eq(users.telegramId, String(ctx.telegramUserId)));
-        
-      console.log(`✅ [NameStep] Updated user name to: ${name} in DB for Telegram ID: ${ctx.telegramUserId}`);
+      console.log(`✅ [NameStep] Updated user name to: ${name} for Telegram ID: ${ctx.telegramUserId}`);
     } catch (error) {
       console.error('❌ [NameStep] Failed to update name in DB:', error);
     }
   } else {
-    console.warn('⚠️ [NameStep] Skipping DB update: d1Database or telegramUserId is missing in context');
+    console.warn('⚠️ [NameStep] telegramUserId is missing in context');
   }
 
-  // 3️⃣ تجهيز الـ Session الجديد بالملي
+  // تجهيز الجلسة الجديدة
   const nextSession = {
     ...ctx.session,
-    step: 'store' as const, 
-    name,          
+    step: 'store' as const,
+    name,
   };
 
-  // 4️⃣ 🎯 الحفر الفوري في الـ Memory لمنع الـ Session Loss
-  await saveSession(ctx.platform, ctx.externalId, nextSession);
+  // ✅ حفظ الجلسة باستخدام db وتمريره كأول معامل
+  await saveSession(db, ctx.platform, ctx.externalId, nextSession);
 
-  // 5️⃣ 🚀 النجاح والانتقال لخطوة اسم المتجر بكل أمان
+  // الرد النهائي
   return {
     reply: `🎯 تشرفنا بك يا ${name}.\n\n🏪 الآن، ما هو الاسم الذي تحب أن تطلقه على متجرك؟ (مثال: متجر موضة):`,
     buttons: [[{ text: '🔙 رجوع', value: 'رجوع' }]],

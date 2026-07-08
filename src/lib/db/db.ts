@@ -2,19 +2,14 @@
 
 import { drizzle } from 'drizzle-orm/d1';
 import type { D1Database } from '@cloudflare/workers-types';
-import * as authSchema from './schema/users'; // ✅ استيراد سكيما المستخدمين والجلسات الموحدة مباشرة
-
-// تجميع السكيمات في كائن واحد محلي للـ Drizzle دون تصديره كـ Global Type يضرب الـ Auth
-const appSchema = {
-  ...authSchema,
-};
+import { schema } from './index'; // ✅ استيراد الـ schema الشامل من الملف الرئيسي
 
 /**
  * جلب كائن الداتابيز (Drizzle Instance) بشكل آمن ومتوافق مع أي Bindings
  */
 export function getDb(env: { DB: D1Database } & Record<string, unknown>) {
-  // ✅ تمرير الـ appSchema محلياً للـ instance
-  return drizzle(env.DB, { schema: appSchema });
+  // ✅ نمرر schema كامل (جميع الجداول) بدلاً من authSchema فقط
+  return drizzle(env.DB, { schema });
 }
 
 // ✅ نوع كائن الـ Database المرتجع للاستخدام في الأماكن الأخرى
@@ -25,6 +20,6 @@ export type DbInstance = ReturnType<typeof getDb>;
  */
 export type D1Transaction = Parameters<Parameters<DbInstance['transaction']>[0]>[0];
 
-// 🛡️ بدلاً من export { schema } التي تمرر الأنواع القديمة وتسبب التعارض:
-// نصدر الجداول كـ كائنات مستقلة للـ Queries عند الحاجة
-export const dbTables = authSchema;
+// 🛡️ احتفظنا بـ dbTables (لكن الآن أصبح يعكس كل الجداول)
+// حتى لا نكسر أي ملف كان يستخدمه (نادراً)، لكن يمكن إزالته إن لم يُستخدم.
+export const dbTables = schema;

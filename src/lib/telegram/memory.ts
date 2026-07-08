@@ -1,9 +1,10 @@
 // src/lib/telegram/memory.ts
-import { eq, and, desc, isNull } from 'drizzle-orm';
-import { getDb } from '@/lib/db';
-import { schema } from '@/lib/db';
 
-type ChatSessionState = typeof schema.chatSessions.$inferSelect['state'];
+import { eq, and, desc, isNull } from 'drizzle-orm';
+import type { DbInstance } from '@/lib/db'; // ✅ استيراد النوع الموحد
+import { chatSessions } from '@/lib/db/schema/chat-sessions';
+
+type ChatSessionState = typeof chatSessions.$inferSelect['state'];
 
 export interface SessionResult {
   session: ChatSessionState;
@@ -13,24 +14,26 @@ export interface SessionResult {
   };
 }
 
+/**
+ * تحميل جلسة مستخدم من قاعدة البيانات
+ */
 export async function loadSession(
-  env: { DB: D1Database }, // ✅ تمرير env بدلاً من استخدام db مباشر
+  db: DbInstance, // ✅ استخدام DbInstance بدلاً من DrizzleD1Database
   platform: 'telegram' | 'web',
   externalId: string
 ): Promise<SessionResult> {
-  const db = getDb(env);
   try {
     const record = await db
       .select()
-      .from(schema.chatSessions)
+      .from(chatSessions)
       .where(
         and(
-          eq(schema.chatSessions.platform, platform),
-          eq(schema.chatSessions.externalId, externalId),
-          isNull(schema.chatSessions.deletedAt)
+          eq(chatSessions.platform, platform),
+          eq(chatSessions.externalId, externalId),
+          isNull(chatSessions.deletedAt)
         )
       )
-      .orderBy(desc(schema.chatSessions.createdAt))
+      .orderBy(desc(chatSessions.createdAt))
       .limit(1)
       .then(rows => rows[0] || null);
 
@@ -52,31 +55,33 @@ export async function loadSession(
   }
 }
 
+/**
+ * حفظ أو تحديث جلسة مستخدم في قاعدة البيانات
+ */
 export async function saveSession(
-  env: { DB: D1Database },
+  db: DbInstance, // ✅ استخدام DbInstance
   platform: 'telegram' | 'web',
   externalId: string,
   sessionData: ChatSessionState,
   timestamps?: { lastActivity?: Date; createdAt?: Date }
 ): Promise<void> {
-  const db = getDb(env);
   try {
     const now = new Date();
+    const sessionId = crypto.randomUUID();
 
     await db
-      .insert(schema.chatSessions)
+      .insert(chatSessions)
       .values({
-        id: crypto.randomUUID(), // ✅ يجب توليد ID لأن العمود primary key
+        id: sessionId,
         platform,
         externalId,
         state: sessionData,
         lastActivityAt: timestamps?.lastActivity || now,
         createdAt: timestamps?.createdAt || now,
         updatedAt: now,
-        timestamps: {}, // ✅ حقل timestamps مطلوب في السكيما، ضع {} افتراضيًا
       })
       .onConflictDoUpdate({
-        target: [schema.chatSessions.platform, schema.chatSessions.externalId],
+        target: [chatSessions.platform, chatSessions.externalId],
         set: {
           state: sessionData,
           lastActivityAt: timestamps?.lastActivity || now,
@@ -84,38 +89,43 @@ export async function saveSession(
         },
       });
   } catch (error) {
-    console.error('❌ [Memory Service] Error saving session:', error);
+    console.error('❌ [Memory Service] Error saving/upserting session:', error);
     throw error;
   }
 }
 
+/**
+ * تحديث جلسة مستخدم موجودة
+ */
 export async function updateSession(
-  env: { DB: D1Database },
+  db: DbInstance,
   platform: 'telegram' | 'web',
   externalId: string,
   sessionData: ChatSessionState
 ): Promise<void> {
-  await saveSession(env, platform, externalId, sessionData);
+  await saveSession(db, platform, externalId, sessionData);
 }
 
+/**
+ * حذف جلسة مستخدم (soft delete)
+ */
 export async function deleteSession(
-  env: { DB: D1Database },
+  db: DbInstance,
   platform: 'telegram' | 'web',
   externalId: string
 ): Promise<void> {
-  const db = getDb(env);
   try {
     await db
-      .update(schema.chatSessions)
+      .update(chatSessions)
       .set({
         deletedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(
         and(
-          eq(schema.chatSessions.platform, platform),
-          eq(schema.chatSessions.externalId, externalId),
-          isNull(schema.chatSessions.deletedAt)
+          eq(chatSessions.platform, platform),
+          eq(chatSessions.externalId, externalId),
+          isNull(chatSessions.deletedAt)
         )
       );
   } catch (error) {
