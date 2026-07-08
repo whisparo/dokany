@@ -1,17 +1,9 @@
 // src/lib/telegram/memory.ts
-/**
- * ============================================================================
- * 🧠 Telegram Session Memory Manager (Unified Chat Sessions)
- * ============================================================================
- * إدارة جلسات وحالات مستخدمي البوت بناءً على جدول chat_sessions الموحد.
- */
-
-import { db } from '@/lib/db/db';
-import { chatSessions } from '@/lib/db/schema/chat-sessions';
 import { eq, and, desc, isNull } from 'drizzle-orm';
+import { getDb } from '@/lib/db';
+import { schema } from '@/lib/db';
 
-// استخراج نوع الـ State بالملي من السكيما لمنع الـ any تماماً والالتزام بالـ Types
-type ChatSessionState = typeof chatSessions.$inferSelect['state'];
+type ChatSessionState = typeof schema.chatSessions.$inferSelect['state'];
 
 export interface SessionResult {
   session: ChatSessionState;
@@ -21,26 +13,29 @@ export interface SessionResult {
   };
 }
 
-/**
- * تحميل جلسة مستخدم من قاعدة البيانات (يقرأ الجلسة النشطة والغير محذوفة soft deleted)
- */
 export async function loadSession(
+  env: { DB: D1Database }, // ✅ تمرير env بدلاً من استخدام db مباشر
   platform: 'telegram' | 'web',
   externalId: string
 ): Promise<SessionResult> {
+  const db = getDb(env);
   try {
-    const record = await db.query.chatSessions.findFirst({
-      where: and(
-        eq(chatSessions.platform, platform),
-        eq(chatSessions.externalId, externalId),
-        isNull(chatSessions.deletedAt) // قراءة الجلسات النشطة فقط
-      ),
-      orderBy: [desc(chatSessions.createdAt)],
-    });
+    const record = await db
+      .select()
+      .from(schema.chatSessions)
+      .where(
+        and(
+          eq(schema.chatSessions.platform, platform),
+          eq(schema.chatSessions.externalId, externalId),
+          isNull(schema.chatSessions.deletedAt)
+        )
+      )
+      .orderBy(desc(schema.chatSessions.createdAt))
+      .limit(1)
+      .then(rows => rows[0] || null);
 
     return {
-      // إذا لم توجد جلسة، نرجع كائن فارغ متوافق مع النوع
-      session: record?.state || {},
+      session: (record?.state as ChatSessionState) || {},
       timestamps: {
         lastActivity: record?.lastActivityAt || new Date(),
         createdAt: record?.createdAt,
@@ -57,33 +52,31 @@ export async function loadSession(
   }
 }
 
-/**
- * حفظ أو تحديث جلسة مستخدم في قاعدة البيانات (Upsert Pattern)
- * تعتمد على الـ Unique Index المركب: (platform, external_id)
- * ✅ تم إزالة `where` من `onConflictDoUpdate` لأن الفهرس أصبح دائماً (بدون شرط)
- */
 export async function saveSession(
+  env: { DB: D1Database },
   platform: 'telegram' | 'web',
   externalId: string,
   sessionData: ChatSessionState,
   timestamps?: { lastActivity?: Date; createdAt?: Date }
 ): Promise<void> {
+  const db = getDb(env);
   try {
     const now = new Date();
 
     await db
-      .insert(chatSessions)
+      .insert(schema.chatSessions)
       .values({
+        id: crypto.randomUUID(), // ✅ يجب توليد ID لأن العمود primary key
         platform,
         externalId,
         state: sessionData,
         lastActivityAt: timestamps?.lastActivity || now,
         createdAt: timestamps?.createdAt || now,
         updatedAt: now,
+        timestamps: {}, // ✅ حقل timestamps مطلوب في السكيما، ضع {} افتراضيًا
       })
       .onConflictDoUpdate({
-        // ✅ الفهرس الآن ثابت ولا يحتوي على where، لذا نستطيع استخدامه مباشرة
-        target: [chatSessions.platform, chatSessions.externalId],
+        target: [schema.chatSessions.platform, schema.chatSessions.externalId],
         set: {
           state: sessionData,
           lastActivityAt: timestamps?.lastActivity || now,
@@ -91,41 +84,38 @@ export async function saveSession(
         },
       });
   } catch (error) {
-    console.error('❌ [Memory Service] Error saving/upserting session:', error);
+    console.error('❌ [Memory Service] Error saving session:', error);
     throw error;
   }
 }
 
-/**
- * تحديث جلسة مستخدم موجودة
- */
 export async function updateSession(
+  env: { DB: D1Database },
   platform: 'telegram' | 'web',
   externalId: string,
   sessionData: ChatSessionState
 ): Promise<void> {
-  await saveSession(platform, externalId, sessionData);
+  await saveSession(env, platform, externalId, sessionData);
 }
 
-/**
- * حذف جلسة مستخدم (Soft Delete بناءً على معمارية السنيور المكتوبة في السكيما)
- */
 export async function deleteSession(
+  env: { DB: D1Database },
   platform: 'telegram' | 'web',
   externalId: string
 ): Promise<void> {
+  const db = getDb(env);
   try {
     await db
-      .update(chatSessions)
+      .update(schema.chatSessions)
       .set({
         deletedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(
         and(
-          eq(chatSessions.platform, platform),
-          eq(chatSessions.externalId, externalId),
-          isNull(chatSessions.deletedAt)
+          eq(schema.chatSessions.platform, platform),
+          eq(schema.chatSessions.externalId, externalId),
+          isNull(schema.chatSessions.deletedAt)
         )
       );
   } catch (error) {

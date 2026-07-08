@@ -5,13 +5,12 @@ import { sql } from 'drizzle-orm';
 import { type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 
 export const idempotency = sqliteTable('idempotency', {
-  // الـ key القادم من العميل هو المفتاح الرئيسي والوحيد
   key: text('key').primaryKey(),
   
-  // pending | completed
+  // الحالات المدعومة: 'pending' | 'completed' | 'failed'
+  // ملاحظة: SQLite لا يدعم ENUM، لذا نضبطه عبر TypeScript فقط.
   status: text('status').notNull().default('pending'),
   
-  // نتيجة العملية مخزنة كـ نصوص JSON
   result: text('result'),
   
   createdAt: integer('created_at', { mode: 'timestamp' })
@@ -21,5 +20,10 @@ export const idempotency = sqliteTable('idempotency', {
   completedAt: integer('completed_at', { mode: 'timestamp' }),
 });
 
-export type Idempotency = InferSelectModel<typeof idempotency>;
-export type NewIdempotency = InferInsertModel<typeof idempotency>;
+// ✅ إعادة تعريف الأنواع لتشمل 'failed'
+export type Idempotency = InferSelectModel<typeof idempotency> & {
+  status: 'pending' | 'completed' | 'failed';
+};
+export type NewIdempotency = InferInsertModel<typeof idempotency> & {
+  status?: 'pending' | 'completed' | 'failed';
+};
