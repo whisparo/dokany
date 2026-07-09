@@ -6,7 +6,6 @@ import { processErrorQueue } from '@/lib/errors/queue-processor';
 import type { Env } from '@/lib/errors/queue-processor';
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'edge';
 
 // دمج الـ Env الأصلية للمشروع مع الـ CRON_SECRET الخاص بالـ Endpoint لحمايتها
 interface NextCloudflareCronRequest extends NextRequest {

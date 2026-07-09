@@ -1,7 +1,5 @@
 // src/app/page.tsx
 
-export const runtime = 'edge'; // تشغيل الصفحة على الحافة فوراً
-
 export default function HomePage() {
   return (
     <div style={{

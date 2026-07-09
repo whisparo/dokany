@@ -4,8 +4,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'edge'; // 🌟 حتمي لتشغيل الفحص بسرعة فائقة على الحافة
-
 /**
  * GET /api/auth/session
  * يعيد بيانات الجلسة الحالية للمستخدم (لايف) مع تأمين تفتيت الاستثناءات

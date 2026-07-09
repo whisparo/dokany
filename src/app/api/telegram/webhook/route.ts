@@ -7,7 +7,6 @@ import { telegramToContext, sendTelegramMessage } from '@/lib/telegram/adapter';
 import type { OnboardingSession, HandlerResult } from '@/lib/telegram/types';
 import type { D1Database } from '@cloudflare/workers-types';
 
-export const runtime = 'edge';
 
 // 🌟 تعريف الـ Types محلياً وبشكل صارم بدون أي مكتبات خارجية
 interface TelegramUpdate {

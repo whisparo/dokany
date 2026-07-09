@@ -2,8 +2,8 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // ❌ **لا** تضع output: "export" هنا
-  // لأنك تحتاج API Routes و SSR تعمل على Cloudflare Pages Functions
+  // 🔥 ده هيساعد OpenNext يشتغل مع Next.js 16
+  output: "standalone", // إضافي لو لسه في مشاكل
 
   experimental: {
     // reactCompiler: true, // علّقها إذا مش محتاجها
