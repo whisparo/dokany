@@ -11,6 +11,10 @@ import { sendErrorToTelegram } from '@/lib/errors/notifier';
 export interface Env {
   DB: D1Database;
   R2_BUCKET: R2Bucket; // تم تفعيل الـ R2
+  B2_ENDPOINT: string;
+  B2_BUCKET_NAME: string;
+  B2_ACCESS_KEY_ID: string;
+  B2_SECRET_ACCESS_KEY: string;
   TELEGRAM_ERROR_CHAT_ID: string;
   TELEGRAM_BOT_TOKEN: string;
   REDIS_URL: string;
