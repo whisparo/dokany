@@ -1,13 +1,14 @@
 // src/lib/telegram/memory.ts
 
 import { eq, and, desc, isNull } from 'drizzle-orm';
-import type { DbInstance } from '@/lib/db'; // ✅ النوع الصحيح
+import type { DbInstance } from '@/lib/db';
 import { chatSessions } from '@/lib/db/schema/chat-sessions';
+import type { OnboardingSession } from './types';
 
 type ChatSessionState = typeof chatSessions.$inferSelect['state'];
 
 export interface SessionResult {
-  session: ChatSessionState;
+  session: OnboardingSession;
   timestamps: {
     lastActivity: Date;
     createdAt?: Date;
@@ -15,7 +16,7 @@ export interface SessionResult {
 }
 
 export async function loadSession(
-  db: DbInstance, // ✅ الآن يتطابق مع ما يُرجعه getDb
+  db: DbInstance,
   platform: 'telegram' | 'web',
   externalId: string
 ): Promise<SessionResult> {
@@ -32,10 +33,20 @@ export async function loadSession(
       )
       .orderBy(desc(chatSessions.createdAt))
       .limit(1)
-      .then(rows => rows[0] || null);
+      .get(); // ✅ رجعناها .get() الاصلية لـ D1
+
+    // عمل mapping آمن ونظيف للبيانات بدون any
+    const rawState = record?.state as Record<string, unknown> | null;
+    const sessionState: OnboardingSession = {
+      step: (rawState?.step as OnboardingSession['step']) || 'phone',
+      phone: rawState?.phone as string | undefined,
+      name: rawState?.name as string | undefined,
+      storeName: rawState?.storeName as string | undefined,
+      nicheAttempts: rawState?.nicheAttempts as number | undefined,
+    };
 
     return {
-      session: (record?.state as ChatSessionState) || {},
+      session: sessionState,
       timestamps: {
         lastActivity: record?.lastActivityAt || new Date(),
         createdAt: record?.createdAt,
@@ -44,7 +55,7 @@ export async function loadSession(
   } catch (error) {
     console.error('❌ [Memory Service] Error loading session:', error);
     return {
-      session: {},
+      session: { step: 'phone' },
       timestamps: {
         lastActivity: new Date(),
       },
@@ -53,15 +64,17 @@ export async function loadSession(
 }
 
 export async function saveSession(
-  db: DbInstance, // ✅ نوع دقيق
+  db: DbInstance,
   platform: 'telegram' | 'web',
   externalId: string,
-  sessionData: ChatSessionState,
+  sessionData: OnboardingSession,
   timestamps?: { lastActivity?: Date; createdAt?: Date }
 ): Promise<void> {
   try {
     const now = new Date();
     const sessionId = crypto.randomUUID();
+    
+    const dbState = sessionData as ChatSessionState;
 
     await db
       .insert(chatSessions)
@@ -69,7 +82,7 @@ export async function saveSession(
         id: sessionId,
         platform,
         externalId,
-        state: sessionData,
+        state: dbState,
         lastActivityAt: timestamps?.lastActivity || now,
         createdAt: timestamps?.createdAt || now,
         updatedAt: now,
@@ -77,7 +90,7 @@ export async function saveSession(
       .onConflictDoUpdate({
         target: [chatSessions.platform, chatSessions.externalId],
         set: {
-          state: sessionData,
+          state: dbState,
           lastActivityAt: timestamps?.lastActivity || now,
           updatedAt: now,
         },
@@ -92,7 +105,7 @@ export async function updateSession(
   db: DbInstance,
   platform: 'telegram' | 'web',
   externalId: string,
-  sessionData: ChatSessionState
+  sessionData: OnboardingSession
 ): Promise<void> {
   await saveSession(db, platform, externalId, sessionData);
 }

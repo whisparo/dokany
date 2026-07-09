@@ -70,9 +70,8 @@ function buildReplyMarkup(buttons?: any, persistentButtons?: any) {
   }
 
   if (Array.isArray(buttons)) {
-    // مصفوفة 2D
+    // مصفوفة 2D (صفوف وأعمدة)
     if (buttons.length > 0 && Array.isArray(buttons[0])) {
-      // حالة زر مشاركة جهة الاتصال (تم إصلاحها)
       if (buttons.length === 1 && buttons[0].length === 1 && buttons[0][0]?.callback_data === 'share_contact') {
         return {
           keyboard: [[{ text: buttons[0][0].text, request_contact: true }]],
@@ -84,17 +83,18 @@ function buildReplyMarkup(buttons?: any, persistentButtons?: any) {
       return {
         inline_keyboard: buttons.map((row: any[]) =>
           row.map((btn: any) => {
-            if (btn.url) return { text: btn.text, url: btn.url };
+            // تقديم شرط الـ Web App عشان ما يتداخلش مع الرابط العادي
             if (btn.type === 'web_app' && btn.url) {
               return { text: btn.text, web_app: { url: btn.url } };
             }
+            if (btn.url) return { text: btn.text, url: btn.url };
             return { text: btn.text, callback_data: btn.value || btn.callback_data };
           })
         ),
       };
     }
 
-    // مصفوفة مسطحة
+    // مصفوفة مسطحة (Flat Array)
     const hasContact = buttons.some((b: any) => b.type === 'contact');
     if (hasContact) {
       return {
@@ -112,10 +112,10 @@ function buildReplyMarkup(buttons?: any, persistentButtons?: any) {
     return {
       inline_keyboard: [
         buttons.map((b: any) => {
-          if (b.url) return { text: b.text, url: b.url };
           if (b.type === 'web_app' && b.url) {
             return { text: b.text, web_app: { url: b.url } };
           }
+          if (b.url) return { text: b.text, url: b.url };
           return { text: b.text, callback_data: b.value || b.callback_data };
         }),
       ],

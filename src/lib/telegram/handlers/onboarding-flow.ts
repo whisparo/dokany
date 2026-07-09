@@ -3,7 +3,7 @@
 import { eq } from 'drizzle-orm';
 import type { D1Database } from '@cloudflare/workers-types';
 import { users, stores } from '@/lib/db/schema';
-import { getDb, type DbInstance } from '@/lib/db';
+import { getDb } from '@/lib/db';
 import { deleteSession, saveSession } from '../memory';
 import type { HandlerContext, HandlerResult, OnboardingSession } from '@/lib/telegram/types';
 
@@ -17,6 +17,7 @@ import { safeExecute } from '@/lib/errors/safe-executor';
 const STEPS = ['phone', 'name', 'store', 'niche'] as const;
 type OnboardingStep = (typeof STEPS)[number];
 
+// الـ Interface اللي بتأمن وجود الـ DB من الـ Worker env
 interface SecureHandlerContext extends HandlerContext {
   env: { DB: D1Database };
 }
@@ -78,22 +79,9 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
 
         const currentMsg = ctx.message?.trim() || '';
         const niches = [
-          'ملابس',
-          '👗 ملابس',
-          'إلكترونيات',
-          '📱 إلكترونيات',
-          'تجميل',
-          '💄 تجميل',
-          'مجوهرات',
-          '💍 مجوهرات',
-          'أحذية',
-          '👟 أحذية',
-          'اكسسوارات',
-          '👜 اكسسوارات',
-          'أخرى',
-          '📦 أخرى',
-          '📦 تخصص آخر',
-          'تخصص آخر',
+          'ملابس', '👗 ملابس', 'إلكترونيات', '📱 إلكترونيات', 'تجميل', '💄 تجميل',
+          'مجوهرات', '💍 مجوهرات', 'أحذية', '👟 أحذية', 'اكسسوارات', '👜 اكسسوارات',
+          'أخرى', '📦 أخرى', '📦 تخصص آخر', 'تخصص آخر',
         ];
         const isNicheClick = niches.includes(currentMsg) || currentMsg.startsWith('__custom__::');
 
@@ -145,7 +133,7 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     };
   }
 
-  // 6️⃣ توجيه للخطوات
+  // 6️⃣ توجيه للخطوات (تم إبقاء التمرير للـ ctx المتوافق مع SecureHandlerContext)
   switch (step) {
     case 'phone':
       return handlePhoneStep(ctx);
@@ -224,7 +212,7 @@ export async function handleGetDashboard(ctx: SecureHandlerContext): Promise<Han
         return { reply: '❌ ليس لديك متجر بعد. أرسل /start لإنشاء واحد.' };
       }
 
-      const loginLink = `https://dokanyy.vercel.app/dashboard?user=${user.id}&store=${store.id}`;
+      const loginLink = `https://dokany.pages.dev/dashboard?user=${user.id}&store=${store.id}`;
 
       return {
         reply: `🔗 تم تجهيز رابط الدخول الخاص بك لمتجر "${store.name}":`,

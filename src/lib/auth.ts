@@ -6,12 +6,35 @@ import { getDb } from '@/lib/db/db';
 import { users, sessions, accounts } from '@/lib/db/schema/users';
 import { eq } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt-ts';
-import { createHash, createHmac } from 'crypto';
+
+// تعريف صارم لواجهة البيئة لحظر الـ dynamic casting أو any
+interface CloudflareWorkerEnv {
+  DB: import('@cloudflare/workers-types').D1Database;
+  TELEGRAM_BOT_TOKEN?: string;
+  BETTER_AUTH_URL?: string;
+  NEXT_PUBLIC_APP_URL?: string;
+}
+
+interface TelegramInput {
+  telegramId: string;
+  hash: string;
+  auth_date: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  photo_url?: string;
+}
+
+interface PinInput {
+  phone: string;
+  pin: string;
+}
 
 /**
- * التحقق من صحة بيانات تسجيل الدخول عبر تليجرام (Telegram Login Widget)
+ * 🌟 التحقق من صحة بيانات تليجرام باستخدام Web Crypto API المتوافقة 100% مع الـ Edge Runtime
+ * تاييبس صافية بالكامل وبدون أي مكتبات Node.js خارجية
  */
-function verifyTelegramHash(data: Record<string, string | undefined>, botToken: string): boolean {
+async function verifyTelegramHash(data: Record<string, string | undefined>, botToken: string): Promise<boolean> {
   if (!data.hash || !data.auth_date) return false;
 
   const authDate = parseInt(data.auth_date, 10);
@@ -26,21 +49,49 @@ function verifyTelegramHash(data: Record<string, string | undefined>, botToken: 
     }
   });
 
-  const secretKey = createHash('sha256').update(botToken).digest();
   const sortedKeys = Object.keys(checkData).sort();
   const dataString = sortedKeys.map(k => `${k}=${checkData[k]}`).join('\n');
   
-  const hmac = createHmac('sha256', secretKey).update(dataString).digest('hex');
+  const encoder = new TextEncoder();
 
-  return hmac === data.hash;
+  // 1. حساب الـ Secret Key مفتاح التشفير الأساسي للـ Bot Token
+  const secretKeyBuffer = await globalThis.crypto.subtle.digest(
+    'SHA-256',
+    encoder.encode(botToken)
+  );
+
+  // 2. استيراد المفتاح لحساب الـ HMAC
+  const cryptoKey = await globalThis.crypto.subtle.importKey(
+    'raw',
+    secretKeyBuffer,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  // 3. توقيع سلسلة البيانات
+  const signatureBuffer = await globalThis.crypto.subtle.sign(
+    'HMAC',
+    cryptoKey,
+    encoder.encode(dataString)
+  );
+
+  // 4. تحويل الناتج إلى Hex String ومقارنته بشكل آمن
+  const hashArray = Array.from(new Uint8Array(signatureBuffer));
+  const calculatedHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+  return calculatedHash === data.hash;
 }
+
+// استخراج آمن للبيئة بدون الاختباء خلف "any"
+const globalEnv = (typeof process !== 'undefined' ? process.env : {}) as unknown as CloudflareWorkerEnv;
 
 // ============================================================
 // 🧠 بناء الـ Auth مع جلب الـ DB ديناميكياً لبيئة Cloudflare D1
 // ============================================================
 export const auth = betterAuth({
   database: drizzleAdapter(
-    getDb({ DB: (process.env as unknown as { DB: any }).DB }), 
+    getDb({ DB: globalEnv.DB }), 
     {
       provider: 'sqlite', 
       schema: {
@@ -51,7 +102,7 @@ export const auth = betterAuth({
     }
   ),
   
-  baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+  baseURL: globalEnv.BETTER_AUTH_URL || globalEnv.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
 
   session: {
     cookieCache: {
@@ -78,23 +129,11 @@ export const auth = betterAuth({
           last_name: { type: 'string', required: false },
           photo_url: { type: 'string', required: false },
         },
-        async verify({ 
-          input 
-        }: { 
-          input: { 
-            telegramId: string; 
-            hash: string; 
-            auth_date: string; 
-            username?: string; 
-            first_name?: string; 
-            last_name?: string; 
-            photo_url?: string; 
-          } 
-        }) {
-          const botToken = process.env.TELEGRAM_BOT_TOKEN;
+        async verify({ input }: { input: TelegramInput }) {
+          const botToken = globalEnv.TELEGRAM_BOT_TOKEN;
           if (!botToken) return null;
 
-          const isValid = verifyTelegramHash(
+          const isValid = await verifyTelegramHash(
             {
               hash: input.hash,
               auth_date: input.auth_date,
@@ -109,7 +148,7 @@ export const auth = betterAuth({
 
           if (!isValid || !input.telegramId) return null;
 
-          const localDb = getDb({ DB: (process.env as unknown as { DB: any }).DB });
+          const localDb = getDb({ DB: globalEnv.DB });
 
           const user = await localDb.query.users.findFirst({
             where: eq(users.telegramId, input.telegramId),
@@ -170,15 +209,8 @@ export const auth = betterAuth({
           phone: { type: 'string', required: true },
           pin: { type: 'string', required: true },
         },
-        async verify({ 
-          input 
-        }: { 
-          input: { 
-            phone: string; 
-            pin: string; 
-          } 
-        }) {
-          const localDb = getDb({ DB: (process.env as unknown as { DB: any }).DB });
+        async verify({ input }: { input: PinInput }) {
+          const localDb = getDb({ DB: globalEnv.DB });
 
           const user = await localDb.query.users.findFirst({
             where: eq(users.phoneNumber, input.phone),
