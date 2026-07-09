@@ -3,7 +3,7 @@ import type { OpenNextConfig } from "@opennextjs/cloudflare";
 const config: OpenNextConfig = {
   default: {
     override: {
-      wrapper: "cloudflare-node",
+      wrapper: "cloudflare-edge", // ✅ نغير لـ cloudflare-edge
       converter: "edge",
       proxyExternalRequest: "fetch",
       incrementalCache: "dummy",
