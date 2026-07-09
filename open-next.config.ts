@@ -11,6 +11,7 @@ const config: OpenNextConfig = {
       queue: "dummy",
     },
   },
+  edgeExternals: ["node:crypto"], // 👈 السطر ده اللي كان موقف المراكب السايرة!
   middleware: {
     external: true,
     override: {
