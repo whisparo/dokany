@@ -1,5 +1,5 @@
-// open-next.config.ts
-export default {
+// open-next.config.js
+module.exports = {
   default: {
     override: {
       wrapper: "cloudflare-edge",
@@ -11,5 +11,4 @@ export default {
     },
   },
   edgeExternals: ["node:crypto", "node:stream", "node:buffer"],
-  // ✅ middleware اتحذف نهائياً دلوقتي
 };
