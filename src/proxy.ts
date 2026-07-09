@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose'; // ✅ تثبيت jose: bun add jose
-
+export const runtime = "edge";
 // ============================================================
 // 📌 المسارات العامة
 // ============================================================
