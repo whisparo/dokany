@@ -2,6 +2,8 @@
   "name": "dokany",
   "version": "0.1.0",
   "private": true,
+  "legacy-peer-deps": true,
+   
   "scripts": {
     "dev": "next dev",
     "build": "bunx @opennextjs/cloudflare", 
