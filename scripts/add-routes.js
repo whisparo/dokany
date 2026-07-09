@@ -9,11 +9,16 @@ const routes = {
 };
 
 const outputDir = path.join(process.cwd(), '.open-next');
-const routesPath = path.join(outputDir, '_routes.json');
+// ✅ Pages بتدور على _routes.json في مجلد functions
+const functionsDir = path.join(outputDir, 'functions');
 
-if (!fs.existsSync(outputDir)) {
-  fs.mkdirSync(outputDir, { recursive: true });
+// تأكد من وجود المجلد
+if (!fs.existsSync(functionsDir)) {
+  fs.mkdirSync(functionsDir, { recursive: true });
 }
 
+// اكتب الملف في المسار الصحيح
+const routesPath = path.join(functionsDir, '_routes.json');
 fs.writeFileSync(routesPath, JSON.stringify(routes, null, 2));
-console.log('✅ _routes.json generated successfully in .open-next');
+
+console.log(`✅ _routes.json generated at ${routesPath}`);
