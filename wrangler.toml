@@ -2,6 +2,7 @@ name = "dokany"
 main = "src/workers/index.ts"
 compatibility_date = "2026-07-08"
 compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".open-next"
 
 [[d1_databases]]
 binding = "DB"

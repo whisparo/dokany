@@ -2,10 +2,10 @@
   "name": "dokany",
   "version": "0.1.0",
   "private": true,
-   
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build:next": "next build",
+    "build:cf": "OPENNEXT_SKIP_BUILD=true bunx @opennextjs/cloudflare build",
     "start": "next start",
     "lint": "next lint",
     "db:push": "bunx drizzle-kit push",
@@ -19,6 +19,7 @@
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.27",
+    "jose": "^6.2.3",
     "lucide-react": "^1.23.0",
     "next": "16.3.0-preview.5",
     "pg": "^8.22.0",
