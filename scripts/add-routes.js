@@ -8,17 +8,16 @@ const routes = {
   exclude: []
 };
 
+// 🎯 التعديل السنيور: المسار المباشر جوه مجلد .open-next الرئيسي
 const outputDir = path.join(process.cwd(), '.open-next');
-// ✅ Pages بتدور على _routes.json في مجلد functions
-const functionsDir = path.join(outputDir, 'functions');
+const routesPath = path.join(outputDir, '_routes.json');
 
-// تأكد من وجود المجلد
-if (!fs.existsSync(functionsDir)) {
-  fs.mkdirSync(functionsDir, { recursive: true });
+// تأكد من وجود المجلد الرئيسي
+if (!fs.existsSync(outputDir)) {
+  fs.mkdirSync(outputDir, { recursive: true });
 }
 
-// اكتب الملف في المسار الصحيح
-const routesPath = path.join(functionsDir, '_routes.json');
+// اكتب الملف مباشرة في الـ Root
 fs.writeFileSync(routesPath, JSON.stringify(routes, null, 2));
 
-console.log(`✅ _routes.json generated at ${routesPath}`);
+console.log(`✅ _routes.json generated directly in .open-next Root!`);
