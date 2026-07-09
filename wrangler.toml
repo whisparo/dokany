@@ -1,18 +1,14 @@
 name = "dokany"
 compatibility_date = "2026-07-08"
 compatibility_flags = ["nodejs_compat"]
-
-# ✅ المسار الصحيح لمخرجات OpenNext لـ Cloudflare Pages
 pages_build_output_dir = ".open-next"
 
-# 🗄️ ربط قاعدة بيانات D1 بالشكل الصحيح لـ Pages
 [[d1_databases]]
 binding = "DB"
 database_name = "dokany-db"
 database_id = "64114e17-bff6-4c40-9340-095165e06421"
 migrations_dir = "drizzle"
 
-# ⚙️ المتغيرات العامة (قاريها السيرفر وقت البناء والتشغيل)
 [vars]
 B2_ENDPOINT = "https://s3.eu-central-003.backblazeb2.com"
 B2_BUCKET_NAME = "dokany-logs-bucket"
