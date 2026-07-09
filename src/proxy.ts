@@ -1,8 +1,8 @@
 // src/proxy.ts
 
 import { NextRequest, NextResponse } from 'next/server';
-import { jwtVerify } from 'jose'; // ✅ تثبيت jose: bun add jose
-export const runtime = "edge";
+import { jwtVerify } from 'jose';
+
 // ============================================================
 // 📌 المسارات العامة
 // ============================================================
@@ -35,28 +35,23 @@ export async function proxy(request: NextRequest) {
   const startTime = Date.now();
   const correlationId = generateCorrelationId();
 
-  // ✅ إضافة الـ Correlation ID إلى Headers
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-correlation-id', correlationId);
 
-  // استخراج الـ IP
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
              request.headers.get('x-real-ip') ||
              '127.0.0.1';
   requestHeaders.set('x-client-ip', ip);
 
-  // ✅ تمرير السياق عبر Headers
   requestHeaders.set('x-user-agent', request.headers.get('user-agent') || 'unknown');
   requestHeaders.set('x-start-time', String(startTime));
   requestHeaders.set('x-is-public', String(isPublicPath(pathname)));
 
-  // ✅ فك الجلسة مباشرة (بدون طلب HTTP داخلي، وبدون AsyncLocalStorage)
   if (!isPublicPath(pathname)) {
     try {
       const cookie = request.headers.get('cookie') || '';
       const authHeader = request.headers.get('authorization') || '';
 
-      // استخراج الـ token من الـ Cookie أو Authorization header
       const sessionToken = cookie.split(';').find(c => c.trim().startsWith('session='))?.split('=')[1]?.trim() ||
                            authHeader.replace('Bearer ', '').trim();
 
@@ -86,15 +81,11 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // ✅ تنفيذ الطلب
   const response = NextResponse.next({ request: { headers: requestHeaders } });
-
-  // ✅ توريث الـ Headers للـ Response
   response.headers.set('x-correlation-id', correlationId);
   const duration = Date.now() - startTime;
   response.headers.set('x-response-time', `${duration}ms`);
 
-  // ✅ سجل خفيف (اختياري)
   if (process.env.NODE_ENV !== 'production') {
     console.log(`[${correlationId}] ${request.method} ${pathname} - ${duration}ms - IP: ${ip}`);
   }
@@ -102,9 +93,6 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-// ============================================================
-// 🛡️ دوال مساعدة
-// ============================================================
 function unauthorizedResponse(): NextResponse {
   return new NextResponse(
     JSON.stringify({ error: 'AUTH_401: Unauthorized access' }),
@@ -116,11 +104,5 @@ function generateCorrelationId(): string {
   return `pro-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-// ============================================================
-// 📌 تصدير الـ Proxy و Config
-// ============================================================
+// ✅ التصدير بدون أي Route Segment Config
 export default proxy;
-
-export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico)$).*)'],
-};
