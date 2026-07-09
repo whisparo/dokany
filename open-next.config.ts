@@ -1,7 +1,19 @@
-import type { OpenNextConfig } from "@opennextjs/cloudflare";
+// open-next.config.ts
 
-const config: OpenNextConfig = {
+export default {
   default: {
+    override: {
+      wrapper: "cloudflare-edge", // أو cloudflare-node
+      converter: "edge",
+      proxyExternalRequest: "fetch",
+      incrementalCache: "dummy",
+      tagCache: "dummy",
+      queue: "dummy",
+    },
+  },
+  edgeExternals: ["node:crypto", "node:stream", "node:buffer"],
+  middleware: {
+    external: true, // ✅ لازم تكون true عشان يشتغل مع Pages
     override: {
       wrapper: "cloudflare-edge",
       converter: "edge",
@@ -11,11 +23,4 @@ const config: OpenNextConfig = {
       queue: "dummy",
     },
   },
-  edgeExternals: ["node:crypto", "node:stream", "node:buffer"],
-  // ✅ middleware من غير override عشان النوع يرضى
-  middleware: {
-    external: false, // خليه داخلي عشان البناء يعدي
-  },
 };
-
-export default config;
