@@ -6,15 +6,21 @@ const config: OpenNextConfig = {
       wrapper: "cloudflare-node",
       converter: "edge",
       proxyExternalRequest: "fetch",
+      incrementalCache: "dummy",
+      tagCache: "dummy",
+      queue: "dummy",
     },
   },
-  // هنا بنقول للأداة: لو سمحتِ ملف الـ proxy حركيه وشغليه كـ Edge أوتوماتيك
+  edgeExternals: ["node:crypto"],
   middleware: {
     external: true,
     override: {
       wrapper: "cloudflare-edge",
       converter: "edge",
       proxyExternalRequest: "fetch",
+      incrementalCache: "dummy",
+      tagCache: "dummy",
+      queue: "dummy",
     },
   },
 };
