@@ -1,1 +1,0 @@
-globalThis.__RSC_MANIFEST=(globalThis.__RSC_MANIFEST||{});globalThis.__RSC_MANIFEST["/api/telegram/webhook/route"]={"moduleLoading":{"prefix":"/_next/"},"ssrModuleMapping":{},"edgeSSRModuleMapping":{},"clientModules":{},"entryCSSFiles":{"C:\\Users\\PC\\Desktop\\dokany\\src\\app\\api\\telegram\\webhook\\route":[]},"rscModuleMapping":{},"edgeRscModuleMapping":{}};

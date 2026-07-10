@@ -1,1 +1,0 @@
-globalThis.__RSC_MANIFEST=(globalThis.__RSC_MANIFEST||{});globalThis.__RSC_MANIFEST["/api/telegram/mini-app/route"]={"moduleLoading":{"prefix":"/_next/"},"ssrModuleMapping":{},"edgeSSRModuleMapping":{},"clientModules":{},"entryCSSFiles":{"C:\\Users\\PC\\Desktop\\dokany\\src\\app\\api\\telegram\\mini-app\\route":[]},"rscModuleMapping":{},"edgeRscModuleMapping":{}};
