@@ -4,8 +4,8 @@ const { defineCloudflareConfig } = require("@opennextjs/cloudflare");
 module.exports = defineCloudflareConfig({
   default: {
     override: {
-      wrapper: "cloudflare-edge", // ← غيرتها لـ edge
-      converter: "edge",
+      wrapper: "cloudflare-node", // ← نرجع لـ node عشان RSC
+      converter: "node",          // ← node بدل edge
       proxyExternalRequest: "fetch",
       incrementalCache: "dummy",
       tagCache: "dummy",
