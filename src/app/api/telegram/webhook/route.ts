@@ -2,13 +2,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { loadSession, saveSession } from '@/lib/telegram/memory';
-import { handleOnboarding, handleGetDashboard } from '@/lib/telegram/handlers/onboarding-flow';
+import { handleOnboarding, handleGetDashboard, type SecureHandlerContext } from '@/lib/telegram/handlers/onboarding-flow';
 import { telegramToContext, sendTelegramMessage } from '@/lib/telegram/adapter';
 import type { OnboardingSession, HandlerResult } from '@/lib/telegram/types';
 import type { D1Database } from '@cloudflare/workers-types';
+
 export const runtime = 'edge';
 
-// 🌟 تعريف الـ Types محلياً وبشكل صارم بدون أي مكتبات خارجية
 interface TelegramUpdate {
   callback_query?: {
     id: string;
@@ -44,7 +44,6 @@ interface NextCloudflareRequest extends NextRequest {
 
 export async function POST(req: NextCloudflareRequest) {
   try {
-    // كاستينج نظيف للنوع المحلي اللي عرفناه فوق
     const update = (await req.json()) as TelegramUpdate;
     console.log('📥 Telegram update:', JSON.stringify(update).slice(0, 300));
 
@@ -74,12 +73,13 @@ export async function POST(req: NextCloudflareRequest) {
 
       const { session, timestamps } = await loadSession(db, 'telegram', chatId);
 
-      const ctx = {
-        platform: 'telegram' as const,
+      // ✅ استخدام SecureHandlerContext (يحتوي على env)
+      const ctx: SecureHandlerContext = {
+        platform: 'telegram',
         externalId: chatId,
         message: data,
         contact: undefined,
-        telegramUserId: callback.from ? String(callback.from.id) : undefined,
+        telegramUserId: callback.from.id,
         session,
         env,
       };
@@ -113,11 +113,10 @@ export async function POST(req: NextCloudflareRequest) {
 
     const { session, timestamps } = await loadSession(db, 'telegram', baseCtx.externalId);
 
-    const messageFromId = update.message?.from ? String(update.message.from.id) : undefined;
-
-    const enrichedCtx = {
+    // ✅ استخدام SecureHandlerContext مع إضافة env
+    const enrichedCtx: SecureHandlerContext = {
       ...baseCtx,
-      telegramUserId: messageFromId,
+      telegramUserId: update.message?.from?.id,
       session,
       env,
     };

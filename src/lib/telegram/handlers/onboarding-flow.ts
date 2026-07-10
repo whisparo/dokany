@@ -17,11 +17,10 @@ import { safeExecute } from '@/lib/errors/safe-executor';
 const STEPS = ['phone', 'name', 'store', 'niche'] as const;
 type OnboardingStep = (typeof STEPS)[number];
 
-// الـ Interface اللي بتأمن وجود الـ DB من الـ Worker env
-interface SecureHandlerContext extends HandlerContext {
+// ✅ تم تصدير هذه الواجهة
+export interface SecureHandlerContext extends HandlerContext {
   env: { DB: D1Database };
 }
-
 export async function handleOnboarding(ctx: SecureHandlerContext): Promise<HandlerResult> {
   // جارد للتأكد من وجود قاعدة البيانات
   if (!ctx.env?.DB) {

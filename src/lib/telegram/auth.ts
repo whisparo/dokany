@@ -1,5 +1,5 @@
 // lib/telegram/auth.ts
-import { createHmac } from 'crypto';
+import { createHmac } from 'node:crypto';
 
 interface TelegramUser {
   id: number;
