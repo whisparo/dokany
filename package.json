@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "next build && bunx @cloudflare/next-on-pages",
+    "build": "next build",
+    "cloudflare-build": "next build && bunx @cloudflare/next-on-pages",
     "start": "next start",
     "lint": "next lint",
     "db:push": "bunx drizzle-kit push",
