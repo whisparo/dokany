@@ -2,7 +2,6 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  output: "standalone", // ✅ هذا السطر هو الحل
   experimental: {
     // reactCompiler: true,
   },
