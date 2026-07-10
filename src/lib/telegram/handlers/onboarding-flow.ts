@@ -17,12 +17,11 @@ import { safeExecute } from '@/lib/errors/safe-executor';
 const STEPS = ['phone', 'name', 'store', 'niche'] as const;
 type OnboardingStep = (typeof STEPS)[number];
 
-// ✅ تم تصدير هذه الواجهة
 export interface SecureHandlerContext extends HandlerContext {
   env: { DB: D1Database };
 }
+
 export async function handleOnboarding(ctx: SecureHandlerContext): Promise<HandlerResult> {
-  // جارد للتأكد من وجود قاعدة البيانات
   if (!ctx.env?.DB) {
     console.error('❌ [Onboarding] Critical: DB missing from env');
     return { reply: '❌ عذراً، النظام غير جاهز حالياً لمعالجة الطلبات. أرسل /start مجدداً.' };
@@ -35,7 +34,7 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     return handleGetDashboard(ctx);
   }
 
-  // 2️⃣ البداية الصريحة
+  // 2️⃣ البداية الصريحة للأمر /start
   if (ctx.message === '/start') {
     await deleteSession(db, ctx.platform, ctx.externalId);
     return {
@@ -46,13 +45,7 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     };
   }
 
-  // 3️⃣ تأمين الـ Contact
-  if (ctx.contact && (!ctx.session || !ctx.session.step || ctx.session.step === 'phone')) {
-    ctx.session = { ...ctx.session, step: 'phone' };
-    return handlePhoneStep(ctx);
-  }
-
-  // 4️⃣ Self-Healing للجلسة المفقودة
+  // 3️⃣ Self-Healing للجلسة المفقودة
   if (!ctx.session || !ctx.session.step || Object.keys(ctx.session).length === 0) {
     console.log(`⚠️ [Onboarding] Session lost for ${ctx.externalId}, reconstructing from DB...`);
 
@@ -62,12 +55,9 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
           ? await db.select().from(users).where(eq(users.telegramId, String(ctx.telegramUserId))).get()
           : null;
 
-        if (!existingUser) {
-          return { step: 'phone' };
-        }
+        if (!existingUser) return { step: 'phone' };
 
         const existingStore = await db.select().from(stores).where(eq(stores.ownerId, existingUser.id)).get();
-
         if (existingStore) {
           return { step: 'completed', phone: existingUser.phoneNumber || undefined, name: existingUser.name };
         }
@@ -113,11 +103,13 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     await saveSession(db, ctx.platform, ctx.externalId, { ...ctx.session });
   }
 
-  // الآن الـ step مضمونة
+  // الآن الـ step مضمونة ومحميّة
   const step = ctx.session.step as OnboardingStep;
-  const msg = ctx.message.trim();
+  
+  // 🛡️ تأمين قراءة الرسالة النصية: لو الـ message مش موجودة (زي كائن الـ contact) متعملش Crash للـ trim
+  const msg = ctx.message ? ctx.message.trim() : '';
 
-  // 5️⃣ الأوامر العامة
+  // 4️⃣ الأوامر العامة (لن تعمل إلا لو كانت هناك رسالة نصية مطابقة فعلاً)
   if (msg === 'رجوع') return handleBack(ctx, step);
   if (msg === 'إلغاء') {
     await deleteSession(db, ctx.platform, ctx.externalId);
@@ -132,16 +124,28 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     };
   }
 
-  // 6️⃣ توجيه للخطوات (تم إبقاء التمرير للـ ctx المتوافق مع SecureHandlerContext)
+  // 5️⃣ 🎯 التوجيه الحاسم والذكي بناءً على الـ Step الحالية فقط
   switch (step) {
     case 'phone':
       return handlePhoneStep(ctx);
+      
     case 'name':
-      return handleNameStep(ctx);
+      // حارس ذكي جوه خطوة الاسم: لو التاجر استهبل وبعت كائن اتصال (Contact) تاني، نرفضه بأدب وم نرجعش الجلسة لورا
+      if (ctx.contact) {
+        return {
+          reply: '⚠️ يرجى كتابة اسمك نصياً في رسالة، وليس مشاركة رقم الهاتف مجدداً.',
+          buttons: [[{ text: '🔙 رجوع', value: 'رجوع' }]],
+          session: ctx.session,
+        };
+      }
+      return handleNameStep(ctx); // كدة "محمد" هتدخل هنا بكل أمان ونظافة
+      
     case 'store':
       return handleStoreStep(ctx);
+      
     case 'niche':
       return handleNicheStep(ctx);
+      
     default:
       return { reply: '❌ حدث خطأ في حالة التسجيل. أرسل /start للبدء من جديد.' };
   }
