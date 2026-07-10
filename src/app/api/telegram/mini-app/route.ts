@@ -1,15 +1,15 @@
 // app/api/telegram/mini-app/route.ts
 import { verifyTelegramInitData } from '@/lib/telegram/auth';
 import { NextRequest, NextResponse } from 'next/server';
+
 export const runtime = 'edge';
-// 🌟 تعريف الـ Type الصارم المتوقع من الـ Request body
+
 interface MiniAppRequestBody {
   initData: string;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // كاستينج آمن للـ Request Body بناءً على الواجهة المحددة
     const body = (await request.json()) as MiniAppRequestBody;
     const { initData } = body;
 
@@ -19,13 +19,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 
-    const user = verifyTelegramInitData(initData, botToken);
+    // 🌟 التعديل السحري: ضفنا await هنا لأن الدالة أصبحت Async
+    const user = await verifyTelegramInitData(initData, botToken);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // ✅ المستخدم موثّق، قدم له بيانات الداشبورد
     return NextResponse.json({
       user,
       dashboard: {
