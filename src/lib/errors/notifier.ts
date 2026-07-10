@@ -14,26 +14,7 @@ import { SystemError, StoredErrorSchema } from './types';
 import type { TelegramMessage, ErrorSeverity, ErrorContext } from './types';
 import { Redis } from '@upstash/redis';
 import { uploadToB2 } from '@/lib/storage'; // ✅ استيراد دالة B2
-import type { Env as StorageEnv } from '@/lib/storage';
-// ============================================================
-// 📦 تعريف Env (Cloudflare Workers + B2)
-// ============================================================
-
-export interface Env extends StorageEnv {
-  TELEGRAM_ERROR_CHAT_ID: string;
-  TELEGRAM_BOT_TOKEN: string;
-
-  
-  // ✅ متغيرات B2 المطلوبة
-  B2_ENDPOINT: string;
-  B2_BUCKET_NAME: string;
-  B2_ACCESS_KEY_ID: string;
-  B2_SECRET_ACCESS_KEY: string;
-  
-  REDIS_URL: string;
-  REDIS_TOKEN: string;
-  [key: string]: any; 
-}
+import type { Env } from '@/lib/env';
 
 // ============================================================
 // 🔧 تكوينات الحماية
