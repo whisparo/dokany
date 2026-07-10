@@ -1,0 +1,45 @@
+{
+  "name": "dokany",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build --webpack && node scripts/fix-build.mjs && OPENNEXT_SKIP_BUILD=true opennextjs-cloudflare build --skip-build && node scripts/add-routes.js && node scripts/rename-worker.js",
+    "start": "next start",
+    "lint": "next lint",
+    "db:push": "bunx drizzle-kit push",
+    "db:studio": "bunx drizzle-kit studio"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1081.0",
+    "@upstash/redis": "^1.38.0",
+    "bcrypt-ts": "^8.0.1",
+    "better-auth": "^1.6.23",
+    "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.27",
+    "jose": "^6.2.3",
+    "lucide-react": "^1.23.0",
+    "next": "16.2.10",
+    "pg": "^8.22.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260702.1",
+    "@opennextjs/cloudflare": "^1.20.1",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "wrangler": "4.107.1"
+  }
+}

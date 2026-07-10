@@ -1,0 +1,1 @@
+"use strict";exports.id=22,exports.ids=[22],exports.modules={22:(a,b,c)=>{c.d(b,{createKyselyAdapter:()=>d.xA,kyselyAdapter:()=>d.rV});var d=c(132)}};

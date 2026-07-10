@@ -1,0 +1,12 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/_global-error/page": "app/_global-error/page.js",
+  "/api/auth/[...all]/route": "app/api/auth/[...all]/route.js",
+  "/api/ping/route": "app/api/ping/route.js",
+  "/api/telegram/mini-app/route": "app/api/telegram/mini-app/route.js",
+  "/api/telegram/webhook/route": "app/api/telegram/webhook/route.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/api/auth/session/route": "app/api/auth/session/route.js",
+  "/api/cron/process-errors/route": "app/api/cron/process-errors/route.js",
+  "/page": "app/page.js"
+}

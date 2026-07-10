@@ -1,9 +1,9 @@
-// open-next.config.js
-module.exports = {
+// open-next.config.ts
+export default {
   default: {
     override: {
-      wrapper: "cloudflare-node",   // ← Node.js runtime
-      converter: "edge",            // ← Edge converter (يدعم RSC)
+      wrapper: "cloudflare-node",
+      converter: "edge",
       proxyExternalRequest: "fetch",
       incrementalCache: "dummy",
       tagCache: "dummy",
@@ -11,4 +11,15 @@ module.exports = {
     },
   },
   edgeExternals: ["node:crypto", "node:stream", "node:buffer"],
+  middleware: {
+    external: true,
+    override: {
+      wrapper: "cloudflare-edge",
+      converter: "edge",
+      proxyExternalRequest: "fetch",
+      incrementalCache: "dummy",
+      tagCache: "dummy",
+      queue: "dummy",
+    },
+  },
 };
