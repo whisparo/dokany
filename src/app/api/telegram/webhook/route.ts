@@ -47,14 +47,24 @@ export async function POST(req: NextCloudflareRequest) {
     const update = (await req.json()) as TelegramUpdate;
     console.log('📥 Telegram update:', JSON.stringify(update).slice(0, 300));
 
-    const env = req.cloudflare?.env;
+    // 🌟 الحل السحري: الدمج الهجين بين سياق كلاود فلير والبيئة العالمية كـ Fallback
+    const cloudflareEnv = req.cloudflare?.env || (process.env as any);
+    
+    // إعادة بناء كائن الـ env عشان نضمن إن الـ DB وأي متغيرات تانية (زي الـ Tokens) موجودة ومقروءة
+    const env = {
+      ...cloudflareEnv,
+      DB: cloudflareEnv?.DB || (process.env as any)?.DB
+    };
 
     if (!env || !env.DB) {
-      console.error('❌ [Webhook Route] Critical: Cloudflare D1 binding (DB) is missing from req.cloudflare');
+      console.error('❌ [Webhook Route] Critical: Cloudflare D1 binding (DB) is completely missing from environment!');
       return NextResponse.json({ ok: false, error: 'Database binding missing' }, { status: 500 });
     }
 
     const db = getDb(env);
+
+    // 🌟 جلب التوكن بمرونة (سواء من السيرفر مباشرة أو من الـ context)
+    const botToken = env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
 
     // 1. معالجة callback_query (الأزرار)
     if (update.callback_query) {
@@ -63,7 +73,7 @@ export async function POST(req: NextCloudflareRequest) {
       const data = callback.data || '';
 
       await fetch(
-        `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`,
+        `https://api.telegram.org/bot${botToken}/answerCallbackQuery`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -73,7 +83,6 @@ export async function POST(req: NextCloudflareRequest) {
 
       const { session, timestamps } = await loadSession(db, 'telegram', chatId);
 
-      // ✅ استخدام SecureHandlerContext (يحتوي على env)
       const ctx: SecureHandlerContext = {
         platform: 'telegram',
         externalId: chatId,
@@ -81,7 +90,7 @@ export async function POST(req: NextCloudflareRequest) {
         contact: undefined,
         telegramUserId: callback.from.id,
         session,
-        env,
+        env, // ممرر ومحصن بالكامل
       };
 
       let result: HandlerResult;
@@ -113,12 +122,11 @@ export async function POST(req: NextCloudflareRequest) {
 
     const { session, timestamps } = await loadSession(db, 'telegram', baseCtx.externalId);
 
-    // ✅ استخدام SecureHandlerContext مع إضافة env
     const enrichedCtx: SecureHandlerContext = {
       ...baseCtx,
       telegramUserId: update.message?.from?.id,
       session,
-      env,
+      env, // ممرر ومحصن بالكامل
     };
 
     // 3. التحقق من طلب خاص (get_dashboard)
