@@ -1,7 +1,7 @@
 // app/api/telegram/mini-app/route.ts
 import { verifyTelegramInitData } from '@/lib/telegram/auth';
 import { NextRequest, NextResponse } from 'next/server';
-
+export const runtime = 'edge';
 // 🌟 تعريف الـ Type الصارم المتوقع من الـ Request body
 interface MiniAppRequestBody {
   initData: string;

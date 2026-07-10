@@ -5,7 +5,7 @@ import { processErrorQueue } from '@/lib/errors/queue-processor';
 import type { Env } from '@/lib/env'; // ✅ استيراد النوع الموحد من env.ts
 
 export const dynamic = 'force-dynamic';
-
+export const runtime = 'edge';
 /**
  * معالج الـ Cron Job الاقتصادي والمجمع (كل 10 دقائق)
  * يقرأ ملفات الأخطاء من B2، يحدّث العدادات في Redis، ويرسل التقارير لتليجرام.
