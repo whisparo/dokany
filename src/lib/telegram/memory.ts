@@ -72,57 +72,35 @@ export async function saveSession(
 ): Promise<void> {
   try {
     const now = new Date();
+    const sessionId = crypto.randomUUID();
+    
     const dbState = sessionData as ChatSessionState;
 
-    // 1️⃣ البحث عن أي جلسة نشطة وقائمة حالياً لهذا المستخدم
-    const existing = await db
-      .select()
-      .from(chatSessions)
-      .where(
-        and(
-          eq(chatSessions.platform, platform),
-          eq(chatSessions.externalId, externalId),
-          isNull(chatSessions.deletedAt)
-        )
-      )
-      .orderBy(desc(chatSessions.createdAt))
-      .limit(1)
-      .get();
-
-    if (existing) {
-      // 2️⃣ إذا وجدت جلسة، قم بتحديثها فوراً بدلاً من إدراج سطر جديد يسبب التضارب
-      await db
-        .update(chatSessions)
-        .set({
+    await db
+      .insert(chatSessions)
+      .values({
+        id: sessionId,
+        platform,
+        externalId,
+        state: dbState,
+        lastActivityAt: timestamps?.lastActivity || now,
+        createdAt: timestamps?.createdAt || now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [chatSessions.platform, chatSessions.externalId],
+        set: {
           state: dbState,
           lastActivityAt: timestamps?.lastActivity || now,
           updatedAt: now,
-        })
-        .where(eq(chatSessions.id, existing.id));
-      
-      console.log(`💾 [Memory Service] Session updated successfully for ${externalId} to step: ${sessionData.step}`);
-    } else {
-      // 3️⃣ إذا لم توجد جلسة من قبل، قم بإنشاء سطر جديد نظيف
-      const sessionId = crypto.randomUUID();
-      await db
-        .insert(chatSessions)
-        .values({
-          id: sessionId,
-          platform,
-          externalId,
-          state: dbState,
-          lastActivityAt: timestamps?.lastActivity || now,
-          createdAt: timestamps?.createdAt || now,
-          updatedAt: now,
-        });
-      
-      console.log(`💾 [Memory Service] New session created for ${externalId}`);
-    }
+        },
+      });
   } catch (error) {
     console.error('❌ [Memory Service] Error saving/upserting session:', error);
     throw error;
   }
 }
+
 export async function updateSession(
   db: DbInstance,
   platform: 'telegram' | 'web',
