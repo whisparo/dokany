@@ -1,11 +1,9 @@
 // open-next.config.js
-const { defineCloudflareConfig } = require("@opennextjs/cloudflare");
-
-module.exports = defineCloudflareConfig({
+module.exports = {
   default: {
     override: {
-      wrapper: "cloudflare-node", // ← نرجع لـ node عشان RSC
-      converter: "node",          // ← node بدل edge
+      wrapper: "cloudflare-node",   // ← Node.js runtime
+      converter: "edge",            // ← Edge converter (يدعم RSC)
       proxyExternalRequest: "fetch",
       incrementalCache: "dummy",
       tagCache: "dummy",
@@ -13,4 +11,4 @@ module.exports = defineCloudflareConfig({
     },
   },
   edgeExternals: ["node:crypto", "node:stream", "node:buffer"],
-});
+};
