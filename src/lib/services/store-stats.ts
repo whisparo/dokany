@@ -2,11 +2,11 @@
 
 import { getDb, schema, type D1Transaction } from '@/lib/db';
 import { eq, sql } from 'drizzle-orm';
-import type { Env } from '@/workers';
-import { SystemError } from '@/lib/errors/types'; // 🚀 استيراد كلاس الأخطاء الموحد
+import type { Env } from '@/lib/env'; // ✅ استيراد النوع الموحد من env.ts
+import { SystemError } from '@/lib/errors/types';
 
 export async function updateStoreStatsAfterOrder(
-  env: Env & Record<string, unknown>, // ✅ حل مشكلة تيبات الـ env وتوافقها مع getDb
+  env: Env & Record<string, unknown>,
   storeId: string,
   orderTotal: string,
   tx?: D1Transaction
@@ -24,7 +24,6 @@ export async function updateStoreStatsAfterOrder(
       .where(eq(schema.storeStats.storeId, storeId))
       .returning({ id: schema.storeStats.id });
 
-    // إذا لم يكن هناك سجل إحصائيات للمتجر بعد (أول طلب)، قم بإنشائه فوراً
     if (result.length === 0) {
       await client.insert(schema.storeStats).values({
         id: crypto.randomUUID(),
@@ -41,16 +40,16 @@ export async function updateStoreStatsAfterOrder(
       category: 'database',
       severity: 'critical',
       retryable: true,
-      shouldAlert: true, // حرج جداً لأن عدم تحديث الإيرادات يسبب تضارب مالي عند التاجر
+      shouldAlert: true,
       technicalMessage: `STORE_STATS_FAILURE: Failed to update stats for store ${storeId}.`,
       cause: error,
-      metadata: { storeId, orderTotal, originalError: error instanceof Error ? error.message : String(error) }
+      metadata: { storeId, orderTotal, originalError: error instanceof Error ? error.message : String(error) },
     });
   }
 }
 
 export async function updateCustomerStats(
-  env: Env & Record<string, unknown>, // ✅ حل مشكلة تيبات الـ env
+  env: Env & Record<string, unknown>,
   customerId: string,
   orderTotal: string,
   tx?: D1Transaction
@@ -88,13 +87,13 @@ export async function updateCustomerStats(
       shouldAlert: true,
       technicalMessage: `CUSTOMER_STATS_FAILURE: Failed to update stats for customer ${customerId}.`,
       cause: error,
-      metadata: { customerId, orderTotal, originalError: error instanceof Error ? error.message : String(error) }
+      metadata: { customerId, orderTotal, originalError: error instanceof Error ? error.message : String(error) },
     });
   }
 }
 
 export async function updateProductStatsBatch(
-  env: Env & Record<string, unknown>, // ✅ حل مشكلة تيبات الـ env
+  env: Env & Record<string, unknown>,
   items: { productId: string; quantity: number }[],
   tx?: D1Transaction
 ) {
@@ -133,7 +132,7 @@ export async function updateProductStatsBatch(
       shouldAlert: true,
       technicalMessage: `PRODUCT_STATS_FAILURE: Batch update failed.`,
       cause: error,
-      metadata: { items, originalError: error instanceof Error ? error.message : String(error) }
+      metadata: { items, originalError: error instanceof Error ? error.message : String(error) },
     });
   }
 }
