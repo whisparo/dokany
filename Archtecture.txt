@@ -688,4 +688,4 @@ Cloudinary	1GB Bandwidth	مجاناً (ضمن 25GB)
 بما أنك تستخدم الأمر الذري SET lock:idempotency:{key} pending EX 30 NX لمنع الـ Race Condition، تأكد عند عمل حذف للقفل (DEL) في نهاية العملية أن الـ Worker الحالي هو نفسه الذي أنشأ القفل (باستخدام UUID فريد كقيمة للقفل)، وذلك لتجنب أن يقوم Worker بطيء بحذف قفل أنشأه Worker آخر جاء بعده.
 
 ⚠️ دقة المسارات في هيكلية Hive لـ DuckDB (الباب الخامس - 5.3.3)
-تأكد أن الـ Capture Worker يكتب ملفات الـ JSON والـ Parquet بنفس أسماء المجلدات الدقيقة المتوقعة في المتصفح. مثلاً: store_id=${store_id}/year=${year}/month=${month}/. أي اختلاف في التسمية سيجعل DuckDB يفشل في عمل الـ Partition Pruning التلقائي ويضطر لتحميل كامل الملفات.
+تأكد أن الـ Capture Worker يكتب ملفات الـ JSON والـ Parquet بنفس أسماء المجلدات الدقيقة المتوقعة في المتصفح. مثلاً: store_id=${store_id}/year=${year}/month=${month}/. أي اختلاف في التسمية سيجعل DuckDB يفشل في عمل الـ Partition Pruning التلقائي ويضطر لتحميل كامل الملفات..

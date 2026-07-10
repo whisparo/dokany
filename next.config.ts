@@ -2,15 +2,12 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // 🔥 ده هيساعد OpenNext يشتغل مع Next.js 16
-  output: "standalone", // إضافي لو لسه في مشاكل
-
+  output: "standalone", // ✅ هذا السطر هو الحل
   experimental: {
-    // reactCompiler: true, // علّقها إذا مش محتاجها
+    // reactCompiler: true,
   },
-
   images: {
-    domains: [], // ضع domains الخاصة بك هنا
+    domains: [],
   },
 };
 
