@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack && node scripts/fix-build.mjs && OPENNEXT_SKIP_BUILD=true opennextjs-cloudflare build --skip-build",
+    "build": "next build --webpack && node scripts/fix-build.mjs && OPENNEXT_SKIP_BUILD=true opennextjs-cloudflare build --skip-build && node scripts/add-routes.js && node scripts/rename-worker.js",
     "start": "next start",
     "lint": "next lint",
     "db:push": "bunx drizzle-kit push",

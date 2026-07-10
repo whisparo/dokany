@@ -4305,13 +4305,1448 @@
       ],
       "format": "cjs"
     },
+    ".open-next/server-functions/default/node_modules/@smithy/types/dist-cjs/index.js": {
+      "bytes": 3349,
+      "imports": [],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/transport/index.js": {
+      "bytes": 5172,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/types/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/types"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js": {
+      "bytes": 21439,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/transport/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/transport"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js": {
+      "bytes": 42098,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/transport/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/transport"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/types/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/types"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/schema"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js": {
+      "bytes": 29340,
+      "imports": [
+        {
+          "path": "node:os",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:crypto",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:fs/promises",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/types/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/types"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/transport/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/transport"
+        },
+        {
+          "path": "node:http",
+          "kind": "require-call",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/endpoints/index.js": {
+      "bytes": 32324,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/transport/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/transport"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/types/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/types"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js": {
+      "bytes": 60961,
+      "imports": [
+        {
+          "path": "node:crypto",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/transport/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/transport"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/endpoints/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/endpoints"
+        },
+        {
+          "path": "node:stream",
+          "kind": "require-call",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/checksum/index.js": {
+      "bytes": 18654,
+      "imports": [
+        {
+          "path": "node:fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:stream",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": "node:crypto",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:zlib",
+          "kind": "require-call",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/event-streams/index.js": {
+      "bytes": 35381,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/checksum/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/checksum"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": "node:stream",
+          "kind": "require-call",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js": {
+      "bytes": 40216,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/schema"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/transport/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/transport"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/transport/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/transport"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/types/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/types"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/event-streams/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/event-streams"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/retry/index.js": {
+      "bytes": 33319,
+      "imports": [
+        {
+          "path": "node:stream",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws/lambda-invoke-store/dist-cjs/invoke-store.js": {
+      "bytes": 4237,
+      "imports": [
+        {
+          "path": "node:async_hooks",
+          "kind": "dynamic-import",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/index.js": {
+      "bytes": 13444,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/transport/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/transport"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/types/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/types"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/bowser/es5.js": {
+      "bytes": 36752,
+      "imports": [],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js": {
+      "bytes": 38673,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/retry/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/retry"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws/lambda-invoke-store/dist-cjs/invoke-store.js",
+          "kind": "require-call",
+          "original": "@aws/lambda-invoke-store"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core"
+        },
+        {
+          "path": "node:os",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:process",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": "node:fs/promises",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/endpoints/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/endpoints"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/endpoints/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/endpoints"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/bowser/es5.js",
+          "kind": "require-call",
+          "original": "bowser"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/checksums/dist-cjs/submodules/crc/index.js": {
+      "bytes": 4572,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/checksum/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/checksum"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/checksums/dist-cjs/submodules/flexible-checksums/index.js": {
+      "bytes": 19612,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/checksums/dist-cjs/submodules/crc/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/checksums/crc"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/signature-v4/dist-cjs/index.js": {
+      "bytes": 23490,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/signature-v4-multi-region/dist-cjs/index.js": {
+      "bytes": 8084,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/signature-v4/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/signature-v4"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/util/index.js": {
+      "bytes": 1894,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/cbor/index.js": {
+      "bytes": 43039,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/schema"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/transport/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/transport"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/xml-builder/dist-cjs/index.js": {
+      "bytes": 10404,
+      "imports": [],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js": {
+      "bytes": 75393,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/cbor/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/cbor"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/schema"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/xml-builder/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/xml-builder"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/middleware-sdk-s3/dist-cjs/submodules/s3/index.js": {
+      "bytes": 45011,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/signature-v4-multi-region/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/signature-v4-multi-region"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core"
+        },
+        {
+          "path": "node:stream",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/util/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/util"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/schema"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/httpAuthSchemes/index.js": {
+      "bytes": 14012,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/signature-v4/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/signature-v4"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-env/dist-cjs/index.js": {
+      "bytes": 1663,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js": {
+      "bytes": 15218,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": "node:http",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@smithy/node-http-handler/dist-cjs/index.js": {
+      "bytes": 31660,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": "node:https",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:stream",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:http2",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": "node:http",
+          "kind": "require-call",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-http/dist-cjs/index.js": {
+      "bytes": 7337,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/node-http-handler/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/node-http-handler"
+        },
+        {
+          "path": "node:fs/promises",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/sso-oidc/index.js": {
+      "bytes": 26284,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/endpoints/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/endpoints"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/retry/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/retry"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/schema"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/httpAuthSchemes/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/httpAuthSchemes"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/node-http-handler/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/node-http-handler"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/checksum/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/checksum"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/token-providers/dist-cjs/index.js": {
+      "bytes": 6931,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/httpAuthSchemes/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/httpAuthSchemes"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": "node:fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/sso-oidc/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/nested-clients/sso-oidc"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/sso-oidc/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/nested-clients/sso-oidc"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/sso/index.js": {
+      "bytes": 19513,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/endpoints/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/endpoints"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/retry/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/retry"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/schema"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/httpAuthSchemes/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/httpAuthSchemes"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/node-http-handler/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/node-http-handler"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/checksum/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/checksum"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-sso/dist-cjs/loadSso-BGYXHf8s.js": {
+      "bytes": 183,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/sso/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/nested-clients/sso"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-sso/dist-cjs/index.js": {
+      "bytes": 8232,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/token-providers/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/token-providers"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-sso/dist-cjs/loadSso-BGYXHf8s.js",
+          "kind": "require-call",
+          "original": "./loadSso-BGYXHf8s.js"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/signin/index.js": {
+      "bytes": 22271,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/endpoints/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/endpoints"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/retry/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/retry"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/schema"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/httpAuthSchemes/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/httpAuthSchemes"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/node-http-handler/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/node-http-handler"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/checksum/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/checksum"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-login/dist-cjs/index.js": {
+      "bytes": 12365,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": "node:crypto",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:os",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/signin/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/nested-clients/signin"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/sts/index.js": {
+      "bytes": 37806,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/endpoints/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/endpoints"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/retry/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/retry"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/schema"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/httpAuthSchemes/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/httpAuthSchemes"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/signature-v4-multi-region/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/signature-v4-multi-region"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/node-http-handler/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/node-http-handler"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/checksum/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/checksum"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-process/dist-cjs/index.js": {
+      "bytes": 3257,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": "node:child_process",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:util",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-web-identity/dist-cjs/index.js": {
+      "bytes": 2636,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": "node:fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/sts/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/nested-clients/sts"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-ini/dist-cjs/index.js": {
+      "bytes": 11572,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-login/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/credential-provider-login"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-http/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/credential-provider-http"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/credential-provider-imds"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/credential-provider-imds"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-env/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/credential-provider-env"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/sts/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/nested-clients/sts"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-process/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/credential-provider-process"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-sso/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/credential-provider-sso"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-web-identity/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/credential-provider-web-identity"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-node/dist-cjs/index.js": {
+      "bytes": 7120,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-env/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/credential-provider-env"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/credential-provider-imds"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-http/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/credential-provider-http"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-sso/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/credential-provider-sso"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-ini/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/credential-provider-ini"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-process/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/credential-provider-process"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-web-identity/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/credential-provider-web-identity"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/checksums/dist-cjs/submodules/sha/index.js": {
+      "bytes": 10223,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": "node:crypto",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/checksum/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/checksum"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/node_modules/@aws-sdk/client-s3/dist-cjs/index.js": {
+      "bytes": 265031,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/checksums/dist-cjs/submodules/flexible-checksums/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/checksums/flexible-checksums"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/middleware-sdk-s3/dist-cjs/submodules/s3/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/middleware-sdk-s3/s3"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/client"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/config"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/endpoints/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/endpoints"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/event-streams/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/event-streams"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/protocols"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/retry/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/retry"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/schema"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/httpAuthSchemes/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/core/httpAuthSchemes"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/signature-v4-multi-region/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/signature-v4-multi-region"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-node/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/credential-provider-node"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/checksum/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/checksum"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js",
+          "kind": "require-call",
+          "original": "@smithy/core/serde"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@smithy/node-http-handler/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@smithy/node-http-handler"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/checksums/dist-cjs/submodules/sha/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/checksums/sha"
+        }
+      ],
+      "format": "cjs"
+    },
     ".open-next/server-functions/default/.next/server/chunks/157.js": {
       "bytes": 70497,
       "imports": [],
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/197.js": {
-      "bytes": 23693,
+      "bytes": 24608,
       "imports": [],
       "format": "cjs"
     },
@@ -4503,7 +5938,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/cron/process-errors/route.js": {
-      "bytes": 15988,
+      "bytes": 16203,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/router/utils/app-paths.js",
@@ -4549,6 +5984,11 @@
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/no-fallback-error.external.js",
           "kind": "require-call",
           "original": "next/dist/shared/lib/no-fallback-error.external"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/client-s3/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/client-s3"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/webpack-runtime.js",
@@ -4610,7 +6050,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/telegram/webhook/route.js": {
-      "bytes": 75743,
+      "bytes": 75794,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/router/utils/app-paths.js",
@@ -4656,6 +6096,11 @@
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/no-fallback-error.external.js",
           "kind": "require-call",
           "original": "next/dist/shared/lib/no-fallback-error.external"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@aws-sdk/client-s3/dist-cjs/index.js",
+          "kind": "require-call",
+          "original": "@aws-sdk/client-s3"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/webpack-runtime.js",
@@ -6413,7 +7858,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/open-next.config.mjs": {
-      "bytes": 10989,
+      "bytes": 11029,
       "imports": [],
       "format": "esm"
     },
@@ -6729,6 +8174,181 @@
         },
         {
           "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:os",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:crypto",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:fs/promises",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:http",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:crypto",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:stream",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:stream",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:crypto",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:zlib",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:stream",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:stream",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:async_hooks",
+          "kind": "dynamic-import",
+          "external": true
+        },
+        {
+          "path": "node:os",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:process",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:fs/promises",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:stream",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:http",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:https",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:stream",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:http2",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:http",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:fs/promises",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:crypto",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:os",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:child_process",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:util",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node:crypto",
           "kind": "require-call",
           "external": true
         },
@@ -7803,11 +9423,140 @@
         ".open-next/server-functions/default/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js": {
           "bytesInOutput": 181447
         },
+        ".open-next/server-functions/default/node_modules/@smithy/types/dist-cjs/index.js": {
+          "bytesInOutput": 2833
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/transport/index.js": {
+          "bytesInOutput": 3586
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js": {
+          "bytesInOutput": 14014
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/client/index.js": {
+          "bytesInOutput": 27858
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/config/index.js": {
+          "bytesInOutput": 21479
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/endpoints/index.js": {
+          "bytesInOutput": 22783
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/serde/index.js": {
+          "bytesInOutput": 42551
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/checksum/index.js": {
+          "bytesInOutput": 11955
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/event-streams/index.js": {
+          "bytesInOutput": 21745
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js": {
+          "bytesInOutput": 25295
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/retry/index.js": {
+          "bytesInOutput": 23998
+        },
+        ".open-next/server-functions/default/node_modules/@aws/lambda-invoke-store/dist-cjs/invoke-store.js": {
+          "bytesInOutput": 3090
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/index.js": {
+          "bytesInOutput": 10085
+        },
+        ".open-next/server-functions/default/node_modules/bowser/es5.js": {
+          "bytesInOutput": 38177
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/client/index.js": {
+          "bytesInOutput": 25720
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/checksums/dist-cjs/submodules/crc/index.js": {
+          "bytesInOutput": 2748
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/checksums/dist-cjs/submodules/flexible-checksums/index.js": {
+          "bytesInOutput": 14739
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/signature-v4/dist-cjs/index.js": {
+          "bytesInOutput": 17277
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/signature-v4-multi-region/dist-cjs/index.js": {
+          "bytesInOutput": 6022
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/util/index.js": {
+          "bytesInOutput": 1533
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/core/dist-cjs/submodules/cbor/index.js": {
+          "bytesInOutput": 25409
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/xml-builder/dist-cjs/index.js": {
+          "bytesInOutput": 6056
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js": {
+          "bytesInOutput": 47657
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/middleware-sdk-s3/dist-cjs/submodules/s3/index.js": {
+          "bytesInOutput": 33031
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/core/dist-cjs/submodules/httpAuthSchemes/index.js": {
+          "bytesInOutput": 9853
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-env/dist-cjs/index.js": {
+          "bytesInOutput": 1420
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js": {
+          "bytesInOutput": 10989
+        },
+        ".open-next/server-functions/default/node_modules/@smithy/node-http-handler/dist-cjs/index.js": {
+          "bytesInOutput": 20009
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-http/dist-cjs/index.js": {
+          "bytesInOutput": 5515
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/sso-oidc/index.js": {
+          "bytesInOutput": 20819
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/token-providers/dist-cjs/index.js": {
+          "bytesInOutput": 5424
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/sso/index.js": {
+          "bytesInOutput": 15338
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-sso/dist-cjs/loadSso-BGYXHf8s.js": {
+          "bytesInOutput": 309
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-sso/dist-cjs/index.js": {
+          "bytesInOutput": 5875
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/signin/index.js": {
+          "bytesInOutput": 17369
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-login/dist-cjs/index.js": {
+          "bytesInOutput": 8022
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/nested-clients/dist-cjs/submodules/sts/index.js": {
+          "bytesInOutput": 29055
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-process/dist-cjs/index.js": {
+          "bytesInOutput": 2517
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-web-identity/dist-cjs/index.js": {
+          "bytesInOutput": 2179
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-ini/dist-cjs/index.js": {
+          "bytesInOutput": 8993
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/credential-provider-node/dist-cjs/index.js": {
+          "bytesInOutput": 4929
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/checksums/dist-cjs/submodules/sha/index.js": {
+          "bytesInOutput": 6350
+        },
+        ".open-next/server-functions/default/node_modules/@aws-sdk/client-s3/dist-cjs/index.js": {
+          "bytesInOutput": 212499
+        },
         ".open-next/server-functions/default/.next/server/chunks/157.js": {
           "bytesInOutput": 77897
         },
         ".open-next/server-functions/default/.next/server/chunks/197.js": {
-          "bytesInOutput": 31024
+          "bytesInOutput": 31941
         },
         ".open-next/server-functions/default/.next/server/chunks/209.js": {
           "bytesInOutput": 5956
@@ -7861,13 +9610,13 @@
           "bytesInOutput": 2303
         },
         ".open-next/server-functions/default/.next/server/app/api/cron/process-errors/route.js": {
-          "bytesInOutput": 16611
+          "bytesInOutput": 16796
         },
         ".open-next/server-functions/default/.next/server/app/api/telegram/mini-app/route.js": {
           "bytesInOutput": 8265
         },
         ".open-next/server-functions/default/.next/server/app/api/telegram/webhook/route.js": {
-          "bytesInOutput": 86676
+          "bytesInOutput": 86720
         },
         ".open-next/server-functions/default/.next/server/app/api/auth/[...all]/route.js": {
           "bytesInOutput": 11266
@@ -8041,7 +9790,7 @@
           "bytesInOutput": 59384
         }
       },
-      "bytes": 4046002
+      "bytes": 4884253
     }
   }
 }

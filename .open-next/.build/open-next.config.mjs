@@ -302,7 +302,8 @@ var require_open_next_config = __commonJS({
     module.exports = defineCloudflareConfig2({
       default: {
         override: {
-          wrapper: "cloudflare-node",
+          wrapper: "cloudflare-edge",
+          // ← غيرتها لـ edge
           converter: "edge",
           proxyExternalRequest: "fetch",
           incrementalCache: "dummy",
