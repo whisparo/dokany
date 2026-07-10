@@ -5,21 +5,13 @@ import { classifyError } from './classifier';
 import { sendErrorToTelegram } from './notifier';
 import { SystemError, StoredErrorSchema } from './types';
 import type { StoredError, ProcessedErrorResult } from './types';
-import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
-
-// ============================================================
-// 📦 تعريف Env (Cloudflare Workers)
-// ============================================================
-
-export interface Env {
-  DB: D1Database;
-  R2_BUCKET: R2Bucket;
-  TELEGRAM_ERROR_CHAT_ID: string;
-  TELEGRAM_BOT_TOKEN: string;
-  REDIS_URL: string;
-  REDIS_TOKEN: string;
-  QSTASH_TOKEN: string;
-}
+import type { Env } from '@/lib/env';
+import {
+  uploadToB2,
+  downloadFromB2,
+  deleteFromB2,
+  listB2Objects,
+} from '@/lib/storage';
 
 // ============================================================
 // ⚙️ تكوينات المعالج
@@ -28,25 +20,25 @@ export interface Env {
 interface QueueProcessorConfig {
   /** عدد الأخطاء المراد معالجتها في كل دورة (افتراضي: 10) */
   batchSize?: number;
-  
+
   /** الحد الأقصى لمحاولات إعادة الإرسال (افتراضي: 3) */
   maxRetries?: number;
-  
-  /** مسار تخزين الأخطاء في R2 */
-  r2RawPath?: string;
-  
-  /** مسار تخزين الأخطاء المعالجة في R2 */
-  r2ProcessedPath?: string;
-  
-  /** مسار تخزين الأخطاء الفاشلة نهائياً (DLQ) في R2 */
-  r2DlqPath?: string;
-  
+
+  /** مسار تخزين الأخطاء في B2 */
+  b2RawPath?: string;
+
+  /** مسار تخزين الأخطاء المعالجة في B2 */
+  b2ProcessedPath?: string;
+
+  /** مسار تخزين الأخطاء الفاشلة نهائياً (DLQ) في B2 */
+  b2DlqPath?: string;
+
   /** عدد العمليات المتوازية (افتراضي: 5) */
   concurrency?: number;
-  
+
   /** Timeout للمعالجة (بالميلي ثانية) */
   timeoutMs?: number;
-  
+
   /** عدد الأيام للاحتفاظ بالأخطاء المعالجة */
   retentionDays?: number;
 }
@@ -54,9 +46,9 @@ interface QueueProcessorConfig {
 const DEFAULT_CONFIG: Required<QueueProcessorConfig> = {
   batchSize: 10,
   maxRetries: 3,
-  r2RawPath: 'errors/raw/',
-  r2ProcessedPath: 'errors/processed/',
-  r2DlqPath: 'errors/failed/',
+  b2RawPath: 'errors/raw/',
+  b2ProcessedPath: 'errors/processed/',
+  b2DlqPath: 'errors/failed/',
   concurrency: 5,
   timeoutMs: 50000, // 50 ثانية (أقل من 60s Worker limit)
   retentionDays: 30,
@@ -91,7 +83,7 @@ function log(entry: Omit<ProcessingLog, 'timestamp'>): void {
 // ============================================================
 
 /**
- * معالجة الأخطاء المعلقة من Redis Queue و R2 ككتلة واحدة ممتثلة للمسار الاقتصادي
+ * معالجة الأخطاء المعلقة من Redis Queue و B2 ككتلة واحدة ممتثلة للمسار الاقتصادي
  */
 export async function processErrorQueue(
   env: Env,
@@ -105,34 +97,34 @@ export async function processErrorQueue(
 }> {
   const startTime = Date.now();
   const mergedConfig = { ...DEFAULT_CONFIG, ...config };
-  
+
   const stats = {
     processed: 0,
     succeeded: 0,
     failed: 0,
     skipped: 0,
   };
-  
+
   log({
     level: 'info',
     action: 'queue_processor_started',
     metadata: { config: mergedConfig },
   });
-  
+
   try {
-    // ✅ 1. معالجة الأخطاء من Redis Queue (تم تحديثها إلى Single-Pass الحصيف توفيراً للـ RAM)
+    // ✅ 1. معالجة الأخطاء من Redis Queue
     const queuedErrors = await fetchFromRedisQueue(env, mergedConfig.batchSize);
     log({
       level: 'info',
       action: 'fetched_from_redis',
       metadata: { count: queuedErrors.length },
     });
-    
+
     await processWithConcurrency(
       queuedErrors,
       async (error) => {
         const result = await processSingleError(error, env, mergedConfig);
-        
+
         stats.processed++;
         if (result.success) {
           stats.succeeded++;
@@ -144,20 +136,20 @@ export async function processErrorQueue(
       },
       mergedConfig.concurrency
     );
-    
-    // ✅ 2. معالجة الأخطاء من R2 (Single-Pass مع المحافظة على التيبات الصافية دون "as")
-    const r2Errors = await fetchFromR2(env, mergedConfig);
+
+    // ✅ 2. معالجة الأخطاء من B2
+    const b2Errors = await fetchFromB2(env, mergedConfig);
     log({
       level: 'info',
-      action: 'fetched_from_r2',
-      metadata: { count: r2Errors.length },
+      action: 'fetched_from_b2',
+      metadata: { count: b2Errors.length },
     });
 
     await processWithConcurrency(
-      r2Errors,
+      b2Errors,
       async (storedError) => {
         const result = await processStoredError(storedError, env, mergedConfig);
-        
+
         stats.processed++;
         if (result.success) {
           stats.succeeded++;
@@ -179,28 +171,27 @@ export async function processErrorQueue(
         metadata: { deleted },
       });
     }
-    
+
     // ✅ 4. تحديث الإحصائيات والعدادات في Redis
     await updateProcessingMetrics(env, stats);
-    
+
     const duration = Date.now() - startTime;
-    
+
     log({
       level: 'info',
       action: 'queue_processor_completed',
       duration,
       metadata: stats,
     });
-    
+
     return { ...stats, duration };
-    
   } catch (error) {
     log({
       level: 'error',
       action: 'queue_processor_failed',
       metadata: { error: String(error) },
     });
-    
+
     throw error;
   }
 }
@@ -214,17 +205,17 @@ async function fetchFromRedisQueue(
   batchSize: number
 ): Promise<SystemError[]> {
   const redis = await getRedis(env);
-  
+
   const pipeline = redis.pipeline();
   pipeline.lrange('error:queue', 0, batchSize - 1);
   pipeline.ltrim('error:queue', batchSize, -1);
-  
+
   const execResult = await pipeline.exec();
   if (!execResult || execResult.length === 0) return [];
-  
+
   const rawErrors = execResult[0] as string[];
   if (!rawErrors || rawErrors.length === 0) return [];
-  
+
   return rawErrors
     .map((raw: string) => {
       try {
@@ -243,51 +234,43 @@ async function fetchFromRedisQueue(
 }
 
 // ============================================================
-// 📂 جلب الأخطاء من R2
+// 📂 جلب الأخطاء من B2
 // ============================================================
 
-async function fetchFromR2(
+async function fetchFromB2(
   env: Env,
   config: QueueProcessorConfig
 ): Promise<StoredError[]> {
   const errors: StoredError[] = [];
-  let cursor: string | undefined = undefined;
-  
-  do {
-    const listed = await env.R2_BUCKET.list({
-      prefix: config.r2RawPath,
-      limit: Math.min(100, config.batchSize! * 2),
-      cursor,
-    });
-    
-    for (const obj of listed.objects) {
-      if (!obj.key.endsWith('.json')) continue;
+  const prefix = config.b2RawPath!;
+
+  try {
+    const keys = await listB2Objects(prefix, env);
+
+    for (const key of keys) {
+      if (!key.endsWith('.json')) continue;
       if (errors.length >= config.batchSize!) break;
-      
+
       try {
-        const content = await env.R2_BUCKET.get(obj.key);
+        const content = await downloadFromB2(key, env);
         if (!content) continue;
-        
-        const text = await content.text();
-        const data = JSON.parse(text);
-        
+
+        const data = JSON.parse(content);
         const result = StoredErrorSchema.safeParse(data);
         if (!result.success) {
           log({
             level: 'warn',
             action: 'invalid_stored_error',
-            errorId: obj.key,
+            errorId: key,
             metadata: { error: result.error.message },
           });
           continue;
         }
-        
+
         const storedError = result.data as StoredError;
-        
-        if (storedError.processed) {
-          continue;
-        }
-        
+
+        if (storedError.processed) continue;
+
         if (
           storedError.processingStartedAt &&
           Date.now() - storedError.processingStartedAt < 5 * 60 * 1000
@@ -299,22 +282,25 @@ async function fetchFromR2(
           });
           continue;
         }
-        
+
         errors.push(storedError);
       } catch (error) {
         log({
           level: 'error',
-          action: 'failed_to_read_r2',
-          errorId: obj.key,
+          action: 'failed_to_read_b2',
+          errorId: key,
           metadata: { error: String(error) },
         });
       }
     }
-    
-    cursor = listed.truncated ? listed.cursor : undefined;
-    if (errors.length >= config.batchSize!) break;
-  } while (cursor);
-  
+  } catch (error) {
+    log({
+      level: 'error',
+      action: 'failed_to_list_b2',
+      metadata: { error: String(error) },
+    });
+  }
+
   return errors;
 }
 
@@ -328,38 +314,40 @@ async function processSingleError(
   config: QueueProcessorConfig
 ): Promise<ProcessedErrorResult & { skipped?: boolean }> {
   const startTime = Date.now();
-  
+
   try {
     await sendErrorToTelegram(error, env);
     await updateErrorStats(env, error.code, 'sent');
-    
+
     log({
       level: 'info',
       action: 'error_sent_to_telegram',
       errorCode: error.code,
       duration: Date.now() - startTime,
     });
-    
+
     return {
       success: true,
       error: error.toJSON(),
       sentToTelegram: true,
     };
-    
   } catch (sendError) {
-    const retryCount = typeof error.metadata?.retryCount === 'number' ? error.metadata.retryCount : 0;
+    const retryCount =
+      typeof error.metadata?.retryCount === 'number'
+        ? error.metadata.retryCount
+        : 0;
     const newRetryCount = retryCount + 1;
-    
+
     if (newRetryCount >= config.maxRetries!) {
       await moveToDLQ(error, env);
-      
+
       log({
         level: 'error',
         action: 'error_moved_to_dlq',
         errorCode: error.code,
         metadata: { retryCount: newRetryCount },
       });
-      
+
       return {
         success: false,
         error: error.toJSON(),
@@ -368,14 +356,14 @@ async function processSingleError(
       };
     } else {
       await reQueueError(error, newRetryCount, env);
-      
+
       log({
         level: 'warn',
         action: 'error_requeued',
         errorCode: error.code,
         metadata: { retryCount: newRetryCount },
       });
-      
+
       return {
         success: false,
         error: error.toJSON(),
@@ -392,20 +380,25 @@ async function processStoredError(
   config: QueueProcessorConfig
 ): Promise<ProcessedErrorResult & { skipped?: boolean }> {
   const startTime = Date.now();
-  
+
   const error = new SystemError(storedError.error);
   const retryCount = storedError.retryCount || 0;
-  
+
   try {
     await markAsProcessing(storedError, env);
     await sendErrorToTelegram(error, env);
     await updateErrorStats(env, error.code, 'sent');
-    
-    const moved = await moveR2File(storedError, env, config.r2ProcessedPath!, 'processed');
+
+    const moved = await moveB2File(
+      storedError,
+      env,
+      config.b2ProcessedPath!,
+      'processed'
+    );
     if (!moved) {
-      throw new Error('Failed to move R2 file');
+      throw new Error('Failed to move B2 file');
     }
-    
+
     log({
       level: 'info',
       action: 'stored_error_processed',
@@ -413,19 +406,18 @@ async function processStoredError(
       errorCode: error.code,
       duration: Date.now() - startTime,
     });
-    
+
     return {
       success: true,
       error: error.toJSON(),
       sentToTelegram: true,
     };
-    
   } catch (sendError) {
     const newRetryCount = retryCount + 1;
-    
+
     if (newRetryCount >= config.maxRetries!) {
-      await moveR2File(storedError, env, config.r2DlqPath!, 'failed');
-      
+      await moveB2File(storedError, env, config.b2DlqPath!, 'failed');
+
       log({
         level: 'error',
         action: 'stored_error_moved_to_dlq',
@@ -433,7 +425,7 @@ async function processStoredError(
         errorCode: error.code,
         metadata: { retryCount: newRetryCount },
       });
-      
+
       return {
         success: false,
         error: error.toJSON(),
@@ -441,8 +433,8 @@ async function processStoredError(
         sentToTelegram: false,
       };
     } else {
-      await updateR2RetryCount(storedError, newRetryCount, env);
-      
+      await updateB2RetryCount(storedError, newRetryCount, env);
+
       log({
         level: 'warn',
         action: 'stored_error_retry',
@@ -450,7 +442,7 @@ async function processStoredError(
         errorCode: error.code,
         metadata: { retryCount: newRetryCount },
       });
-      
+
       return {
         success: false,
         error: error.toJSON(),
@@ -462,7 +454,7 @@ async function processStoredError(
 }
 
 // ============================================================
-// 🗂️ دوال التعامل مع R2
+// 🗂️ دوال التعامل مع B2 (بدلاً من R2)
 // ============================================================
 
 async function markAsProcessing(
@@ -473,16 +465,14 @@ async function markAsProcessing(
     ...storedError,
     processingStartedAt: Date.now(),
   };
-  
+
   const date = new Date(storedError.timestamp).toISOString().split('T')[0];
   const key = `errors/raw/${date}/error_${storedError.timestamp}_${storedError.id}.json`;
-  
-  await env.R2_BUCKET.put(key, JSON.stringify(updatedError, null, 2), {
-    httpMetadata: { contentType: 'application/json' },
-  });
+
+  await uploadToB2(key, JSON.stringify(updatedError, null, 2), env);
 }
 
-async function moveR2File(
+async function moveB2File(
   storedError: StoredError,
   env: Env,
   destinationPath: string,
@@ -491,35 +481,32 @@ async function moveR2File(
   const date = new Date(storedError.timestamp).toISOString().split('T')[0];
   const sourceKey = `errors/raw/${date}/error_${storedError.timestamp}_${storedError.id}.json`;
   const destKey = `${destinationPath}${date}/error_${storedError.timestamp}_${storedError.id}.json`;
-  
+
   try {
-    const content = await env.R2_BUCKET.get(sourceKey);
+    const content = await downloadFromB2(sourceKey, env);
     if (!content) {
       log({
         level: 'warn',
-        action: 'r2_file_not_found',
+        action: 'b2_file_not_found',
         errorId: storedError.id,
       });
       return false;
     }
-    
+
     const updatedError: StoredError = {
       ...storedError,
       processed: status === 'processed',
       processedAt: status === 'processed' ? Date.now() : undefined,
       failedAt: status === 'failed' ? Date.now() : undefined,
     };
-    
-    await env.R2_BUCKET.put(destKey, JSON.stringify(updatedError, null, 2), {
-      httpMetadata: { contentType: 'application/json' },
-    });
-    
-    await env.R2_BUCKET.delete(sourceKey);
+
+    await uploadToB2(destKey, JSON.stringify(updatedError, null, 2), env);
+    await deleteFromB2(sourceKey, env);
     return true;
   } catch (error) {
     log({
       level: 'error',
-      action: 'move_r2_file_failed',
+      action: 'move_b2_file_failed',
       errorId: storedError.id,
       metadata: { error: String(error), sourceKey, destKey },
     });
@@ -527,7 +514,7 @@ async function moveR2File(
   }
 }
 
-async function updateR2RetryCount(
+async function updateB2RetryCount(
   storedError: StoredError,
   newRetryCount: number,
   env: Env
@@ -537,13 +524,11 @@ async function updateR2RetryCount(
     retryCount: newRetryCount,
     processingStartedAt: undefined,
   };
-  
+
   const date = new Date(storedError.timestamp).toISOString().split('T')[0];
   const key = `errors/raw/${date}/error_${storedError.timestamp}_${storedError.id}.json`;
-  
-  await env.R2_BUCKET.put(key, JSON.stringify(updatedError, null, 2), {
-    httpMetadata: { contentType: 'application/json' },
-  });
+
+  await uploadToB2(key, JSON.stringify(updatedError, null, 2), env);
 }
 
 // ============================================================
@@ -556,7 +541,7 @@ async function reQueueError(
   env: Env
 ): Promise<void> {
   const redis = await getRedis(env);
-  
+
   const updatedError = new SystemError({
     ...error.toJSON(),
     metadata: {
@@ -564,23 +549,20 @@ async function reQueueError(
       retryCount,
     },
   });
-  
+
   await redis.lpush('error:queue', JSON.stringify(updatedError.toJSON()));
 }
 
-async function moveToDLQ(
-  error: SystemError,
-  env: Env
-): Promise<void> {
+async function moveToDLQ(error: SystemError, env: Env): Promise<void> {
   const redis = await getRedis(env);
-  
+
   await redis.lpush('error:dlq', JSON.stringify(error.toJSON()));
   await redis.ltrim('error:dlq', 0, 999);
-  
+
   const date = new Date().toISOString().split('T')[0];
   const key = `errors/failed/${date}/error_${Date.now()}_${crypto.randomUUID()}.json`;
-  
-  await env.R2_BUCKET.put(
+
+  await uploadToB2(
     key,
     JSON.stringify(
       {
@@ -591,9 +573,7 @@ async function moveToDLQ(
       null,
       2
     ),
-    {
-      httpMetadata: { contentType: 'application/json' },
-    }
+    env
   );
 }
 
@@ -604,56 +584,52 @@ async function cleanupOldErrors(
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
   const cutoffStr = cutoffDate.toISOString().split('T')[0];
-  
+
   let deleted = 0;
-  
+
+  // حذف الأخطاء المعالجة الأقدم من المدة المحددة
   const processedPrefix = 'errors/processed/';
-  const processedObjects = await env.R2_BUCKET.list({
-    prefix: processedPrefix,
-    limit: 1000,
-  });
-  
-  for (const obj of processedObjects.objects) {
-    const dateMatch = obj.key.match(/\/(\d{4}-\d{2}-\d{2})\//);
+  const processedKeys = await listB2Objects(processedPrefix, env);
+
+  for (const key of processedKeys) {
+    const dateMatch = key.match(/\/(\d{4}-\d{2}-\d{2})\//);
     if (dateMatch && dateMatch[1] < cutoffStr) {
-      await env.R2_BUCKET.delete(obj.key);
+      await deleteFromB2(key, env);
       deleted++;
     }
   }
-  
-  const failedPrefix = 'errors/failed/';
-  const failedObjects = await env.R2_BUCKET.list({
-    prefix: failedPrefix,
-    limit: 1000,
-  });
-  
+
+  // حذف الأخطاء الفاشلة الأقدم من 90 يوماً
   const failedCutoff = new Date();
   failedCutoff.setDate(failedCutoff.getDate() - 90);
   const failedCutoffStr = failedCutoff.toISOString().split('T')[0];
-  
-  for (const obj of failedObjects.objects) {
-    const dateMatch = obj.key.match(/\/(\d{4}-\d{2}-\d{2})\//);
+
+  const failedPrefix = 'errors/failed/';
+  const failedKeys = await listB2Objects(failedPrefix, env);
+
+  for (const key of failedKeys) {
+    const dateMatch = key.match(/\/(\d{4}-\d{2}-\d{2})\//);
     if (dateMatch && dateMatch[1] < failedCutoffStr) {
-      await env.R2_BUCKET.delete(obj.key);
+      await deleteFromB2(key, env);
       deleted++;
     }
   }
-  
+
   return deleted;
 }
 
 async function shouldRunCleanup(env: Env): Promise<boolean> {
   const redis = await getRedis(env);
   const key = 'cleanup:last_run';
-  
+
   const lastRun = await redis.get(key);
   const now = Date.now();
-  
+
   if (!lastRun || now - Number(lastRun) > 24 * 60 * 60 * 1000) {
     await redis.set(key, now.toString());
     return true;
   }
-  
+
   return false;
 }
 
@@ -663,7 +639,7 @@ async function updateProcessingMetrics(
 ): Promise<void> {
   const redis = await getRedis(env);
   const date = new Date().toISOString().split('T')[0];
-  
+
   const pipeline = redis.pipeline();
   pipeline.hincrby(`metrics:queue_processor:${date}`, 'processed', stats.processed);
   pipeline.hincrby(`metrics:queue_processor:${date}`, 'succeeded', stats.succeeded);
@@ -671,7 +647,7 @@ async function updateProcessingMetrics(
   pipeline.hincrby(`metrics:queue_processor:${date}`, 'skipped', stats.skipped);
   pipeline.set('metrics:queue_processor:last_run', Date.now().toString());
   pipeline.expire(`metrics:queue_processor:${date}`, 86400 * 7);
-  
+
   await pipeline.exec();
 }
 
@@ -682,13 +658,13 @@ async function updateErrorStats(
 ): Promise<void> {
   const redis = await getRedis(env);
   const date = new Date().toISOString().split('T')[0];
-  
+
   const pipeline = redis.pipeline();
   pipeline.hincrby(`error:${date}`, code, 1);
   pipeline.hincrby(`error:${date}:${status}`, code, 1);
   pipeline.expire(`error:${date}`, 86400 * 7);
   pipeline.expire(`error:${date}:${status}`, 86400 * 7);
-  
+
   await pipeline.exec();
 }
 
@@ -703,7 +679,7 @@ async function processWithConcurrency<T, R>(
 ): Promise<R[]> {
   const results: R[] = [];
   const executing: Promise<void>[] = [];
-  
+
   for (const item of items) {
     const p = fn(item)
       .then((r) => {
@@ -720,27 +696,23 @@ async function processWithConcurrency<T, R>(
           failureReason: String(error),
         } as R);
       });
-    
+
     executing.push(p);
-    
+
     if (executing.length >= limit) {
-      // 🧠 الحل الجذري: الانتظار حتى تنتهي أول مهمة من المهام الجارية
       await Promise.race(executing);
-      
-      // 🚀 تفريغ الوعاء من الـ Promises المكتملة فوراً لمنع الـ Memory Leak على الـ Edge
+
       for (let i = executing.length - 1; i >= 0; i--) {
-        // فحص الـ status الصامت للـ Promise لتجنب تعليق حجز الـ RAM
         if (Promise.prototype.then === executing[i].then) {
           executing.splice(i, 1);
         }
       }
     }
   }
-  
+
   await Promise.all(executing);
   return results;
 }
-
 
 // ============================================================
 // 🔌 Redis Client
@@ -766,17 +738,17 @@ async function verifyQStashSignature(
     log({ level: 'warn', action: 'missing_qstash_signature' });
     return false;
   }
-  
+
   if (!env.QSTASH_TOKEN) {
     log({ level: 'error', action: 'missing_qstash_token' });
     return false;
   }
-  
+
   try {
     const body = await request.clone().text();
     const { jwtVerify } = await import('jose');
     const secret = new TextEncoder().encode(env.QSTASH_TOKEN);
-    
+
     await jwtVerify(signature, secret);
     return true;
   } catch (error) {
@@ -792,10 +764,10 @@ async function verifyQStashSignature(
 async function checkEndpointRateLimit(env: Env): Promise<boolean> {
   const redis = await getRedis(env);
   const key = `rate_limit:queue_processor:${Math.floor(Date.now() / 60000)}`;
-  
+
   const count = await redis.incr(key);
   if (count === 1) await redis.expire(key, 60);
-  
+
   return count <= 10;
 }
 
@@ -808,7 +780,7 @@ export async function handleQueueProcessorRequest(
   env: Env
 ): Promise<Response> {
   const startTime = Date.now();
-  
+
   try {
     // 1. Authentication
     const isValid = await verifyQStashSignature(request, env);
@@ -818,7 +790,7 @@ export async function handleQueueProcessorRequest(
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    
+
     // 2. Rate Limiting
     const allowed = await checkEndpointRateLimit(env);
     if (!allowed) {
@@ -827,10 +799,10 @@ export async function handleQueueProcessorRequest(
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    
+
     // 3. المعالجة الأساسية
     const result = await processErrorQueue(env);
-    
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -849,7 +821,7 @@ export async function handleQueueProcessorRequest(
       duration: Date.now() - startTime,
       metadata: { error: String(error) },
     });
-    
+
     return new Response(
       JSON.stringify({
         success: false,
@@ -875,7 +847,7 @@ export function createTestStoredError(
     storeId: 'test-store',
     path: '/test',
   });
-  
+
   return {
     id: crypto.randomUUID(),
     error: error.toJSON(),
