@@ -2,32 +2,56 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { processErrorQueue } from '@/lib/errors/queue-processor';
-import type { Env } from '@/lib/env'; // ✅ استيراد النوع الموحد من env.ts
+import type { Env } from '@/lib/env';
+import type { D1Database } from '@cloudflare/workers-types';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
+
+// 🛡️ توسيع الواجهة لاستقبال الـ Bindings بنظافة في الـ Cron Request
+interface NextCloudflareCronRequest extends NextRequest {
+  cloudflare?: {
+    env: {
+      DB: D1Database;
+      B2_ENDPOINT?: string;
+      B2_BUCKET_NAME?: string;
+      B2_ACCESS_KEY_ID?: string;
+      B2_SECRET_ACCESS_KEY?: string;
+      TELEGRAM_ERROR_CHAT_ID?: string;
+      TELEGRAM_BOT_TOKEN?: string;
+      REDIS_URL?: string;
+      REDIS_TOKEN?: string;
+      QSTASH_TOKEN?: string;
+      CRON_SECRET?: string;
+    };
+  };
+}
+
 /**
  * معالج الـ Cron Job الاقتصادي والمجمع (كل 10 دقائق)
  * يقرأ ملفات الأخطاء من B2، يحدّث العدادات في Redis، ويرسل التقارير لتليجرام.
  */
-export async function GET(request: NextRequest) {
+export async function GET(request: NextCloudflareCronRequest) {
   try {
-    // ✅ بناء كائن env من process.env (المتغيرات متوفرة في Pages Functions)
+    const cloudflareEnv = request.cloudflare?.env;
+
+    // ✅ بناء كائن env آمن وصريح 100% بدون أي هروب بـ as any
     const env: Env = {
-      DB: process.env.DB as any, // D1 binding (يتم توفيره عبر OpenNext)
-      B2_ENDPOINT: process.env.B2_ENDPOINT!,
-      B2_BUCKET_NAME: process.env.B2_BUCKET_NAME!,
-      B2_ACCESS_KEY_ID: process.env.B2_ACCESS_KEY_ID!,
-      B2_SECRET_ACCESS_KEY: process.env.B2_SECRET_ACCESS_KEY!,
-      TELEGRAM_ERROR_CHAT_ID: process.env.TELEGRAM_ERROR_CHAT_ID!,
-      TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN!,
-      REDIS_URL: process.env.REDIS_URL!,
-      REDIS_TOKEN: process.env.REDIS_TOKEN!,
-      QSTASH_TOKEN: process.env.QSTASH_TOKEN!,
+      DB: cloudflareEnv?.DB || (process.env.DB as unknown as D1Database),
+      B2_ENDPOINT: cloudflareEnv?.B2_ENDPOINT || process.env.B2_ENDPOINT || '',
+      B2_BUCKET_NAME: cloudflareEnv?.B2_BUCKET_NAME || process.env.B2_BUCKET_NAME || '',
+      B2_ACCESS_KEY_ID: cloudflareEnv?.B2_ACCESS_KEY_ID || process.env.B2_ACCESS_KEY_ID || '',
+      B2_SECRET_ACCESS_KEY: cloudflareEnv?.B2_SECRET_ACCESS_KEY || process.env.B2_SECRET_ACCESS_KEY || '',
+      TELEGRAM_ERROR_CHAT_ID: cloudflareEnv?.TELEGRAM_ERROR_CHAT_ID || process.env.TELEGRAM_ERROR_CHAT_ID || '',
+      TELEGRAM_BOT_TOKEN: cloudflareEnv?.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '',
+      REDIS_URL: cloudflareEnv?.REDIS_URL || process.env.REDIS_URL || '',
+      REDIS_TOKEN: cloudflareEnv?.REDIS_TOKEN || process.env.REDIS_TOKEN || '',
+      QSTASH_TOKEN: cloudflareEnv?.QSTASH_TOKEN || process.env.QSTASH_TOKEN || '',
     };
 
-    // ✅ التحقق من وجود المتغيرات الأساسية
-    const requiredVars = [
+    // ✅ التحقق من وجود المتغيرات الأساسية من الكائن المدمج نفسه لضمان الدقة
+    const requiredVars: (keyof Env)[] = [
+      'DB',
       'B2_ENDPOINT',
       'B2_BUCKET_NAME',
       'B2_ACCESS_KEY_ID',
@@ -39,7 +63,7 @@ export async function GET(request: NextRequest) {
       'QSTASH_TOKEN',
     ];
 
-    const missing = requiredVars.filter((key) => !process.env[key]);
+    const missing = requiredVars.filter((key) => !env[key]);
     if (missing.length > 0) {
       console.error(`❌ [Cron Job] Missing environment variables: ${missing.join(', ')}`);
       return NextResponse.json(
@@ -48,9 +72,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // ✅ التحقق من مفتاح الـ Cron (اختياري)
+    // ✅ التحقق من مفتاح الـ Cron التلقائي والأمن
     const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET;
+    const cronSecret = cloudflareEnv?.CRON_SECRET || process.env.CRON_SECRET;
 
     if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
       console.warn('⚠️ [Cron Job] Unauthorized attempt blocked');

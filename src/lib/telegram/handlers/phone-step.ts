@@ -39,40 +39,45 @@ export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<Handle
     };
   }
 
-  // 3️⃣ تنفيذ عمليات قاعدة البيانات تحت مظلة الـ Safe Executor
-  const dbOperation = await safeExecute<{ existingStoreName?: string; shouldInsert: boolean }>(async () => {
-    // التحقق من وجود المستخدم برقم الهاتف
-    const existingUser = await db.select().from(users).where(eq(users.phoneNumber, phone)).get();
-    
-    if (existingUser) {
-      const existingStore = await db.select().from(stores).where(eq(stores.ownerId, existingUser.id)).get();
-      if (existingStore) {
-        return { existingStoreName: existingStore.name, shouldInsert: false };
+  // 3️⃣ تنفيذ عمليات قاعدة البيانات تحت مظلة الـ Safe Executor (ممتثل لـ 2 Arguments ومتوافق مع الـ Types)
+  const dbOperation = await safeExecute<{ existingStoreName?: string; shouldInsert: boolean }>(
+    async () => {
+      // التحقق من وجود المستخدم برقم الهاتف
+      const existingUser = await db.select().from(users).where(eq(users.phoneNumber, phone)).get();
+      
+      if (existingUser) {
+        const existingStore = await db.select().from(stores).where(eq(stores.ownerId, existingUser.id)).get();
+        if (existingStore) {
+          return { existingStoreName: existingStore.name, shouldInsert: false };
+        }
+        return { shouldInsert: false };
       }
-      return { shouldInsert: false };
+
+      // 4️⃣ 🎯 بصم التاجر في الداتابيز بطريقة ممتثلة تماماً للسكيما
+      await db.insert(users).values({
+        id: String(ctx.telegramUserId),          // ID التاجر الموحد
+        telegramId: String(ctx.telegramUserId),  // القيد المطلوب لحل مشكلة chk_auth_telegram
+        phoneNumber: phone,                      // رقم الهاتف المفعل
+        name: '',                                // اسم فاضي مؤقتاً لخطوة الاسم
+        authMethod: 'telegram',                  // طريقة التسجيل الرسمية
+        updatedAt: new Date()                    // طابع زمني نظيف ممتثل للسكيما
+      });
+
+      console.log(`🎯 [PhoneStep] New user inserted successfully to DB with ID: ${ctx.telegramUserId}`);
+      return { shouldInsert: true };
+    },
+    {
+      fallback: { shouldInsert: false, existingStoreName: undefined },
+      context: {
+        userId: String(ctx.telegramUserId),
+        path: 'phone_step_db_ops',
+        extras: { 
+          phone,
+          env: ctx.env // 🛡️ تم النقل هنا جوه الـ extras لحل خطأ الـ Typescript نهائياً وإصلاح تحذير [SYS_001]
+        }
+      }
     }
-
-    // 4️⃣ 🎯 بصم التاجر في الداتابيز بطريقة ممتثلة تماماً للسكيما
-    await db.insert(users).values({
-      id: String(ctx.telegramUserId),          // ID التاجر الموحد
-      telegramId: String(ctx.telegramUserId),  // القيد المطلوب لحل مشكلة chk_auth_telegram
-      phoneNumber: phone,                      // رقم الهاتف المفعل
-      name: '',                                // اسم فاضي مؤقتاً لخطوة الاسم
-      authMethod: 'telegram',                  // طريقة التسجيل الرسمية
-      updatedAt: new Date()                    // طابع زمني نظيف ممتثل للسكيما
-    });
-
-    console.log(`🎯 [PhoneStep] New user inserted successfully to DB with ID: ${ctx.telegramUserId}`);
-    return { shouldInsert: true };
-
-  }, {
-    fallback: { shouldInsert: false, existingStoreName: undefined },
-    context: {
-      userId: String(ctx.telegramUserId),
-      path: 'phone_step_db_ops',
-      extras: { phone }
-    }
-  });
+  );
 
   if (dbOperation && dbOperation.existingStoreName) {
     return {

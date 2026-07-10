@@ -34,10 +34,12 @@ interface TelegramUpdate {
   };
 }
 
+// 🛡️ توسيع الواجهة هندسياً لتعريف المتغيرات المتوقعة في بيئة Cloudflare Pages بنظافة
 interface NextCloudflareRequest extends NextRequest {
   cloudflare?: {
     env: {
       DB: D1Database;
+      TELEGRAM_BOT_TOKEN?: string;
     };
   };
 }
@@ -47,24 +49,24 @@ export async function POST(req: NextCloudflareRequest) {
     const update = (await req.json()) as TelegramUpdate;
     console.log('📥 Telegram update:', JSON.stringify(update).slice(0, 300));
 
-    // 🌟 الحل السحري: الدمج الهجين بين سياق كلاود فلير والبيئة العالمية كـ Fallback
-    const cloudflareEnv = req.cloudflare?.env || (process.env as any);
+    const cloudflareEnv = req.cloudflare?.env;
     
-    // إعادة بناء كائن الـ env عشان نضمن إن الـ DB وأي متغيرات تانية (زي الـ Tokens) موجودة ومقروءة
-    const env = {
-      ...cloudflareEnv,
-      DB: cloudflareEnv?.DB || (process.env as any)?.DB
+    // 🌟 بناء كائن الـ env الصريح وتحديد نوعه بالملي لتجنب تضييق الأنواع
+    const env: { DB: D1Database; TELEGRAM_BOT_TOKEN: string } = {
+      DB: cloudflareEnv?.DB || (process.env.DB as unknown as D1Database),
+      TELEGRAM_BOT_TOKEN: cloudflareEnv?.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '',
     };
 
-    if (!env || !env.DB) {
+    // 2️⃣ حارس الأمان الصارم للـ DB
+    if (!env.DB) {
       console.error('❌ [Webhook Route] Critical: Cloudflare D1 binding (DB) is completely missing from environment!');
       return NextResponse.json({ ok: false, error: 'Database binding missing' }, { status: 500 });
     }
 
     const db = getDb(env);
 
-    // 🌟 جلب التوكن بمرونة (سواء من السيرفر مباشرة أو من الـ context)
-    const botToken = env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+    // 3️⃣ جلب التوكن بأمان صريح ومتوافق تماماً مع الأنواع
+    const botToken = env.TELEGRAM_BOT_TOKEN;
 
     // 1. معالجة callback_query (الأزرار)
     if (update.callback_query) {
@@ -90,7 +92,7 @@ export async function POST(req: NextCloudflareRequest) {
         contact: undefined,
         telegramUserId: callback.from.id,
         session,
-        env, // ممرر ومحصن بالكامل
+        env, // ممرر ومحصن ومطابق للـ Type بنسبة 100%
       };
 
       let result: HandlerResult;
@@ -126,7 +128,7 @@ export async function POST(req: NextCloudflareRequest) {
       ...baseCtx,
       telegramUserId: update.message?.from?.id,
       session,
-      env, // ممرر ومحصن بالكامل
+      env, // ممرر ومحصن ومطابق للـ Type بنسبة 100%
     };
 
     // 3. التحقق من طلب خاص (get_dashboard)
