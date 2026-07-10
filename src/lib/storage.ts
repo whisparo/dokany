@@ -1,4 +1,5 @@
 // src/lib/storage.ts
+import type { Env } from '@/lib/env';
 import { 
   S3Client, 
   PutObjectCommand, 
@@ -6,15 +7,6 @@ import {
   DeleteObjectCommand, 
   ListObjectsV2Command 
 } from '@aws-sdk/client-s3';
-
-// ✅ تعريف الـ Env
-export interface Env {
-  DB: D1Database;
-  B2_ENDPOINT: string;
-  B2_BUCKET_NAME: string;
-  B2_ACCESS_KEY_ID: string;     
-  B2_SECRET_ACCESS_KEY: string; 
-}
 
 export function createB2Client(env: Env): S3Client {
   return new S3Client({
@@ -46,7 +38,7 @@ export async function uploadToB2(
   );
 }
 
-// 2. التحميل من B2 (النسخة الـ Type-Safe النضيفة من غير as any)
+// 2. التحميل من B2 
 export async function downloadFromB2(
   key: string,
   env: Env

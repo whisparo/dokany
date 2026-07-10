@@ -1,0 +1,31 @@
+// src/lib/env.ts
+import type { D1Database } from '@cloudflare/workers-types';
+
+/**
+ * التعريف الموحد لبيئة العمل
+ * كل المتغيرات المطلوبة في كل أجزاء المشروع
+ */
+export interface Env {
+  // D1
+  DB: D1Database;
+
+  // Backblaze B2
+  B2_ENDPOINT: string;
+  B2_BUCKET_NAME: string;
+  B2_ACCESS_KEY_ID: string;
+  B2_SECRET_ACCESS_KEY: string;
+
+  // Telegram
+  TELEGRAM_ERROR_CHAT_ID: string;
+  TELEGRAM_BOT_TOKEN: string;
+
+  // Upstash Redis
+  REDIS_URL: string;
+  REDIS_TOKEN: string;
+
+  // Upstash QStash
+  QSTASH_TOKEN: string;
+
+  // أي متغيرات أخرى
+  [key: string]: unknown;
+}

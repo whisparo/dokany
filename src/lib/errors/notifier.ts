@@ -3,7 +3,7 @@
 /**
  * ============================================================
  * 📤 المُبلغ المركزي لتليجرام (Telegram Error Notifier)
- * الإصدار: 10.0 (النسخة الكريستالية الفولاذية - أمان Edge و Concurrency كامل)
+ * الإصدار: 10.1 (النسخة المتوافقة مع B2 و Edge)
  * ============================================================
  */
 
@@ -13,16 +13,23 @@ import { classifyError } from './classifier';
 import { SystemError, StoredErrorSchema } from './types';
 import type { TelegramMessage, ErrorSeverity, ErrorContext } from './types';
 import { Redis } from '@upstash/redis';
-import type { R2Bucket } from '@cloudflare/workers-types';
-
+import { uploadToB2 } from '@/lib/storage'; // ✅ استيراد دالة B2
+import type { Env as StorageEnv } from '@/lib/storage';
 // ============================================================
-// 📦 تعريف Env (Cloudflare Workers)
+// 📦 تعريف Env (Cloudflare Workers + B2)
 // ============================================================
 
-export interface Env {
+export interface Env extends StorageEnv {
   TELEGRAM_ERROR_CHAT_ID: string;
   TELEGRAM_BOT_TOKEN: string;
-  R2_BUCKET: R2Bucket;
+
+  
+  // ✅ متغيرات B2 المطلوبة
+  B2_ENDPOINT: string;
+  B2_BUCKET_NAME: string;
+  B2_ACCESS_KEY_ID: string;
+  B2_SECRET_ACCESS_KEY: string;
+  
   REDIS_URL: string;
   REDIS_TOKEN: string;
   [key: string]: any; 
@@ -95,7 +102,7 @@ export async function sendErrorToTelegram(
     return;
   }
   
-  // 2. ✅ التخزين الفوري في R2
+  // 2. ✅ التخزين الفوري في B2 (بدلاً من R2)
   await storeErrorImmediately(error, env);
   
   // 3. ✅ فحص الـ Deduplication
@@ -273,7 +280,7 @@ async function aggregateIncident(
 }
 
 // ============================================================
-// 💾 التخزين الفوري في R2
+// 💾 التخزين الفوري في Backblaze B2 (بدلاً من R2)
 // ============================================================
 
 async function storeErrorImmediately(
@@ -318,9 +325,8 @@ async function storeErrorImmediately(
   const date = new Date().toISOString().split('T')[0];
   const key = `errors/raw/${date}/error_${Date.now()}_${storedError.id}.json`;
   
-  await env.R2_BUCKET.put(key, JSON.stringify(validated, null, 2), {
-    httpMetadata: { contentType: 'application/json' },
-  });
+  // ✅ استخدام B2 بدلاً من R2
+  await uploadToB2(key, JSON.stringify(validated, null, 2), env);
 }
 
 // ============================================================

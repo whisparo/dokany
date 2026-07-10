@@ -54,7 +54,7 @@ export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<Handle
       return { shouldInsert: false };
     }
 
-    // 4️⃣ 🎯 بصم التاجر في الداتابيز بطريقة ممتثلة تماماً للسكيما وبدون ترقيع (as any)
+    // 4️⃣ 🎯 بصم التاجر في الداتابيز بطريقة ممتثلة تماماً للسكيما
     await db.insert(users).values({
       id: String(ctx.telegramUserId),          // الـ ID الأساسي للمستخدم
       telegramId: String(ctx.telegramUserId),  // القيد المطلوب لحل مشكلة chk_auth_telegram
