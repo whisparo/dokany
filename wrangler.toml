@@ -1,7 +1,7 @@
 name = "dokany"
 compatibility_date = "2026-07-08"
 compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = ".open-next"
+pages_build_output_dir = ".vercel/output"
 
 [[d1_databases]]
 binding = "DB"
