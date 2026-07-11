@@ -25,6 +25,10 @@ export interface Env {
 
   // Upstash QStash
   QSTASH_TOKEN: string;
+  QSTASH_URL: string;
+
+  // ✅ Cron Security (اختياري)
+  CRON_SECRET?: string;
 
   // أي متغيرات أخرى
   [key: string]: unknown;

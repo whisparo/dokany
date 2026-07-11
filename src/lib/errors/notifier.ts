@@ -71,7 +71,7 @@ export async function sendErrorToTelegram(
 ): Promise<void> {
   const mergedConfig = { ...DEFAULT_CONFIG, ...config };
   
-  // 1. ✅ هل يجب الإرسال؟
+  // 1. ✅ هل يجب الإرسال أصلاً؟
   if (!error.shouldAlert) {
     if (env) await trackMetrics('skipped', env);
     return;
@@ -83,39 +83,43 @@ export async function sendErrorToTelegram(
     return;
   }
   
-  // 2. ✅ التخزين الفوري في B2 (بدلاً من R2)
+  // 2. 🛡️ 【الباب الثاني】: تطبيق المسار الاقتصادي بناءً على الـ Severity
+  // لو الخطأ مش CRITICAL (يعني warning أو info)، بنخزنه في B2 وبنقفل فوراً!
+  // والـ Background Processor (الـ Cron) هو اللي هيقراه ويتعامل مع الـ Redis والتليجرام بره الـ Request.
+  if (error.severity !== 'critical') {
+    // تخزين صامت واقتصادي لعدم استهلاك باقة الـ Redis والـ Telegram
+    await storeErrorImmediately(error, env);
+    await trackMetrics('skipped', env); // بنعتبره skipped من الإرسال الفوري
+    return; 
+  }
+
+  // 3. 🚀 【المسار السريع للأخطاء الـ CRITICAL فقط】
+  // طالما وصلنا هنا، يبقى الخطأ كارثي ومصيبة تقفل المحل، لازم نتحرك فوراً
+  
+  // أ) بصمة الخلود التخزيني في B2 أولاً لحماية البيانات
   await storeErrorImmediately(error, env);
   
-  // 3. ✅ فحص الـ Deduplication
+  // ب) فحص الـ Deduplication لحماية الـ تليجرام من الانفجار
   if (await isDuplicateError(error, env, mergedConfig)) {
     await trackMetrics('deduplicated', env);
     return;
   }
     
-  // 4. ✅ فحص الـ Circuit Breaker
+  // ج) فحص الـ Circuit Breaker
   if (await isCircuitBreakerOpen(env, mergedConfig)) {
     await queueErrorForRetry(error, env);
     await trackMetrics('queued', env);
     return;
   }
   
-  // 5. ✅ فحص الـ Rate Limiter
+  // د) فحص الـ Rate Limiter
   if (!(await checkRateLimit(env, mergedConfig))) {
     await queueErrorForRetry(error, env);
     await trackMetrics('queued', env);
     return;
   }
   
-  // 6. ✅ Incident Aggregation
-  if (mergedConfig.enableIncidentAggregation) {
-    const incidentId = await aggregateIncident(error, env, mergedConfig);
-    if (incidentId) {
-      await trackMetrics('aggregated', env);
-      return;
-    }
-  }
-  
-  // 7. ✅ إرسال إلى تليجرام
+  // هـ) إرسال فوري عاجل للتليجرام
   try {
     const message = formatTelegramMessage(error);
     await sendTelegramMessageWithRetry(
@@ -134,7 +138,7 @@ export async function sendErrorToTelegram(
     await recordCircuitBreakerFailure(env, mergedConfig);
     await trackMetrics('failed', env);
     
-    console.error('❌ Failed to send to Telegram:', sendError);
+    console.error('❌ Critical Error Failed to send to Telegram:', sendError);
   }
 }
 
