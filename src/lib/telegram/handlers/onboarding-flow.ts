@@ -17,7 +17,7 @@ const STEPS = ['phone', 'name', 'store', 'email', 'niche'] as const;
 type OnboardingStep = (typeof STEPS)[number];
 
 // تأمين بيئة الـ Edge والـ Workers بالأنواع الصريحة بنسبة 100%
-interface SecureHandlerContext extends HandlerContext {
+export interface SecureHandlerContext extends HandlerContext {
   env: { DB: D1Database }; // 👈 وداعاً لأي any
 }
 
