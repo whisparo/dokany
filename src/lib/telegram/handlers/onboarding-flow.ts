@@ -1,32 +1,27 @@
 // src/lib/telegram/handlers/onboarding-flow.ts
-
-import { eq } from 'drizzle-orm';
-import type { D1Database } from '@cloudflare/workers-types';
 import { users, stores } from '@/lib/db/schema';
-import { getDb } from '@/lib/db';
-import { deleteSession, saveSession } from '../memory';
-import type { HandlerContext, HandlerResult, OnboardingSession } from '@/lib/telegram/types';
+import { eq } from 'drizzle-orm';
+import { deleteSession, saveSession } from '../memory'; 
+import type { HandlerContext, HandlerResult, SessionData } from '@/lib/telegram/types';
+import { getDb } from '@/lib/db'; // 👈 المولد الموحد والشرعي للمشروع
 
 import { handlePhoneStep } from './phone-step';
 import { handleNameStep } from './name-step';
 import { handleStoreStep } from './store-step';
+import { handleEmailStep } from './email-step'; // 👈 استيراد معالج خطوة الإيميل الجديد
 import { handleNicheStep } from './niche-step';
 
-import { safeExecute } from '@/lib/errors/safe-executor';
-
-const STEPS = ['phone', 'name', 'store', 'niche'] as const;
+// 🎯 إضافة خطوة الـ email في الهيكل التتابعي
+const STEPS = ['phone', 'name', 'store', 'email', 'niche'] as const;
 type OnboardingStep = (typeof STEPS)[number];
 
-export interface SecureHandlerContext extends HandlerContext {
-  env: { DB: D1Database };
+// تمديد الواجهة لضمان سلامة الـ Environment في بيئة الـ Edge
+interface SecureHandlerContext extends HandlerContext {
+  env: { DB: any };
 }
 
 export async function handleOnboarding(ctx: SecureHandlerContext): Promise<HandlerResult> {
-  if (!ctx.env?.DB) {
-    console.error('❌ [Onboarding] Critical: DB missing from env');
-    return { reply: '❌ عذراً، النظام غير جاهز حالياً لمعالجة الطلبات. أرسل /start مجدداً.' };
-  }
-
+  // تهيئة الـ db لايف بناءً على طلب الـ Edge الحالي من getDb الموحد
   const db = getDb(ctx.env);
 
   // 1️⃣ لو الحساب مكتمل، ارميه على لوحة التحكم فوراً
@@ -34,7 +29,7 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     return handleGetDashboard(ctx);
   }
 
-  // 2️⃣ البداية الصريحة للأمر /start
+  // 2️⃣ البداية الصريحة
   if (ctx.message === '/start') {
     await deleteSession(db, ctx.platform, ctx.externalId);
     return {
@@ -45,71 +40,76 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     };
   }
 
-  // 3️⃣ Self-Healing للجلسة المفقودة
+  // 3️⃣ تأمين الـ Contact: يشتغل فقط لو الـ step الحالية هي فعلاً phone أو الجلسة جديدة
+  if (ctx.contact && (!ctx.session || !ctx.session.step || ctx.session.step === 'phone')) {
+    ctx.session = { ...ctx.session, step: 'phone' };
+    return handlePhoneStep(ctx);
+  }
+
+  // 4️⃣ 🎯 الكبسولة السحرية (Self-Healing) الذكية والمؤمنة ضد فقدان البيانات
   if (!ctx.session || !ctx.session.step || Object.keys(ctx.session).length === 0) {
     console.log(`⚠️ [Onboarding] Session lost for ${ctx.externalId}, reconstructing from DB...`);
+    
+    const existingUser = ctx.telegramUserId 
+      ? await db.query.users.findFirst({ where: eq(users.id, String(ctx.telegramUserId)) })
+      : null;
 
-    const healingResult = await safeExecute<OnboardingSession>(
-      async () => {
-        const existingUser = ctx.telegramUserId
-          ? await db.select().from(users).where(eq(users.telegramId, String(ctx.telegramUserId))).get()
-          : null;
-
-        if (!existingUser) return { step: 'phone' };
-
-        const existingStore = await db.select().from(stores).where(eq(stores.ownerId, existingUser.id)).get();
-        if (existingStore) {
-          return { step: 'completed', phone: existingUser.phoneNumber || undefined, name: existingUser.name };
-        }
-
-        if (!existingUser.name || existingUser.name.trim() === '') {
-          return { step: 'name', phone: existingUser.phoneNumber || undefined };
-        }
-
+    if (!existingUser) {
+      ctx.session = { step: 'phone' };
+    } else {
+      const existingStore = await db.query.stores.findFirst({ where: eq(stores.ownerId, existingUser.id) });
+      
+      if (existingStore) {
+        ctx.session = { 
+          step: 'completed', 
+          phone: existingUser.phoneNumber || undefined, 
+          name: existingUser.name,
+          email: existingUser.email || undefined 
+        };
+      } else if (!existingUser.name || existingUser.name.trim() === '') {
+        ctx.session = { step: 'name', phone: existingUser.phoneNumber || undefined };
+      } else {
+        // فحص لو الجلسة طارت عند خطوة البريد الإلكتروني أو ما بعدها
         const currentMsg = ctx.message?.trim() || '';
-        const niches = [
-          'ملابس', '👗 ملابس', 'إلكترونيات', '📱 إلكترونيات', 'تجميل', '💄 تجميل',
-          'مجوهرات', '💍 مجوهرات', 'أحذية', '👟 أحذية', 'اكسسوارات', '👜 اكسسوارات',
-          'أخرى', '📦 أخرى', '📦 تخصص آخر', 'تخصص آخر',
-        ];
+        const niches = ['ملابس', '👗 ملابس', 'إلكترونيات', '📱 إلكترونيات', 'تجميل', '💄 تجميل', 'مجوهرات', '💍 مجوهرات', 'أحذية', '👟 أحذية', 'اكسسوارات', '👜 اكسسوارات', 'أخرى', '📦 أخرى', '📦 تخصص آخر', 'تخصص آخر'];
+        
         const isNicheClick = niches.includes(currentMsg) || currentMsg.startsWith('__custom__::');
 
         if (isNicheClick) {
-          return {
+          // 🎯 التأمين العبقري للـ Niche: إعطاء قيم افتراضية آمنة ومستحيلة الفراغ لدفع عملية التسجيل بنجاح
+          ctx.session = {
             step: 'niche',
             phone: existingUser.phoneNumber || undefined,
             name: existingUser.name,
-            storeName: `متجر ${existingUser.name || 'دكاني'}`,
+            email: existingUser.email || undefined,
+            storeName: `متجر ${existingUser.name || 'دكاني'}`
+          };
+        } else if (!existingUser.email || existingUser.email.trim() === '') {
+          // لو الاسم موجود بس مفيش إيميل، ارميه على خطوة الإيميل لحماية أمان الحساب
+          ctx.session = {
+            step: 'email',
+            phone: existingUser.phoneNumber || undefined,
+            name: existingUser.name,
+            storeName: `متجر ${existingUser.name || 'دكاني'}`
+          };
+        } else {
+          // لو كتب كلام عادي ولسه مفيش متجر، ده معناه إنه لسه بيكتب اسم المتجر
+          ctx.session = { 
+            step: 'store', 
+            phone: existingUser.phoneNumber || undefined, 
+            name: existingUser.name 
           };
         }
-
-        return {
-          step: 'store',
-          phone: existingUser.phoneNumber || undefined,
-          name: existingUser.name,
-        };
-      },
-      {
-        fallback: { step: 'phone' },
-        context: {
-          userId: ctx.telegramUserId ? String(ctx.telegramUserId) : undefined,
-          path: 'onboarding_healing',
-          extras: { externalId: ctx.externalId },
-        },
       }
-    );
-
-    ctx.session = healingResult || { step: 'phone' };
+    }
     await saveSession(db, ctx.platform, ctx.externalId, { ...ctx.session });
   }
 
-  // الآن الـ step مضمونة ومحميّة
+  // الآن الـ step مضمونة ومستقرة تماماً
   const step = ctx.session.step as OnboardingStep;
-  
-  // 🛡️ تأمين قراءة الرسالة النصية: لو الـ message مش موجودة (زي كائن الـ contact) متعملش Crash للـ trim
   const msg = ctx.message ? ctx.message.trim() : '';
 
-  // 4️⃣ الأوامر العامة (لن تعمل إلا لو كانت هناك رسالة نصية مطابقة فعلاً)
+  // 5️⃣ الأوامر العامة
   if (msg === 'رجوع') return handleBack(ctx, step);
   if (msg === 'إلغاء') {
     await deleteSession(db, ctx.platform, ctx.externalId);
@@ -124,28 +124,18 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     };
   }
 
-  // 5️⃣ 🎯 التوجيه الحاسم والذكي بناءً على الـ Step الحالية فقط
+  // 6️⃣ توجيه آمن وصارم للصناديق المختصة بالخطوات
   switch (step) {
     case 'phone':
       return handlePhoneStep(ctx);
-      
     case 'name':
-      // حارس ذكي جوه خطوة الاسم: لو التاجر استهبل وبعت كائن اتصال (Contact) تاني، نرفضه بأدب وم نرجعش الجلسة لورا
-      if (ctx.contact) {
-        return {
-          reply: '⚠️ يرجى كتابة اسمك نصياً في رسالة، وليس مشاركة رقم الهاتف مجدداً.',
-          buttons: [[{ text: '🔙 رجوع', value: 'رجوع' }]],
-          session: ctx.session,
-        };
-      }
-      return handleNameStep(ctx); // كدة "محمد" هتدخل هنا بكل أمان ونظافة
-      
+      return handleNameStep(ctx);
     case 'store':
       return handleStoreStep(ctx);
-      
+    case 'email':
+      return handleEmailStep(ctx); // 👈 توجيه الطلب لمعالج خطوة الإيميل
     case 'niche':
       return handleNicheStep(ctx);
-      
     default:
       return { reply: '❌ حدث خطأ في حالة التسجيل. أرسل /start للبدء من جديد.' };
   }
@@ -157,11 +147,34 @@ async function handleBack(ctx: SecureHandlerContext, currentStep: string): Promi
 
   if (idx <= 0) {
     await deleteSession(db, ctx.platform, ctx.externalId);
-    return { reply: '❌ تم إلغاء عملية التسجيل.' };
+    return {
+      reply: '❌ تم إلغاء عملية التسجيل.',
+    };
   }
 
   const prevStep = STEPS[idx - 1];
-  const updatedSession = { ...ctx.session, step: prevStep };
+
+  const updatedSession: SessionData = {
+    ...ctx.session,
+    step: prevStep,
+  };
+
+  if (prevStep === 'niche') {
+    return {
+      reply: '🎯 يرجى اختيار مجال متجرك (النيش):',
+      buttons: [[{ text: '🔙 رجوع', value: 'رجوع' }]],
+      session: updatedSession,
+    };
+  }
+
+  if (prevStep === 'email') {
+    const { email, ...rest } = updatedSession;
+    return {
+      reply: '📧 يرجى إدخال بريدك الإلكتروني الآن (لأمان حسابك وإرسال روابط الدخول السحرية):',
+      buttons: [[{ text: '🔙 رجوع', value: 'رجوع' }]],
+      session: rest,
+    };
+  }
 
   if (prevStep === 'store') {
     const { storeName, nicheAttempts, ...rest } = updatedSession;
@@ -194,42 +207,32 @@ async function handleBack(ctx: SecureHandlerContext, currentStep: string): Promi
 }
 
 export async function handleGetDashboard(ctx: SecureHandlerContext): Promise<HandlerResult> {
+  const db = getDb(ctx.env);
   const telegramUserId = ctx.telegramUserId;
-  if (!telegramUserId || !ctx.env?.DB) {
-    return { reply: '❌ لم نتمكن من التحقق من هويتك أو الاتصال بالنظام. حاول مرة أخرى.' };
+  if (!telegramUserId) {
+    return { reply: '❌ لم نتمكن من التحقق من هويتك. حاول مرة أخرى.' };
   }
 
-  const db = getDb(ctx.env);
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, String(telegramUserId)),
+  });
 
-  const finalResult = await safeExecute<HandlerResult>(
-    async () => {
-      const user = await db.select().from(users).where(eq(users.telegramId, String(telegramUserId))).get();
+  if (!user) {
+    return { reply: '❌ لم نعثر على حساب مرتبط. أنشئ متجرك أولاً.' };
+  }
 
-      if (!user) {
-        return { reply: '❌ لم نعثر على حساب مرتبط. أنشئ متجرك أولاً.' };
-      }
+  const store = await db.query.stores.findFirst({
+    where: eq(stores.ownerId, user.id),
+  });
 
-      const store = await db.select().from(stores).where(eq(stores.ownerId, user.id)).get();
+  if (!store) {
+    return { reply: '❌ ليس لديك متجر بعد. أرسل /start لإنشاء واحد.' };
+  }
 
-      if (!store) {
-        return { reply: '❌ ليس لديك متجر بعد. أرسل /start لإنشاء واحد.' };
-      }
+  const loginLink = `https://dokanyy.vercel.app/dashboard?user=${user.id}&store=${store.id}`;
 
-      const loginLink = `https://dokany.pages.dev/dashboard?user=${user.id}&store=${store.id}`;
-
-      return {
-        reply: `🔗 تم تجهيز رابط الدخول الخاص بك لمتجر "${store.name}":`,
-        buttons: [[{ text: '🚀 افتح لوحة التحكم', url: loginLink }]],
-      };
-    },
-    {
-      fallback: { reply: '❌ عذراً، نواجه ضغطاً في الخوادم حالياً. يرجى كتابة /start بعد لحظات.' },
-      context: {
-        userId: String(telegramUserId),
-        path: 'get_dashboard',
-      },
-    }
-  );
-
-  return finalResult || { reply: '❌ عذراً، حدث خطأ غير متوقع في جلب لوحة التحكم.' };
+  return {
+    reply: `🔗 تم تجهيز رابط الدخول الخاص بك لمتجر "${store.name}":`,
+    buttons: [[{ text: '🚀 افتح لوحة التحكم', url: loginLink }]],
+  };
 }

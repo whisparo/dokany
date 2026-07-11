@@ -5,27 +5,27 @@ import { users, stores } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import type { HandlerContext, HandlerResult } from '@/lib/telegram/types';
 import { isValidPhone } from './onboarding-helpers';
-import { safeExecute } from '@/lib/errors/safe-executor';
 
-// ✅ توحيد الواجهة مع البواب المركزي لامتثال الـ Cloudflare Pages Runtime
+// 🛡️ توسيع الواجهة الصريحة لامتثال الـ Cloudflare Environment
 interface SecureHandlerContext extends HandlerContext {
   env: { DB: D1Database };
 }
 
 export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<HandlerResult> {
-  // 🎯 1️⃣ حارس الأمان المحدث والمؤمن: التحقق من الهوية وقاعدة البيانات الصريحة
+  // 🎯 1️⃣ حارس الأمان (Guard Clause): تأمين الـ telegramUserId والـ DB ومنع الـ undefined تماماً
   if (!ctx.telegramUserId || !ctx.env?.DB) {
-    console.error('❌ [PhoneStep] Critical Fatal: telegramUserId or env.DB is missing from HandlerContext');
+    console.error('❌ [PhoneStep] Critical: telegramUserId or env.DB is missing from HandlerContext');
     return {
-      reply: '❌ عذراً، لم نتمكن من التحقق من هويتك أو الاتصال بالنظام. يرجى إعادة إرسال /start للمحاولة مجدداً.',
+      reply: '❌ عذراً، لم نتمكن من التحقق من هويتك على تيليجرام. يرجى إعادة إرسال /start للمحاولة مجدداً.',
       session: ctx.session,
     };
   }
 
+  // تهيئة الـ Drizzle باستخدام الـ D1 Binding الممرر لايف
   const db = drizzle(ctx.env.DB);
   const contact = ctx.contact;
   
-  // 🛡️ تأمين جراحي: قراءة الرسالة النصية فقط لو لم يكن كائن الاتصال (Contact) متوفراً لمنع الـ trim crash
+  // تأمين جراحي لمنع الـ trim crash لو الـ message مش نصية (جاي كائن اتصال)
   let phone = contact?.phone_number || (ctx.message ? ctx.message.trim() : '');
 
   // 2️⃣ تنظيف وتجهيز الرقم
@@ -39,61 +39,55 @@ export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<Handle
     };
   }
 
-  // 3️⃣ تنفيذ عمليات قاعدة البيانات تحت مظلة الـ Safe Executor (ممتثل لـ 2 Arguments ومتوافق مع الـ Types)
-  const dbOperation = await safeExecute<{ existingStoreName?: string; shouldInsert: boolean }>(
-    async () => {
-      // التحقق من وجود المستخدم برقم الهاتف
-      const existingUser = await db.select().from(users).where(eq(users.phoneNumber, phone)).get();
-      
-      if (existingUser) {
-        const existingStore = await db.select().from(stores).where(eq(stores.ownerId, existingUser.id)).get();
-        if (existingStore) {
-          return { existingStoreName: existingStore.name, shouldInsert: false };
-        }
-        return { shouldInsert: false };
-      }
+  // 3️⃣ التحقق من التكرار في قاعدة البيانات (بصيغة متوافقة مع الـ Cloudflare Worker runtime بدون .query)
+  const existingUser = await db
+    .select()
+    .from(users)
+    .where(eq(users.phoneNumber, phone))
+    .get();
+  
+  if (existingUser) {
+    const existingStore = await db
+      .select()
+      .from(stores)
+      .where(eq(stores.ownerId, existingUser.id))
+      .get();
+    
+    if (existingStore) {
+      return {
+        reply: `❌ عذراً، رقم الهاتف ${phone} مسجل لدينا بمتجر "${existingStore.name}".\nلا يمكن للرقم الواحد إنشاء أكثر من متجر.`,
+        buttons: [],
+        session: { step: 'phone' }, 
+      };
+    }
+  }
 
-      // 4️⃣ 🎯 بصم التاجر في الداتابيز بطريقة ممتثلة تماماً للسكيما
+  // 4️⃣ 🎯 بصم التاجر في الداتابيز (تطهير كامل من الـ as any وضمان توافق الأنواع)
+  try {
+    if (!existingUser) {
       await db.insert(users).values({
-        id: String(ctx.telegramUserId),          // ID التاجر الموحد
+        id: String(ctx.telegramUserId),          // الـ ID الأساسي للمستخدم
         telegramId: String(ctx.telegramUserId),  // القيد المطلوب لحل مشكلة chk_auth_telegram
         phoneNumber: phone,                      // رقم الهاتف المفعل
         name: '',                                // اسم فاضي مؤقتاً لخطوة الاسم
-        authMethod: 'telegram',                  // طريقة التسجيل الرسمية
-        updatedAt: new Date()                    // طابع زمني نظيف ممتثل للسكيما
+        authMethod: 'telegram',                  // طريقة التسجيل
+        updatedAt: new Date(),                   // طابع زمني نظيف متوافق مع الـ Schema
       });
-
+      
       console.log(`🎯 [PhoneStep] New user inserted successfully to DB with ID: ${ctx.telegramUserId}`);
-      return { shouldInsert: true };
-    },
-    {
-      fallback: { shouldInsert: false, existingStoreName: undefined },
-      context: {
-        userId: String(ctx.telegramUserId),
-        path: 'phone_step_db_ops',
-        extras: { 
-          phone,
-          env: ctx.env // 🛡️ تم النقل هنا جوه الـ extras لحل خطأ الـ Typescript نهائياً وإصلاح تحذير [SYS_001]
-        }
-      }
     }
-  );
-
-  if (dbOperation && dbOperation.existingStoreName) {
-    return {
-      reply: `❌ عذراً، رقم الهاتف ${phone} مسجل لدينا بمتجر "${dbOperation.existingStoreName}".\nلا يمكن للرقم الواحد إنشاء أكثر من متجر.`,
-      buttons: [],
-      session: { step: 'phone' }, 
-    };
+  } catch (error) {
+    console.error('❌ [PhoneStep] Failed to insert user to DB:', error);
   }
 
-  // 5️⃣ 🚀 النجاح الصريح والانتقال لـ name بكل أمان وثبات
+  // 5️⃣ 🚀 النجاح الصريح، الانتقال لـ name، وإخفاء كيبورد الهاتف بتمرير الـ Inline Buttons
   return {
     reply: `✅ تم تفعيل وتأكيد رقم هاتفك بنجاح (${phone}).\n\n👋 يرجى الآن إدخال اسمك الشخصي (اسم التاجر):`,
-    buttons: [[{ text: '🔙 رجوع', value: 'رجوع' }]],
+    // تذكر: إرسال أزرار مخصصة (Inline Keyboard) هنا كفيل بإخفاء الـ Reply Keyboard القديم تلقائياً
+    buttons: [[{ text: '🔙 رجوع', value: 'رجوع' }]], 
     session: { 
-      step: 'name',       
-      phone: phone,       
+      step: 'name',      
+      phone: phone,      
     },
   };
 }

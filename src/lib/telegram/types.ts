@@ -4,14 +4,16 @@
  * حالة جلسة التسجيل (Onboarding)
  */
 export interface OnboardingSession {
-  /** الخطوة الحالية في عملية التسجيل */
-  step: 'phone' | 'name' | 'store' | 'niche' | 'completed';
+  /** الخطوة الحالية في عملية التسجيل (🎯 تم إضافة email هنا) */
+  step: 'phone' | 'name' | 'store' | 'email' | 'niche' | 'completed';
   /** رقم الهاتف (بعد إدخاله) */
   phone?: string;
   /** اسم المستخدم (بعد إدخاله) */
   name?: string;
   /** اسم المتجر (بعد إدخاله) */
   storeName?: string;
+  /** 📧 البريد الإلكتروني (🎯 تم إضافته لأمان الحساب والـ Magic Links) */
+  email?: string;
   /** عدد محاولات إدخال التخصص (للحد من التكرار) */
   nicheAttempts?: number;
 }
