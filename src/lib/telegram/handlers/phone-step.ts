@@ -6,13 +6,17 @@ import { eq } from 'drizzle-orm';
 import type { HandlerContext, HandlerResult } from '@/lib/telegram/types';
 import { isValidPhone } from './onboarding-helpers';
 
-// 🛡️ توسيع الواجهة الصريحة لامتثال الـ Cloudflare Environment
 interface SecureHandlerContext extends HandlerContext {
   env: { DB: D1Database };
 }
 
 export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<HandlerResult> {
-  // 🎯 1️⃣ حارس الأمان (Guard Clause): تأمين الـ telegramUserId والـ DB ومنع الـ undefined تماماً
+  // 🎯 0️⃣ حارس الأمان الصارم للخطوة: لو مش خطوة الـ phone اخرج فوراً لمنع التداخل
+  if (ctx.session?.step && ctx.session.step !== 'phone') {
+    return { reply: '', session: ctx.session };
+  }
+
+  // 🎯 1️⃣ حارس الأمان (Guard Clause): تأمين الـ telegramUserId والـ DB ومنع الـ undefined
   if (!ctx.telegramUserId || !ctx.env?.DB) {
     console.error('❌ [PhoneStep] Critical: telegramUserId or env.DB is missing from HandlerContext');
     return {
@@ -21,11 +25,9 @@ export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<Handle
     };
   }
 
-  // تهيئة الـ Drizzle باستخدام الـ D1 Binding الممرر لايف
   const db = drizzle(ctx.env.DB);
   const contact = ctx.contact;
   
-  // تأمين جراحي لمنع الـ trim crash لو الـ message مش نصية (جاي كائن اتصال)
   let phone = contact?.phone_number || (ctx.message ? ctx.message.trim() : '');
 
   // 2️⃣ تنظيف وتجهيز الرقم
@@ -39,7 +41,7 @@ export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<Handle
     };
   }
 
-  // 3️⃣ التحقق من التكرار في قاعدة البيانات (بصيغة متوافقة مع الـ Cloudflare Worker runtime بدون .query)
+  // 3️⃣ التحقق من التكرار في قاعدة البيانات
   const existingUser = await db
     .select()
     .from(users)
@@ -62,16 +64,16 @@ export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<Handle
     }
   }
 
-  // 4️⃣ 🎯 بصم التاجر في الداتابيز (تطهير كامل من الـ as any وضمان توافق الأنواع)
+  // 4️⃣ بصم التاجر في الداتابيز
   try {
     if (!existingUser) {
       await db.insert(users).values({
-        id: String(ctx.telegramUserId),          // الـ ID الأساسي للمستخدم
-        telegramId: String(ctx.telegramUserId),  // القيد المطلوب لحل مشكلة chk_auth_telegram
-        phoneNumber: phone,                      // رقم الهاتف المفعل
-        name: '',                                // اسم فاضي مؤقتاً لخطوة الاسم
-        authMethod: 'telegram',                  // طريقة التسجيل
-        updatedAt: new Date(),                   // طابع زمني نظيف متوافق مع الـ Schema
+        id: String(ctx.telegramUserId),          
+        telegramId: String(ctx.telegramUserId),  
+        phoneNumber: phone,                      
+        name: '',                                
+        authMethod: 'telegram',                  
+        updatedAt: new Date(),                   
       });
       
       console.log(`🎯 [PhoneStep] New user inserted successfully to DB with ID: ${ctx.telegramUserId}`);
@@ -80,10 +82,9 @@ export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<Handle
     console.error('❌ [PhoneStep] Failed to insert user to DB:', error);
   }
 
-  // 5️⃣ 🚀 النجاح الصريح، الانتقال لـ name، وإخفاء كيبورد الهاتف بتمرير الـ Inline Buttons
+  // 5️⃣ 🚀 النجاح الصريح، الانتقال لـ name
   return {
     reply: `✅ تم تفعيل وتأكيد رقم هاتفك بنجاح (${phone}).\n\n👋 يرجى الآن إدخال اسمك الشخصي (اسم التاجر):`,
-    // تذكر: إرسال أزرار مخصصة (Inline Keyboard) هنا كفيل بإخفاء الـ Reply Keyboard القديم تلقائياً
     buttons: [[{ text: '🔙 رجوع', value: 'رجوع' }]], 
     session: { 
       step: 'name',      
