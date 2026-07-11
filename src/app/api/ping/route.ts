@@ -7,10 +7,13 @@ export const runtime = 'edge';
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ Redis.fromEnv() يقرأ UPSTASH_REDIS_REST_URL و UPSTASH_REDIS_REST_TOKEN تلقائياً
-    const redis = Redis.fromEnv();
-    const ip = request.headers.get('x-forwarded-for') || 'unknown';
+    // ✅ استخدم الأسماء التي تعرف أنها مضبوطة في Pages
+    const redis = new Redis({
+      url: process.env.REDIS_URL!,
+      token: process.env.REDIS_TOKEN!,
+    });
 
+    const ip = request.headers.get('x-forwarded-for') || 'unknown';
     const result = await checkRateLimit(redis, `rate:test:${ip}`, 3, 10);
 
     if (!result.allowed) {
