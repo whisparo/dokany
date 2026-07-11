@@ -6,7 +6,8 @@ import { runWithContext } from '@/lib/context';
 import { classifyError } from '@/lib/errors/classifier';
 import { sendErrorToTelegram } from '@/lib/errors/notifier';
 
-export default {
+// 1️⃣ إسناد الكائن إلى متغير ثابت باسم صريح لإرضاء الـ ESLint ونظافة الكود
+const worker = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const correlationId = request.headers.get('x-correlation-id') || crypto.randomUUID();
     const url = new URL(request.url);
@@ -70,3 +71,6 @@ export default {
     });
   },
 };
+
+// 2️⃣ التصدير الافتراضي للمتغير المسمى بنجاح
+export default worker;
