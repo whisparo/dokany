@@ -2,20 +2,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis/cloudflare';
 import { checkRateLimit } from '@/lib/rate-limit';
-import { getRequestContext } from '@cloudflare/next-on-pages';
-import { Env } from '@/lib/env'; // ✅ استورد الـ interface بتاعك هنا (عدل المسار حسب الفولدر عندك)
+import { getEnv } from '@/lib/env';
 
 export const runtime = 'edge';
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ الحل السنيور: إجبار الـ env يتطابق مع الـ Env الموحد بتاعك
-    const env = getRequestContext().env as unknown as Env;
+    // ✅ الحصول على البيئة بالطريقة الصحيحة
+    const env = getEnv();
 
-    // دلوقتي الـ TypeScript هيقرأ المتغيرات دي وهو مبتسم ومن غير خطوط حمراء
+    const redisUrl = env.UPSTASH_REDIS_REST_URL;
+    const redisToken = env.UPSTASH_REDIS_REST_TOKEN;
+
+    if (!redisUrl || !redisToken) {
+      console.error('❌ Redis env vars missing');
+      return NextResponse.json(
+        { error: 'Redis configuration missing' },
+        { status: 500 }
+      );
+    }
+
     const redis = new Redis({
-      url: env.UPSTASH_REDIS_REST_URL,
-      token: env.UPSTASH_REDIS_REST_TOKEN,
+      url: redisUrl,
+      token: redisToken,
     });
 
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
