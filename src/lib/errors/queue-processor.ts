@@ -1,6 +1,6 @@
 // src/lib/errors/queue-processor.ts
 
-import { Redis } from '@upstash/redis';
+import { Redis } from '@upstash/redis/cloudflare';
 import { classifyError } from './classifier';
 import { sendErrorToTelegram } from './notifier';
 import { SystemError, StoredErrorSchema } from './types';
@@ -719,10 +719,16 @@ async function processWithConcurrency<T, R>(
 // ============================================================
 
 async function getRedis(env: Env): Promise<Redis> {
-  if (env.REDIS_TOKEN) {
-    return new Redis({ url: env.REDIS_URL, token: env.REDIS_TOKEN });
+  if (env.UPSTASH_REDIS_REST_TOKEN) {
+    return new Redis({ 
+      url: env.UPSTASH_REDIS_REST_URL, 
+      token: env.UPSTASH_REDIS_REST_TOKEN 
+    });
   }
-  return new Redis({ url: env.REDIS_URL, token: '' });
+  return new Redis({ 
+    url: env.UPSTASH_REDIS_REST_URL, 
+    token: '' 
+  });
 }
 
 // ============================================================

@@ -20,8 +20,8 @@ export interface Env {
   TELEGRAM_BOT_TOKEN: string;
 
   // Upstash Redis
-  REDIS_URL: string;
-  REDIS_TOKEN: string;
+  UPSTASH_REDIS_REST_URL: string;
+  UPSTASH_REDIS_REST_TOKEN: string;
 
   // Upstash QStash
   QSTASH_TOKEN: string;

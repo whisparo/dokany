@@ -12,7 +12,7 @@ import { sanitizeContext } from './sanitizer';
 import { classifyError } from './classifier';
 import { SystemError, StoredErrorSchema } from './types';
 import type { TelegramMessage, ErrorSeverity, ErrorContext } from './types';
-import { Redis } from '@upstash/redis';
+import { Redis } from '@upstash/redis/cloudflare';
 import { uploadToB2 } from '@/lib/storage'; // ✅ استيراد دالة B2
 import type { Env } from '@/lib/env';
 
@@ -470,15 +470,21 @@ function sleep(ms: number): Promise<void> {
 async function getRedis(env: Env): Promise<Redis> {
   if (globalRedisInstance) return globalRedisInstance;
 
-  if (env.REDIS_TOKEN) {
-    globalRedisInstance = new Redis({ url: env.REDIS_URL, token: env.REDIS_TOKEN });
+  // ✅ استخدم الأسماء الجديدة من Env
+  if (env.UPSTASH_REDIS_REST_TOKEN) {
+    globalRedisInstance = new Redis({
+      url: env.UPSTASH_REDIS_REST_URL,
+      token: env.UPSTASH_REDIS_REST_TOKEN,
+    });
   } else {
-    globalRedisInstance = new Redis({ url: env.REDIS_URL, token: '' });
+    globalRedisInstance = new Redis({
+      url: env.UPSTASH_REDIS_REST_URL,
+      token: '',
+    });
   }
 
   return globalRedisInstance;
 }
-
 async function trackMetrics(
   action: 'sent' | 'failed' | 'queued' | 'deduplicated' | 'aggregated' | 'skipped',
   env: Env

@@ -12,6 +12,7 @@ import {
   PutObjectCommand
 } from '@aws-sdk/client-s3';
 import { type StoredError } from './types';
+import { Redis } from '@upstash/redis/cloudflare';
 import { type Env } from '@/lib/env';
 import { checkRateLimit, buildRateLimitKey } from '@/lib/rate-limit'; // ✅ جديد
 // ============================================
@@ -113,12 +114,10 @@ function getB2Client(env: Env): S3Client {
 // 🔧 Redis Client (Lazy Initialization)
 // ============================================
 
-async function getRedis(env: Env): Promise<any> {
-  const { Redis } = await import('@upstash/redis');
-  // جرب هذا السطر بدلاً من .fromUrl
+async function getRedis(env: Env): Promise<Redis> {
   return new Redis({
-    url: env.REDIS_URL,
-    token: env.REDIS_TOKEN // تأكد أن لديك REDIS_TOKEN في الـ Env
+    url: env.UPSTASH_REDIS_REST_URL,
+    token: env.UPSTASH_REDIS_REST_TOKEN,
   });
 }
 
