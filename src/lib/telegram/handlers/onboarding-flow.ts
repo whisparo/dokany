@@ -1,27 +1,28 @@
 // src/lib/telegram/handlers/onboarding-flow.ts
+import type { D1Database } from '@cloudflare/workers-types'; // 👈 استيراد النوع الصارم والأصلي لـ D1
 import { users, stores } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { deleteSession, saveSession } from '../memory'; 
 import type { HandlerContext, HandlerResult, SessionData } from '@/lib/telegram/types';
-import { getDb } from '@/lib/db'; // 👈 المولد الموحد والشرعي للمشروع
+import { getDb } from '@/lib/db'; 
 
 import { handlePhoneStep } from './phone-step';
 import { handleNameStep } from './name-step';
 import { handleStoreStep } from './store-step';
-import { handleEmailStep } from './email-step'; // 👈 استيراد معالج خطوة الإيميل الجديد
+import { handleEmailStep } from './email-step'; 
 import { handleNicheStep } from './niche-step';
 
-// 🎯 إضافة خطوة الـ email في الهيكل التتابعي
+// 🎯 الهيكل التتابعي الخماسي الصارم للمنصة
 const STEPS = ['phone', 'name', 'store', 'email', 'niche'] as const;
 type OnboardingStep = (typeof STEPS)[number];
 
-// تمديد الواجهة لضمان سلامة الـ Environment في بيئة الـ Edge
+// تأمين بيئة الـ Edge والـ Workers بالأنواع الصريحة بنسبة 100%
 interface SecureHandlerContext extends HandlerContext {
-  env: { DB: any };
+  env: { DB: D1Database }; // 👈 وداعاً لأي any
 }
 
 export async function handleOnboarding(ctx: SecureHandlerContext): Promise<HandlerResult> {
-  // تهيئة الـ db لايف بناءً على طلب الـ Edge الحالي من getDb الموحد
+  // تهيئة الداتابيز لايف وبشكل موحد
   const db = getDb(ctx.env);
 
   // 1️⃣ لو الحساب مكتمل، ارميه على لوحة التحكم فوراً
@@ -29,7 +30,7 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     return handleGetDashboard(ctx);
   }
 
-  // 2️⃣ البداية الصريحة
+  // 2️⃣ البداية الصريحة والمستقلة لإعادة التعيين
   if (ctx.message === '/start') {
     await deleteSession(db, ctx.platform, ctx.externalId);
     return {
@@ -40,13 +41,13 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     };
   }
 
-  // 3️⃣ تأمين الـ Contact: يشتغل فقط لو الـ step الحالية هي فعلاً phone أو الجلسة جديدة
+  // 3️⃣ تأمين الـ Contact المباشر القادم من زر التليجرام
   if (ctx.contact && (!ctx.session || !ctx.session.step || ctx.session.step === 'phone')) {
     ctx.session = { ...ctx.session, step: 'phone' };
     return handlePhoneStep(ctx);
   }
 
-  // 4️⃣ 🎯 الكبسولة السحرية (Self-Healing) الذكية والمؤمنة ضد فقدان البيانات
+  // 4️⃣ 🎯 كبسولة الـ Self-Healing الأسطورية المعدلة والمحصنة ضد التداخل
   if (!ctx.session || !ctx.session.step || Object.keys(ctx.session).length === 0) {
     console.log(`⚠️ [Onboarding] Session lost for ${ctx.externalId}, reconstructing from DB...`);
     
@@ -69,14 +70,12 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
       } else if (!existingUser.name || existingUser.name.trim() === '') {
         ctx.session = { step: 'name', phone: existingUser.phoneNumber || undefined };
       } else {
-        // فحص لو الجلسة طارت عند خطوة البريد الإلكتروني أو ما بعدها
         const currentMsg = ctx.message?.trim() || '';
         const niches = ['ملابس', '👗 ملابس', 'إلكترونيات', '📱 إلكترونيات', 'تجميل', '💄 تجميل', 'مجوهرات', '💍 مجوهرات', 'أحذية', '👟 أحذية', 'اكسسوارات', '👜 اكسسوارات', 'أخرى', '📦 أخرى', '📦 تخصص آخر', 'تخصص آخر'];
         
         const isNicheClick = niches.includes(currentMsg) || currentMsg.startsWith('__custom__::');
 
         if (isNicheClick) {
-          // 🎯 التأمين العبقري للـ Niche: إعطاء قيم افتراضية آمنة ومستحيلة الفراغ لدفع عملية التسجيل بنجاح
           ctx.session = {
             step: 'niche',
             phone: existingUser.phoneNumber || undefined,
@@ -85,7 +84,6 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
             storeName: `متجر ${existingUser.name || 'دكاني'}`
           };
         } else if (!existingUser.email || existingUser.email.trim() === '') {
-          // لو الاسم موجود بس مفيش إيميل، ارميه على خطوة الإيميل لحماية أمان الحساب
           ctx.session = {
             step: 'email',
             phone: existingUser.phoneNumber || undefined,
@@ -93,7 +91,6 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
             storeName: `متجر ${existingUser.name || 'دكاني'}`
           };
         } else {
-          // لو كتب كلام عادي ولسه مفيش متجر، ده معناه إنه لسه بيكتب اسم المتجر
           ctx.session = { 
             step: 'store', 
             phone: existingUser.phoneNumber || undefined, 
@@ -102,14 +99,27 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
         }
       }
     }
+    
+    // حفظ الجلسة المكتشفة في الذاكرة فوراً لقفل الثغرة
     await saveSession(db, ctx.platform, ctx.externalId, { ...ctx.session });
+
+    // 🚀 [الـ Short-Circuit السحري]: التوجيه الفوري للمعالج المختص دون النزول والخلط مع الكود السفلي
+    const healedStep = ctx.session.step as OnboardingStep;
+    console.log(`⚡ [Self-Healing] Forwarding message immediately to handling step: ${healedStep}`);
+    switch (healedStep) {
+      case 'phone': return handlePhoneStep(ctx);
+      case 'name': return handleNameStep(ctx);
+      case 'store': return handleStoreStep(ctx);
+      case 'email': return handleEmailStep(ctx);
+      case 'niche': return handleNicheStep(ctx);
+    }
   }
 
-  // الآن الـ step مضمونة ومستقرة تماماً
+  // الجلسة مستقرة مسبقاً، التقط الكلمة الحالية والأمر الحالي ونفذ بشكل طبيعي
   const step = ctx.session.step as OnboardingStep;
   const msg = ctx.message ? ctx.message.trim() : '';
 
-  // 5️⃣ الأوامر العامة
+  // 5️⃣ الأوامر والعمليات العامة
   if (msg === 'رجوع') return handleBack(ctx, step);
   if (msg === 'إلغاء') {
     await deleteSession(db, ctx.platform, ctx.externalId);
@@ -124,7 +134,7 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     };
   }
 
-  // 6️⃣ توجيه آمن وصارم للصناديق المختصة بالخطوات
+  // 6️⃣ التوجيه الافتراضي والآمن للجلسات القائمة والمستقرة
   switch (step) {
     case 'phone':
       return handlePhoneStep(ctx);
@@ -133,7 +143,7 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     case 'store':
       return handleStoreStep(ctx);
     case 'email':
-      return handleEmailStep(ctx); // 👈 توجيه الطلب لمعالج خطوة الإيميل
+      return handleEmailStep(ctx); 
     case 'niche':
       return handleNicheStep(ctx);
     default:
@@ -147,17 +157,11 @@ async function handleBack(ctx: SecureHandlerContext, currentStep: string): Promi
 
   if (idx <= 0) {
     await deleteSession(db, ctx.platform, ctx.externalId);
-    return {
-      reply: '❌ تم إلغاء عملية التسجيل.',
-    };
+    return { reply: '❌ تم إلغاء عملية التسجيل.' };
   }
 
   const prevStep = STEPS[idx - 1];
-
-  const updatedSession: SessionData = {
-    ...ctx.session,
-    step: prevStep,
-  };
+  const updatedSession: SessionData = { ...ctx.session, step: prevStep };
 
   if (prevStep === 'niche') {
     return {
@@ -229,10 +233,14 @@ export async function handleGetDashboard(ctx: SecureHandlerContext): Promise<Han
     return { reply: '❌ ليس لديك متجر بعد. أرسل /start لإنشاء واحد.' };
   }
 
-  const loginLink = `https://dokanyy.vercel.app/dashboard?user=${user.id}&store=${store.id}`;
+  const loginLink = `https://dokany.pages.dev/dashboard?user=${user.id}&store=${store.id}`;
 
-  return {
+    return {
+
     reply: `🔗 تم تجهيز رابط الدخول الخاص بك لمتجر "${store.name}":`,
+
     buttons: [[{ text: '🚀 افتح لوحة التحكم', url: loginLink }]],
+
   };
+
 }

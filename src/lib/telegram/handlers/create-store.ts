@@ -149,7 +149,7 @@ export async function createStore(
   const dashboardLink = await generateLoginLink(userId, newStore.id);
 
   return {
-    url: `https://dokanyy.vercel.app/m/${slug}`,
+    url: `https://dokany.pages.dev/m/${slug}`,
     dashboardLink,
   };
 }
