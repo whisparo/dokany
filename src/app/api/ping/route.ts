@@ -1,6 +1,5 @@
 // src/app/api/ping/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-// ✅ استخدم الإصدار المخصص لـ Cloudflare
 import { Redis } from '@upstash/redis/cloudflare';
 import { checkRateLimit } from '@/lib/rate-limit';
 
@@ -8,7 +7,7 @@ export const runtime = 'edge';
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ استخدم fromEnv عشان يقرأ المتغيرات تلقائياً
+    // ✅ Redis.fromEnv() يقرأ UPSTASH_REDIS_REST_URL و UPSTASH_REDIS_REST_TOKEN تلقائياً
     const redis = Redis.fromEnv();
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
 
