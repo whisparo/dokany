@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
 import { checkRateLimit } from '@/lib/rate-limit';
 
-/**
- * إنشاء اتصال Redis بشكل كسول (Lazy) لتجنب التحذير أثناء البناء
- */
+// ✅ أضف هذا السطر
+export const runtime = 'edge';
+
 function getRedis() {
   return new Redis({
     url: process.env.REDIS_URL!,
