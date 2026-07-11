@@ -2,15 +2,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis/cloudflare';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { getRequestContext } from '@cloudflare/next-on-pages';
+import { Env } from '@/lib/env'; // ✅ استورد الـ interface بتاعك هنا (عدل المسار حسب الفولدر عندك)
 
 export const runtime = 'edge';
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ استخدم الأسماء التي تعرف أنها مضبوطة في Pages
+    // ✅ الحل السنيور: إجبار الـ env يتطابق مع الـ Env الموحد بتاعك
+    const env = getRequestContext().env as unknown as Env;
+
+    // دلوقتي الـ TypeScript هيقرأ المتغيرات دي وهو مبتسم ومن غير خطوط حمراء
     const redis = new Redis({
-      url: process.env.REDIS_URL!,
-      token: process.env.REDIS_TOKEN!,
+      url: env.UPSTASH_REDIS_REST_URL,
+      token: env.UPSTASH_REDIS_REST_TOKEN,
     });
 
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
