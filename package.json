@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "dev:cloudflare": "bunx @cloudflare/next-on-pages/next-dev",
-    "build": "next build",
-    "pages:build": "bunx @cloudflare/next-on-pages",
-    "lint": "next lint",
-    "db:push": "bunx drizzle-kit push",
-    "db:studio": "bunx drizzle-kit studio"
+  "dev": "next dev",
+  "dev:cloudflare": "bunx @cloudflare/next-on-pages/next-dev",
+  "build": "next build",
+  "pages:build": "bunx @cloudflare/next-on-pages",
+  "lint": "next lint",
+  "db:push": "bunx drizzle-kit push",
+  "db:studio": "bunx drizzle-kit studio"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1081.0",
