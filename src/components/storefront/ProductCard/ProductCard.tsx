@@ -12,9 +12,6 @@ import { getProductCardTheme } from './ProductCard.theme';
 import type { ProductCardAdapterResult } from './ProductCard.adapter';
 import { cn } from '@/lib/utils';
 
-// ============================================================
-// 📦 الأنواع
-// ============================================================
 export interface ProductCardProps {
   data: ProductCardAdapterResult;
   variant?: 'default' | 'compact' | 'horizontal';
@@ -25,9 +22,6 @@ export interface ProductCardProps {
   className?: string;
 }
 
-// ============================================================
-// 🧠 المكون الرئيسي (Premium Edition)
-// ============================================================
 export function ProductCard({
   data,
   variant = 'default',
@@ -66,13 +60,13 @@ export function ProductCard({
   const productAriaLabel = `منتج ${index + 1}: ${data.name}`;
 
   // ============================================================
-  // ✨ 1. الوضع المضغوط (Compact Variant) - فخامة الإيجاز
+  // ✨ 1. الوضع المضغوط (Compact Variant)
   // ============================================================
   if (variant === 'compact') {
     return (
       <div 
         className={cn(
-          "group flex items-center gap-3.5 rounded-2xl border border-slate-100 dark:border-slate-800/60 bg-card p-2.5 shadow-sm transition-all duration-300 hover:shadow-md hover:border-primary-500/20",
+          "group flex items-center gap-3.5 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-card p-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all duration-300 hover:shadow-md hover:border-primary-500/20",
           theme.container,
           className
         )}
@@ -81,7 +75,8 @@ export function ProductCard({
         aria-label={productAriaLabel}
       >
         <Link href={`/products/${data.slug}`} prefetch={false} className="shrink-0">
-          <div className="h-14 w-14 overflow-hidden rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100/50 dark:border-slate-800">
+          {/* تعديل: إضافة bg-slate-50/80 لحماية الصور البيضاء */}
+          <div className="h-14 w-14 overflow-hidden rounded-xl bg-slate-50/80 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
             <Image
               src={imageError ? '/placeholder.png' : data.image}
               alt={data.name}
@@ -127,13 +122,13 @@ export function ProductCard({
   }
 
   // ============================================================
-  // ✨ 2. الوضع الأفقي (Horizontal Variant) - هيبة العرض
+  // ✨ 2. الوضع الأفقي (Horizontal Variant)
   // ============================================================
   if (variant === 'horizontal') {
     return (
       <div 
         className={cn(
-          "group flex flex-col sm:flex-row gap-4 rounded-2xl border border-slate-100 dark:border-slate-800/60 bg-card p-3.5 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-slate-100/50 dark:hover:shadow-none hover:border-primary-500/20",
+          "group flex flex-col sm:flex-row gap-4 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-card p-3.5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all duration-300 hover:shadow-xl hover:shadow-slate-100/30 dark:hover:shadow-none hover:border-primary-500/20",
           theme.container,
           className
         )}
@@ -141,10 +136,11 @@ export function ProductCard({
         data-index={index}
         aria-label={productAriaLabel}
       >
+        {/* تعديل: تثبيت خلفية الحاوية bg-slate-50/80 وتوضيح الـ border */}
         <Link 
           href={`/products/${data.slug}`} 
           prefetch={false}
-          className="relative h-48 w-full sm:h-32 sm:w-36 shrink-0 overflow-hidden rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800"
+          className="relative h-48 w-full sm:h-32 sm:w-36 shrink-0 overflow-hidden rounded-xl bg-slate-50/80 dark:bg-slate-900 border border-slate-100 dark:border-slate-800"
         >
           <Image
             src={imageError ? '/placeholder.png' : data.image}
@@ -208,12 +204,13 @@ export function ProductCard({
   }
 
   // ============================================================
-  // ✨ 3. الوضع الافتراضي (Default Card) - ملك الفخامة (مظبوط للموبايل كارتين بالملي)
+  // ✨ 3. الوضع الافتراضي (Default Card) - التوازن البصري المثالي
   // ============================================================
   return (
     <div 
       className={cn(
-        "group flex flex-col rounded-2xl border border-slate-100/80 dark:border-slate-800/50 bg-card overflow-hidden shadow-sm transition-all duration-500 hover:shadow-xl hover:shadow-slate-100/60 dark:hover:shadow-none hover:border-primary-500/20 hover:-translate-y-1 backface-hidden",
+        // تعديل: رفع الـ border لـ slate-200/70 وإضافة شادو ميكرو ناعم جداً [0_2px_12px_rgba(0,0,0,0.03)] ليفصل الأبيض عن الأبيض
+        "group flex flex-col rounded-2xl border border-slate-200/70 dark:border-slate-800/50 bg-card overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-all duration-500 hover:shadow-xl hover:shadow-slate-200/40 dark:hover:shadow-none hover:border-primary-500/20 hover:-translate-y-1 backface-hidden",
         theme.container,
         className
       )}
@@ -223,12 +220,12 @@ export function ProductCard({
       aria-label={productAriaLabel}
     >
       {/* 🖼️ منطقة الصورة والوسوم */}
+      {/* تعديل: الـ Container واخد bg-slate-50/90 لحماية تباين الصور البيضاء وبوردر سفلي خفيف */}
       <Link 
         href={`/products/${data.slug}`} 
         prefetch={false}
-        className="relative block overflow-hidden bg-slate-50 dark:bg-slate-900 border-b border-slate-50 dark:border-slate-800/40"
+        className="relative block overflow-hidden bg-slate-50/90 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/40"
       >
-        {/* الحفاظ على التناسب المثالي 1:1 وحجم الكارتين في الموبايل */}
         <div className="aspect-[1/1] w-full relative">
           <Image
             src={imageError ? '/placeholder.png' : data.image}
@@ -241,7 +238,7 @@ export function ProductCard({
           />
         </div>
         
-        {/* 🏷️ الوسوم الذكية (Smart Badges) */}
+        {/* 🏷️ الوسوم الذكية */}
         <div className="absolute start-2.5 top-2.5 flex flex-col gap-1.5 z-10">
           {data.isOutOfStock && (
             <span className="inline-flex items-center rounded-lg bg-slate-900/90 dark:bg-red-500/90 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-md shadow-sm">
@@ -295,7 +292,7 @@ export function ProductCard({
         )}
 
         {/* 💵 السعر وزر الإضافة الأسفل */}
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-slate-50 dark:border-slate-800/40 pt-2.5">
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800/40 pt-2.5">
           <div className="space-y-0.5">
             <Typography variant="h6" className="text-primary-600 dark:text-primary-400 font-bold tracking-tight text-sm sm:text-base">
               {data.formattedPrice}

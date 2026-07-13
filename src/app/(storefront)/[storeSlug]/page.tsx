@@ -3,7 +3,7 @@
 import { StorefrontOrchestrator } from '@/lib/orchestrators/storefront-orchestrator';
 import { Hero } from '@/components/storefront/Hero/Hero';
 import { ProductGrid } from '@/components/storefront/ProductGrid/ProductGrid';
-
+export const runtime = 'edge';
 interface StorePageProps {
   params: Promise<{ storeSlug: string }>;
   searchParams: Promise<{ page?: string; sort?: string; currency?: string }>;

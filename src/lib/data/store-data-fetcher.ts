@@ -37,7 +37,7 @@ async function fetchStoreProducts(
       description: 'وصف المنتج الأول',
       price: 10000,
       stock: 10,
-      image: 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?q=80&w=687&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+      image: 'https://images.unsplash.com/photo-1589465885857-44edb59bbff2?q=80&w=687&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
       createdAt: now,
       updatedAt: now,
     },
