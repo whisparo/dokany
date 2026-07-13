@@ -689,3 +689,252 @@ Cloudinary	1GB Bandwidth	مجاناً (ضمن 25GB)
 
 ⚠️ دقة المسارات في هيكلية Hive لـ DuckDB (الباب الخامس - 5.3.3)
 تأكد أن الـ Capture Worker يكتب ملفات الـ JSON والـ Parquet بنفس أسماء المجلدات الدقيقة المتوقعة في المتصفح. مثلاً: store_id=${store_id}/year=${year}/month=${month}/. أي اختلاف في التسمية سيجعل DuckDB يفشل في عمل الـ Partition Pruning التلقائي ويضطر لتحميل كامل الملفات..
+
+dokany/
+├── .env.local
+├── .gitignore
+├── bun.lock
+├── drizzle.config.ts
+├── eslint.config.mjs
+├── next.config.ts
+├── open-next.config.ts
+├── package.json
+├── tailwind.config.ts
+├── tsconfig.json
+├── wrangler.toml
+│
+├── scripts/
+│   ├── add-routes.js
+│   ├── build.js
+│   ├── fix-build.mjs
+│   ├── fix-pages-manifest.mjs
+│   └── rename-worker.js
+│
+├── public/
+│   ├── favicon.ico
+│   ├── images/
+│   │   ├── logo.svg
+│   │   └── default-product.png
+│   └── robots.txt
+│
+└── src/
+    ├── app/
+    │   ├── favicon.ico
+    │   ├── globals.css
+    │   ├── layout.tsx                          # ✅ Root Layout (i18n, RTL, Fonts)
+    │   ├── page.tsx                            # 🏠 الصفحة الرئيسية (dokany.com)
+    │   │
+    │   ├── (storefront)/
+    │   │   └── [storeSlug]/
+    │   │       ├── layout.tsx
+    │   │       ├── page.tsx
+    │   │       ├── cart/
+    │   │       │   └── page.tsx
+    │   │       ├── checkout/
+    │   │       │   └── page.tsx
+    │   │       └── products/
+    │   │           ├── page.tsx
+    │   │           └── [slug]/
+    │   │               └── page.tsx
+    │   │
+    │   ├── (dashboard)/
+    │   │   └── dashboard/
+    │   │       ├── layout.tsx
+    │   │       ├── page.tsx
+    │   │       ├── products/
+    │   │       │   ├── page.tsx
+    │   │       │   └── new/
+    │   │       │       └── page.tsx
+    │   │       ├── orders/
+    │   │       │   └── page.tsx
+    │   │       └── settings/
+    │   │           └── page.tsx
+    │   │
+    │   ├── (miniapp)/
+    │   │   └── miniapp/
+    │   │       └── [storeSlug]/
+    │   │           ├── layout.tsx
+    │   │           └── page.tsx
+    │   │
+    │   ├── (auth)/
+    │   │   └── auth/
+    │   │       ├── login/
+    │   │       │   └── page.tsx
+    │   │       └── verify/
+    │   │           └── page.tsx
+    │   │
+    │   └── api/
+    │       ├── auth/
+    │       │   ├── session/
+    │       │   │   └── route.ts
+    │       │   └── [...all]/
+    │       │       └── route.ts
+    │       ├── cart/
+    │       │   └── sync/
+    │       │       └── route.ts
+    │       ├── cron/
+    │       │   └── process-errors/
+    │       │       └── route.ts
+    │       ├── ping/
+    │       │   └── route.ts
+    │       ├── products/
+    │       │   ├── route.ts
+    │       │   └── [id]/
+    │       │       └── route.ts
+    │       ├── orders/
+    │       │   └── route.ts
+    │       └── telegram/
+    │           ├── mini-app/
+    │           │   └── route.ts
+    │           └── webhook/
+    │               └── route.ts
+    │
+    ├── components/
+    │   ├── shared/
+    │   │   ├── Button/
+    │   │   ├── Input/
+    │   │   ├── Typography/
+    │   │   ├── Container/
+    │   │   └── IconWrapper/
+    │   ├── storefront/
+    │   │   ├── ProductCard/
+    │   │   ├── ProductGrid/
+    │   │   ├── CartItem/
+    │   │   ├── CartSummary/
+    │   │   ├── AddToCartButton/
+    │   │   ├── CartCounter/
+    │   │   └── SearchBar/
+    │   ├── dashboard/
+    │   │   ├── Sidebar/
+    │   │   ├── Header/
+    │   │   ├── StatsCard/
+    │   │   ├── ProductTable/
+    │   │   └── OrderTable/
+    │   └── miniapp/
+    │       ├── QuickActions/
+    │       └── StatsWidget/
+    │
+    ├── hooks/
+    │   ├── useCart.ts
+    │   ├── useAuth.ts
+    │   ├── useDebounce.ts
+    │   └── useMediaQuery.ts
+    │
+    ├── lib/                                   # ✅ موجود بالكامل (نفس الهيكل السابق)
+    │   ├── auth-client.ts
+    │   ├── auth-types.d.ts
+    │   ├── auth.ts
+    │   ├── context.ts
+    │   ├── countries-config.ts
+    │   ├── env.ts
+    │   ├── idempotency.ts
+    │   ├── rate-limit.ts
+    │   ├── storage.ts
+    │   ├── utils.ts
+    │   ├── analytics/
+    │   ├── auth/
+    │   ├── cache/
+    │   ├── commissions/
+    │   ├── db/
+    │   │   ├── db.ts
+    │   │   ├── index.ts
+    │   │   └── schema/
+    │   │       ├── addresses.ts
+    │   │       ├── audit-logs.ts
+    │   │       ├── auth.ts
+    │   │       ├── cart-items.ts
+    │   │       ├── categories.ts
+    │   │       ├── chat-sessions.ts
+    │   │       ├── coupons.ts
+    │   │       ├── custom-domains.ts
+    │   │       ├── customers.ts
+    │   │       ├── group-buys.ts
+    │   │       ├── haggle-sessions.ts
+    │   │       ├── idempotency.ts
+    │   │       ├── index.ts
+    │   │       ├── media.ts
+    │   │       ├── order-items.ts
+    │   │       ├── orders.ts
+    │   │       ├── payments.ts
+    │   │       ├── platform-settings.ts
+    │   │       ├── products.ts
+    │   │       ├── relations.ts
+    │   │       ├── reviews.ts
+    │   │       ├── shipments.ts
+    │   │       ├── stores.ts
+    │   │       ├── telegram-messages.ts
+    │   │       └── users.ts
+    │   ├── errors/
+    │   │   ├── background-processor.ts
+    │   │   ├── classifier.ts
+    │   │   ├── codes.ts
+    │   │   ├── notifier.ts
+    │   │   ├── queue-processor.ts
+    │   │   ├── safe-executor.ts
+    │   │   ├── sanitizer.ts
+    │   │   └── types.ts
+    │   ├── queue/
+    │   ├── services/
+    │   │   ├── cloudinary.ts
+    │   │   ├── inventory-service.ts
+    │   │   ├── order-processor.ts
+    │   │   ├── order-service.ts
+    │   │   └── store-stats.ts
+    │   ├── telegram/
+    │   │   ├── adapter.ts
+    │   │   ├── auth.ts
+    │   │   ├── index.ts
+    │   │   ├── main-bot.ts
+    │   │   ├── memory.ts
+    │   │   ├── types.ts
+    │   │   └── handlers/
+    │   │       ├── create-store.ts
+    │   │       ├── email-step.ts
+    │   │       ├── name-step.ts
+    │   │       ├── niche-step.ts
+    │   │       ├── onboarding-flow.ts
+    │   │       ├── onboarding-helpers.ts
+    │   │       ├── phone-step.ts
+    │   │       └── store-step.ts
+    │   ├── utils/
+    │   │   └── sleep.ts
+    │   └── validations/
+    │       ├── auth.ts
+    │       ├── cart.ts
+    │       ├── category.ts
+    │       ├── common.ts
+    │       ├── coupon.ts
+    │       ├── group-buy.ts
+    │       ├── haggle.ts
+    │       ├── helpers.ts
+    │       ├── index.ts
+    │       ├── media.ts
+    │       ├── order.ts
+    │       ├── payment.ts
+    │       ├── platform.ts
+    │       ├── product.ts
+    │       ├── reviews.ts
+    │       ├── shipment.ts
+    │       ├── store.ts
+    │       └── telegram.ts
+    │
+    ├── stores/
+    │   ├── cart-store.ts
+    │   ├── auth-store.ts
+    │   └── ui-store.ts
+    │
+    ├── types/
+    │   ├── product.ts
+    │   ├── order.ts
+    │   ├── cart.ts
+    │   └── api.ts
+    │
+    ├── utils/
+    │   ├── api-client.ts
+    │   ├── format.ts
+    │   ├── validation.ts
+    │   └── constants.ts
+    │
+    └── workers/
+        ├── index.ts
+        └── tsconfig.json

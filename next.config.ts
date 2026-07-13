@@ -1,13 +1,20 @@
-// next.config.ts
-import type { NextConfig } from 'next';
-
-const nextConfig: NextConfig = {
-  experimental: {
-    // reactCompiler: true,
-  },
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   images: {
-    domains: [],
+    // 🌟 بنفتح تصريح رسمي لكل السيرفرات الشهيرة اللي ممكن تسحب منها صور منتجات أو هيرو
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**', 
+        port: '',
+        pathname: '**', // 👈 إضافة الـ pathname مهمة جداً عشان النكست يفهم السيلد كارد (**) بالكامل
+      },
+    ],
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;

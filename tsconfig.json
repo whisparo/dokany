@@ -13,7 +13,7 @@
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "bundler", // ✅ ممتاز ومتوافق مع Next.js و Bun
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
@@ -23,10 +23,6 @@
         "name": "next"
       }
     ],
-    // 👇 السطر الفولاذي اللي ناقصك هنا
-    "types": [
-      "@cloudflare/workers-types"
-    ],
     "paths": {
       "@/*": [
         "./src/*"
@@ -35,11 +31,11 @@
   },
   "include": [
     "next-env.d.ts",
+    "bun-env.d.ts",     // ✅ ضفنا دي عشان Bun يتعرف على الـ Globals بتاعته
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "src/**/*",         // ✅ للتأكيد على قراءة كل ملفات الـ src بما فيها الـ CSS
+    ".next/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

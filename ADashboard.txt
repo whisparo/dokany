@@ -69,3 +69,48 @@ WHEN NEW.updated_at = OLD.updated_at OR NEW.updated_at IS NULL
 BEGIN
   UPDATE orders SET updated_at = (unixepoch() * 1000) WHERE id = NEW.id;
 END;
+
+
+
+
+src/
+├── lib/
+│   ├── orchestrators/
+│   │   └── storefront-orchestrator.ts   ← المايسترو (يسحب الـ Raw Data مركزيًا)
+│   │
+│   └── adapters/                        👈 هنا الـ 3 أدابترز السيادية (الرئيسية) اللي ماسكة الصفحات!
+│       ├── home-page.adapter.ts         ← ينسق داتا الصفحة الرئيسية كاملة (ينادي أدابتر الهيرو والبنرات)
+│       ├── product-page.adapter.ts      ← ينسق داتا صفحة المنتج كاملة (ينادي أدابتر الكارد والجريد)
+│       └── checkout-page.adapter.ts     ← ينسق داتا صفحة الدفع (ينادي أدابتر الشحن ووسائل الدفع)
+│
+├── components/
+│   ├── shared/                          ← المكونات الذرية البسيطة (بدون أدابترز ولا تعقيد)
+│   │   ├── Button.tsx
+│   │   └── Badge.tsx
+│   │
+│   └── storefront/                      ← المكونات المعقدة (كل مكون مفصول بدقة لـ 3 ملفات)
+│       ├── Hero/
+│       │   ├── Hero.tsx                 ← كود الـ UI الصافي (HTML/JSX)
+│       │   ├── Hero.theme.ts            ← كائن أو دالة الـ Tailwind والـ Styles
+│       │   └── Hero.adapter.ts          ← أدابتر تنظيف داتا الهيرو الخام
+│       │
+│       ├── ProductGrid/
+│       │   ├── ProductGrid.tsx          ← كود تنظيم الجريد والـ Layout
+│       │   ├── ProductGrid.theme.ts     ← ثيم واستايل الجريد
+│       │   └── ProductGrid.adapter.ts   ← أدابتر مصفوفة المنتجات
+│       │
+│       ├── ProductCard/
+│       │   ├── ProductCard.tsx          ← كود الكارت الثابت (+ المكون الحركي الصغير للمخزون)
+│       │   ├── ProductCard.theme.ts     ← ألوان واستايلات وتصميم الكارت (ملابس، إلكترونيات...)
+│       │   └── ProductCard.adapter.ts   ← أدابتر تنظيف بيانات المنتج الواحد (المقاسات، الأوزان...)
+│       │
+│       └── Footer/
+│           ├── Footer.tsx
+│           ├── Footer.theme.ts
+│           └── Footer.adapter.ts
+│
+└── app/
+    └── (storefront)/
+        └── [storeSlug]/
+            ├── layout.tsx               ← الهيكل العام (الهيدر والفوتر الثابتين)
+            └── page.tsx                 ← الأوركسترا بيشتغل هنا (ينادي الـ Main Adapter ويمرر الداتا النظيفة للمكونات)

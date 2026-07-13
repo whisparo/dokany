@@ -2,19 +2,62 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════
-   🎨 DOKANY DESIGN SYSTEM - TAILWIND v4 EDITION
+   🎨 DOKANY DESIGN SYSTEM - TAILWIND v4 EDITION (مُحدّث)
    ═══════════════════════════════════════════════════════════ */
 
 @theme {
-  /* ═══════════════════════════════════════════════════════════
-     🎯 DESIGN TOKENS - مرتبطة تلقائياً بـ Tailwind utilities
+  /* ══════════════════════════════════════════════════════════
+     🎯 COLOR PAELLETTES (مُحسّنة لـ Tailwind v4)
+     ═══════════════════════════════════════════════════════════ */
+  
+  /* ✅ Primary Palette (Indigo-based, hue = 260) */
+  --color-primary: var(--accent-primary); /* ✅ بدون رقم (مهم!) */
+  --color-primary-50: oklch(0.97 0.015 260);
+  --color-primary-100: oklch(0.93 0.04 260);
+  --color-primary-200: oklch(0.87 0.08 260);
+  --color-primary-300: oklch(0.78 0.13 260);
+  --color-primary-400: oklch(0.67 0.18 260);
+  --color-primary-500: oklch(0.58 0.23 260);
+  --color-primary-600: oklch(0.52 0.26 260);
+  --color-primary-700: oklch(0.46 0.24 260);
+  --color-primary-800: oklch(0.39 0.20 260);
+  --color-primary-900: oklch(0.32 0.16 260);
+  
+  /* ✅ Gray Palette (Neutral, hue = 260) */
+  --color-gray-50: oklch(0.985 0.002 260);
+  --color-gray-100: oklch(0.965 0.005 260);
+  --color-gray-200: oklch(0.92 0.01 260);
+  --color-gray-300: oklch(0.87 0.015 260);
+  --color-gray-400: oklch(0.71 0.02 260);
+  --color-gray-500: oklch(0.55 0.03 260);
+  --color-gray-600: oklch(0.45 0.03 260);
+  --color-gray-700: oklch(0.38 0.03 260);
+  --color-gray-800: oklch(0.28 0.03 260);
+  --color-gray-900: oklch(0.20 0.03 260);
+  
+  /* ✅ Red Palette (Red, hue = 25) */
+  --color-red-50: oklch(0.97 0.02 25);
+  --color-red-100: oklch(0.93 0.05 25);
+  --color-red-200: oklch(0.87 0.10 25);
+  --color-red-300: oklch(0.78 0.17 25);
+  --color-red-400: oklch(0.68 0.23 25);
+  --color-red-500: oklch(0.60 0.27 25);
+  --color-red-600: oklch(0.54 0.28 25);
+  --color-red-700: oklch(0.48 0.25 25);
+  --color-red-800: oklch(0.42 0.22 25);
+  --color-red-900: oklch(0.35 0.18 25);
+  
+  /* ✅ Ring Offset Color */
+  --color-ring-offset: var(--bg-base);
+  
+  /* ══════════════════════════════════════════════════════════
+      باقي الـ Design Tokens (الموجودة مسبقاً)
      ═══════════════════════════════════════════════════════════ */
   
   /* Colors */
   --color-background: var(--bg-base);
   --color-foreground: var(--text-primary);
   
-  --color-primary: var(--accent-primary);
   --color-primary-foreground: #ffffff;
   
   --color-secondary: var(--accent-secondary);
@@ -41,15 +84,16 @@
   --radius-2xl: 1.5rem;
   --radius-3xl: 2rem;
   
-/* ✅ Store Theme Tokens (التصحيح النهائي المتوافق مع v4 Rust Engine) */
+  /* Store Theme Tokens */
   --color-store-primary: var(--accent-primary);
   --color-store-secondary: var(--accent-secondary);
   --color-store-background: var(--bg-base);
   --color-store-text: var(--text-primary);
   
-  --radius-store-card: var(--radius-lg);          
-  --radius-store-button: var(--radius-md);        
-  --radius-store-input: var(--radius-sm);  
+  --radius-store-card: var(--radius-lg);
+  --radius-store-button: var(--radius-md);
+  --radius-store-input: var(--radius-sm);
+  
   /* Fonts */
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-arabic: 'Cairo', system-ui, sans-serif;
@@ -62,30 +106,31 @@
   --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   🌙 DARK THEME - DEEP OLED BLACK EDITION 
+/* ══════════════════════════════════════════════════════════
+   🌙 DARK MODE VARIANT (مطلوب للـ dark: prefix في Tailwind v4)
    ═══════════════════════════════════════════════════════════ */
+
+@custom-variant dark (&:is([data-theme="dark"] *));
+
+/* ═══════════════════════════════════════════════════════════
+    DARK THEME - DEEP OLED BLACK EDITION (الموجود مسبقاً)
+   ═══════════════════════════════════════════════════════════ */
+
 [data-theme="dark"] {
-  /* 🌌 الخلفية: أسود مطلق وعميق جداً يريح العين ويفجر تباين الألوان */
   --bg-base: #000000;
-  
-  /* 🎛️ الزجاج والرفع الهندسي: كتل زجاجية فخمة ورمادية غامقة بنقاء Amoled */
   --bg-elevated: rgba(10, 10, 12, 0.75);
   --bg-glass: rgba(12, 12, 16, 0.45);
   --bg-glass-hover: rgba(22, 22, 28, 0.65);
   
-  /* 🕸️ الخطوط الحادة: خيوط دقيقة واضحة (Metallic) تمنع أي بهتان تماماً */
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.14);
   --border-glow: rgba(99, 102, 241, 0.45);
   
-  /* 📝 النصوص: تباين حاد ونقاء مطلق للحروف بخط font-black */
-  --text-primary: #ffffff;           /* أبيض ناصع صريح */
-  --text-secondary: #f3f4f6;         /* أبيض ثلجي ناعم ومقروء */
-  --text-tertiary: #a1a1aa;          /* رمادي واضح ومريح للعين */
-  --text-muted: #71717a;             /* رمادي هادئ جداً للتواقيت */
+  --text-primary: #ffffff;
+  --text-secondary: #f3f4f6;
+  --text-tertiary: #a1a1aa;
+  --text-muted: #71717a;
   
-  /* 🎇 النيونات والألوان الحيوية المشبعة */
   --accent-primary: #6366f1;
   --accent-secondary: #a855f7;
   --accent-tertiary: #ec4899;
@@ -96,7 +141,6 @@
   --glow-primary: 0 4px 20px rgba(99, 102, 241, 0.15);
   --glow-accent: 0 4px 25px rgba(168, 85, 247, 0.12);
   
-  /* 🌌 أوربات الميش في الخلفية: سايحة وخافتة في عمق الليل الأسود */
   --mesh-1: radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.22) 0%, transparent 60%);
   --mesh-2: radial-gradient(circle at 85% 25%, rgba(168, 85, 247, 0.18) 0%, transparent 60%);
   --mesh-3: radial-gradient(circle at 50% 75%, rgba(236, 72, 153, 0.15) 0%, transparent 60%);
@@ -104,40 +148,34 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   🦪 PEARLY LIGHT THEME - PREMIUM LUMINOUS PEARL
+    PEARLY LIGHT THEME (الموجود مسبقاً)
    ═══════════════════════════════════════════════════════════ */
+
 [data-theme="pearly"] {
-  /* 🌌 الخلفية الأساسية: كريمي لؤلؤي ناعم جداً مريح للعين */
   --bg-base: #f9f8f6;
-  
-  /* 🎛️ الزجاج والرفع الهندسي: كتل زجاجية بيضاء صريحة ومشرقة */
   --bg-elevated: rgba(255, 255, 255, 0.85);
   --bg-glass: rgba(255, 255, 255, 0.55);
   --bg-glass-hover: rgba(255, 255, 255, 0.75);
   
-  /* 🕸️ الخطوط الفاصلة الحادة: رمادي خفيف ونظيف يمنع تداخل الأزرار */
   --border-subtle: rgba(0, 0, 0, 0.06);
   --border-strong: rgba(0, 0, 0, 0.1);
   --border-glow: rgba(124, 58, 237, 0.25);
   
-  /* 📝 النصوص: رمادي داكن مائل للأزرق (Charcoal) حاد جداً في القراءة */
-  --text-primary: #111827;           /* أسود/رمادي صريح وعميق */
-  --text-secondary: #374151;         /* رمادي داكن للأزرار والعناوين الفرعية */
-  --text-tertiary: #6b7280;          /* رمادي متوسط للشروحات */
-  --text-muted: #9ca3af;             /* رمادي هادئ جداً للتواقيت */
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-tertiary: #6b7280;
+  --text-muted: #9ca3af;
   
-  /* 🎇 الألوان الحيوية المشبعة المتناسقة مع المود الفاتح */
-  --accent-primary: #7c3aed;         /* بنفسجي ملكي منور */
+  --accent-primary: #7c3aed;
   --accent-secondary: #a855f7;
   --accent-tertiary: #ec4899;
-  --accent-success: #059669;         /* أخضر مبيعات صريح */
+  --accent-success: #059669;
   --accent-warning: #d97706;
-  --accent-danger: #dc2626;          /* أحمر الإشعارات الحاد */
+  --accent-danger: #dc2626;
   
   --glow-primary: 0 4px 20px rgba(124, 58, 237, 0.08);
   --glow-accent: 0 4px 25px rgba(168, 85, 247, 0.06);
   
-  /* 🎨 أوربات الميش الفاتحة الساحرة (باستيل ناعم) */
   --mesh-1: radial-gradient(circle at 15% 15%, rgba(196, 181, 253, 0.35) 0%, transparent 60%);
   --mesh-2: radial-gradient(circle at 85% 25%, rgba(253, 186, 232, 0.3) 0%, transparent 60%);
   --mesh-3: radial-gradient(circle at 50% 75%, rgba(186, 230, 253, 0.35) 0%, transparent 60%);
@@ -145,45 +183,38 @@
 
   --pearl-shimmer: linear-gradient(110deg, transparent 20%, rgba(255, 255, 255, 0.6) 40%, rgba(255, 255, 255, 0.9) 50%, rgba(255, 255, 255, 0.6) 60%, transparent 80%);
 }
+
 /* ═══════════════════════════════════════════════════════════
-   🏪 MERCHANT DYNAMIC THEMES (تخصيص متاجر دكاني)
+   🏪 MERCHANT DYNAMIC THEMES (الموجود مسبقاً)
    ═══════════════════════════════════════════════════════════ */
 
-/* القيم الافتراضية للمتجر في المود المظلم (لو التاجر مغيرش ألوانه) */
 [data-theme="dark"] {
-  /* ... أكوادك الحالية ... */
-  
-  /* سيتم تطبيقها تلقائياً على bg-store-primary و text-store-text */
   --accent-primary: #6366f1;
   --accent-secondary: #a855f7;
 }
 
-/* القيم الافتراضية للمتجر في المود الفاتح */
 [data-theme="pearly"] {
-  /* ... أكوادك الحالية ... */
-  
   --accent-primary: #7c3aed;
   --accent-secondary: #a855f7;
 }
 
-/* 🎭 لو التاجر اختار ثيم مخصص (مثال: الثيم الزمردي Emerald) */
 [data-store-theme="emerald"] {
-  --accent-primary: #10b981;        /* أخضر زمردي براند */
-  --accent-secondary: #059669;      /* أخضر داكن */
-  --radius-lg: 4px;                  /* التاجر بيحب الحواف الحادة للمنتجات */
+  --accent-primary: #10b981;
+  --accent-secondary: #059669;
+  --radius-lg: 4px;
 }
 
-/* 🎭 ثيم فخم مخصص للمتاجر الـ Premium (Luxury Gold) */
 [data-store-theme="luxury"] {
-  --accent-primary: #d4af37;        /* ذهبي ملكي */
-  --accent-secondary: #1c1c1c;      /* أسود فاخر */
-  --bg-base: #0a0a0a;               /* خلفية أعمق */
-  --radius-lg: 20px;                 /* حواف دائرية جداً وناعمة */
+  --accent-primary: #d4af37;
+  --accent-secondary: #1c1c1c;
+  --bg-base: #0a0a0a;
+  --radius-lg: 20px;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   🌐 BASE STYLES
+    BASE STYLES (الموجود مسبقاً)
    ═══════════════════════════════════════════════════════════ */
+
 @layer base {
   html, body {
     background-color: var(--bg-base);
@@ -198,7 +229,6 @@
     font-family: var(--font-sans);
   }
 
-  /* Smooth theme transition */
   * {
     transition-property: background-color, border-color, color;
     transition-duration: 0.5s;
@@ -207,8 +237,9 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   ✨ GLASS MORPHISM UTILITIES
+   ✨ GLASS MORPHISM UTILITIES (الموجود مسبقاً)
    ═══════════════════════════════════════════════════════════ */
+
 @layer utilities {
   .glass {
     background-color: var(--bg-glass);
@@ -235,7 +266,6 @@
     transform: translateY(-2px);
   }
 
-  /* ✅ تم تصحيح الخطأ (إضافة النقطة) */
   .bg-glass {
     background-color: var(--bg-glass);
     backdrop-filter: blur(20px) saturate(180%);
@@ -243,9 +273,6 @@
     border: 1px solid var(--border-subtle);
   }
 
-  /* ═══════════════════════════════════════════════════════════
-     🎭 MESH GRADIENT ANIMATIONS
-     ═══════════════════════════════════════════════════════════ */
   .mesh-orb {
     position: absolute;
     border-radius: 50%;
@@ -312,18 +339,18 @@
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
   }
+  .noise-bg {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   🎬 KEYFRAMES ANIMATIONS
+    KEYFRAMES ANIMATIONS (الموجود مسبقاً)
    ═══════════════════════════════════════════════════════════ */
+
 @keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes slide-up {
@@ -338,38 +365,21 @@
 }
 
 @keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 @keyframes mesh-float {
-  0%, 100% {
-    transform: translate(0, 0) scale(1);
-  }
-  33% {
-    transform: translate(30px, -30px) scale(1.1);
-  }
-  66% {
-    transform: translate(-20px, 20px) scale(0.95);
-  }
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -30px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.95); }
 }
 
 @keyframes pulse-glow {
-  0%, 100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   🎯 LEGACY ANIMATIONS (للتوافق مع الكود القديم)
-   ═══════════════════════════════════════════════════════════ */
 @keyframes fadeIn {
   0% {
     opacity: 0;
@@ -386,8 +396,9 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   📜 SCROLLBAR STYLING & GLOBAL FOCUS
+   📜 SCROLLBAR STYLING & GLOBAL FOCUS (الموجود مسبقاً)
    ═══════════════════════════════════════════════════════════ */
+
 @layer base {
   ::-webkit-scrollbar {
     width: 8px;
@@ -407,17 +418,17 @@
     background: var(--accent-primary);
   }
 
-  /* Focus states - Global (شامل لكل العناصر) */
   :focus-visible {
-    outline: none; 
-    box-shadow: 0 0 0 3px var(--accent-primary); 
-    border-radius: inherit; 
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent-primary);
+    border-radius: inherit;
   }
 }
 
 /* ═══════════════════════════════════════════════════════════
-    🎯 FLEXIBLE UI PROTECTION & SELECTION (النسخة النظيفة بدون ترقيع)
+   🎯 UI PROTECTION & SELECTION (الموجود مسبقاً)
    ═══════════════════════════════════════════════════════════ */
+
 @layer base {
   ::selection {
     background-color: rgba(124, 58, 237, 0.2);
@@ -429,19 +440,16 @@
     color: inherit;
   }
 
-  /* مود التطبيق للسايدبار ومنطقة الواجهة */
   .app-screen, .app-screen *, aside, aside * {
-    caret-color: transparent; 
-    cursor: default; 
+    caret-color: transparent;
+    cursor: default;
   }
 
-  /* خانات الكتابة طبيعية وبمؤشرها الأصلي */
   input, textarea, [contenteditable="true"] {
-    caret-color: var(--accent-primary) !important; 
+    caret-color: var(--accent-primary) !important;
     cursor: text !important;
   }
 
-  /* الأزرار والروابط تظهر بشكل اليد الضاغطة الطبيعي */
   button, a, [role="button"] {
     cursor: pointer !important;
   }

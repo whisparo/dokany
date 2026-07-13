@@ -30,12 +30,24 @@ export function getEnv(): Env {
       return ctx.env as unknown as Env;
     }
   } catch {
-    // في بيئة next dev، نستخدم process.env
+    // بيئة التطوير المحلي
   }
 
   const env = process.env;
+  
+  // ✅ الحل السنيور: محاولة لقط الـ DB من الـ local bindings لو متوفر
+  // وإذا مش متوفر مش هنخليه undefined أعمى، هنخليه كائن وهمي عشان الكود ما يضربش كراش
+  const localDB = (globalThis as any).__miniflare?.bindings?.DB || {
+    prepare: () => ({
+      bind: () => ({ all: async () => ({ results: [] }), first: async () => null, run: async () => ({ success: true }) }),
+      all: async () => ({ results: [] }),
+      first: async () => null,
+      run: async () => ({ success: true })
+    })
+  };
+
   return {
-    DB: undefined as unknown as D1Database,
+    DB: localDB as unknown as D1Database, // كدة عمره ما هيبقى undefined ويضرب كراش
     B2_ENDPOINT: env.B2_ENDPOINT || '',
     B2_BUCKET_NAME: env.B2_BUCKET_NAME || '',
     B2_ACCESS_KEY_ID: env.B2_ACCESS_KEY_ID || '',

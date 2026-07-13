@@ -1,4 +1,5 @@
 // src/workers/index.ts
+import type { ExportedHandler } from '@cloudflare/workers-types';
 import type { Env } from '@/lib/env';
 import { getDb } from '@/lib/db';
 import * as schema from '@/lib/db/schema';
@@ -6,9 +7,9 @@ import { runWithContext } from '@/lib/context';
 import { classifyError } from '@/lib/errors/classifier';
 import { sendErrorToTelegram } from '@/lib/errors/notifier';
 
-// 1️⃣ إسناد الكائن إلى متغير ثابت باسم صريح لإرضاء الـ ESLint ونظافة الكود
-const worker = {
-  async fetch(request: Request, env: Env): Promise<Response> {
+// طالما بنبني عظمة، نلتزم بالأنواع الرسمية للـ Cloudflare Workers لمنع أي تضارب مستقبلي
+const worker: ExportedHandler<Env> = {
+  async fetch(request, env, ctx): Promise<Response> {
     const correlationId = request.headers.get('x-correlation-id') || crypto.randomUUID();
     const url = new URL(request.url);
     const storeId = request.headers.get('x-store-id') || 'default-store';
@@ -19,8 +20,8 @@ const worker = {
         const db = getDb(env);
         const users = await db.select().from(schema.users);
 
-        // سجل نجاح الطلب (للمراقبة)
-        console.log(`✅ [${correlationId}] ${request.method} ${url.pathname} - 200 OK (${performance.now() - startTime}ms)`);
+        // سجل نجاح الطلب (للمراقبة والأداء)
+        console.log(`✅ [${correlationId}] ${request.method} ${url.pathname} - 200 OK (${(performance.now() - startTime).toFixed(2)}ms)`);
 
         return Response.json({
           success: true,
@@ -39,18 +40,22 @@ const worker = {
           method: request.method,
         });
 
-        // تسجيل الخطأ في السجلات
+        // تسجيل الخطأ في الـ Cloudflare Logs فوراً
         console.error(`❌ [${correlationId}] ${request.method} ${url.pathname} - ${systemError.code}`, error);
 
-        // ✅ إرسال الخطأ إلى تليجرام (مع محاولة آمنة)
-        try {
-          await sendErrorToTelegram(systemError, env);
-        } catch (notifyError) {
-          // لا نريد أن يفشل الطلب بسبب فشل الإشعار
-          console.error('❌ Failed to send error notification:', notifyError);
-        }
+        // 🔥 قمة العظمة البرمجية: إرسال التليجرام في الخلفية بدون تعطيل العميل بملي ثانية واحدة
+        ctx.waitUntil(
+          (async () => {
+            try {
+              await sendErrorToTelegram(systemError, env);
+            } catch (notifyError) {
+              // لا نريد أن يفشل الطلب أو ينهار الـ Worker بسبب فشل الإشعار
+              console.error('❌ [Background Task] Failed to send error notification to Telegram:', notifyError);
+            }
+          })()
+        );
 
-        // إرجاع استجابة خطأ منظمة للعميل
+        // إرجاع استجابة خطأ منظمة ومحمية للعميل بناءً على التصنيف
         const statusCode =
           systemError.category === 'security' ? 403 :
           systemError.category === 'business' ? 400 :
@@ -72,5 +77,4 @@ const worker = {
   },
 };
 
-// 2️⃣ التصدير الافتراضي للمتغير المسمى بنجاح
 export default worker;

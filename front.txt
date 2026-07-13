@@ -302,3 +302,52 @@ SEO مُحسَّن (Sitemaps، OpenGraph، JSON-LD).
 
 حدود أداء صارمة (حجم حزمة < 100KB للمتجر).
 
+app/
+├── favicon.ico
+├── globals.css
+├── layout.tsx                          # ✅ Root Layout العام جداً (HTML, Global Fonts)
+├── page.tsx                            # 🏠 الصفحة الرئيسية للمنصة الأم (dokany.com)
+│
+├── (storefront)/                       # 🆕 نظام المتاجر العامة (العملاء)
+│   └── [storeSlug]/                    # 🚀 المسار الديناميكي للتاجر (e.g., /zara)
+│       ├── layout.tsx                  # Layout المتجر (خفيف + كاش SWR)
+│       ├── page.tsx                    # الرئيسية للمتجر (منتجات مميزة)
+│       ├── cart/
+│       │   └── page.tsx                # صفحة السلة
+│       ├── checkout/
+│       │   └── page.tsx                # صفحة إتمام الدفع
+│       └── products/
+│           ├── page.tsx                # قائمة المنتجات (تصفية وبحث)
+│           └── [slug]/
+│               └── page.tsx            # صفحة تفاصيل المنتج
+│
+├── (dashboard)/                        # 🆕 لوحة تحكم التجار (الأدمن)
+│   └── dashboard/                      # 🔐 مسار ثابت ومحمي (e.g., dokany.com/dashboard)
+│       ├── layout.tsx                  # Layout الداشبورد (Auth Guard + Sidebar)
+│       ├── page.tsx                    # الرئيسية (التحليلات والـ DuckDB)
+│       ├── products/
+│       │   ├── page.tsx                # جدول إدارة المنتجات
+│       │   └── new/
+│       │       └── page.tsx            # إضافة منتج جديد
+│       ├── orders/
+│       │   └── page.tsx                # إدارة الطلبات
+│       └── settings/
+│           └── page.tsx                # إعدادات المتجر والثيمات
+│
+├── (miniapp)/                          # 🆕 نظام Telegram Mini App
+│   └── miniapp/                        # 🤖 مسار خاص بالتطبيق المصغر (e.g., /miniapp)
+│       └── [storeSlug]/                # يلقط التاجر جوه تليجرام
+│           ├── layout.tsx              # Layout بدون سكرول خارجي أو هيدر
+│           └── page.tsx                # واجهة الشراء السريع للـ Mini App
+│
+├── auth/                               # 🆕 بوابة المصادقة الموحدة للتاجر
+│   ├── login/
+│   │   └── page.tsx                    # صفحة الـ Magic Link
+│   └── verify/
+│       └── page.tsx                    # الـ Callback للتحقق
+│
+└── api/                                # ✅ الـ API Routes الحالية (Edge Runtime)
+    ├── auth/[...all]/                  # Better-Auth Handler
+    ├── ping/                           # التست اللي قفلناه
+    └── telegram/
+        └── webhook/                    # بوت تليجرام
