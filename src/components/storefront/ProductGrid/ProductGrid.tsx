@@ -1,5 +1,5 @@
 // src/components/storefront/ProductGrid/ProductGrid.tsx
-
+'use client';
 import Link from 'next/link';
 import { RotateCcw, ArrowLeft, PackageX } from 'lucide-react'; 
 import { ProductCard } from '../ProductCard';
