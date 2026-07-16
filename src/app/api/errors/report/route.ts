@@ -26,10 +26,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ✅ خد env كاملة من getEnv
     const env = getEnv();
 
-    // ✅ استخدم env مباشرة، لأنها محتوي عليها كل المتغيرات المطلوبة
     const normalizedContext: ErrorContext = {
       storeId: String(storeIdOrSlug),
       path: context?.path || '/',
@@ -39,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     const systemError = classifyError(rawError, normalizedContext);
 
-    // ✅ مرر env مباشرة (بدون `as any`، لأن Env متطابقة)
+    // ✅ تمرير env مباشرة
     const notifierPromise = sendErrorToTelegram(systemError, env);
 
     if (ctx?.waitUntil) {
