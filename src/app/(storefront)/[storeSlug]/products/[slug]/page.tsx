@@ -3,6 +3,7 @@
 import { notFound } from 'next/navigation';
 import { ProductDetailsOrchestrator } from '@/lib/orchestrators/product-details-orchestrator';
 import { ProductDetails } from '@/components/storefront/ProductDetails';
+export const runtime = 'edge';
 
 interface ProductPageProps {
   params: Promise<{
