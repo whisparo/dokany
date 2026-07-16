@@ -3,39 +3,40 @@ import { NextRequest, NextResponse } from 'next/server';
 import { classifyError } from '@/lib/errors/classifier';
 import { sendErrorToTelegram } from '@/lib/errors/notifier';
 import { type ErrorContext } from '@/lib/errors/types';
-import type { Env } from '@/lib/env';
+import { getEnv } from '@/lib/env'; // 👈 استيراد دالة الـ Env الموحدة
 
-// 🚀 تشغيل المسار على الـ Cloudflare Edge لسرعة استجابة مذهلة وتكلفة صفرية
 export const runtime = 'edge';
 
 export async function POST(req: NextRequest) {
-  // جلب الـ ExecutionContext الخاص بـ Cloudflare لإطلاق المهام الخلفية
   const ctx = (req as any).context;
 
   try {
     const body = await req.json();
-
     const { rawError, context } = body as {
       rawError: unknown;
       context: Partial<ErrorContext>;
     };
 
-    // 1. التحقق الفوري من وجود الـ storeId أو الـ storeSlug لعدم رفض الطلب
-    // قمنا بتبسيط الشرط لكي يقبل المتوفر منهما لمنع حدوث الـ 400 Bad Request
     const storeIdOrSlug = context?.storeId || (context as any)?.storeSlug;
 
     if (!storeIdOrSlug) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'MISSING_STORE_IDENTIFIER', 
-          message: 'Mandatory "storeId" or "storeSlug" is required in error context.' 
-        },
+        { success: false, error: 'MISSING_STORE_IDENTIFIER' },
         { status: 400 }
       );
     }
 
-    // تأمين الكائن وتجهيز الـ storeId بشكل سليم للـ Classifier والـ Notifier
+    // 1. استخدام الـ getEnv الموحدة (هتشتغل في كل البيئات)
+    const env = getEnv();
+
+    // 2. تحديث الـ Env بالكائنات المحددة اللي بيحتاجها الـ Notifier
+    // لاحظ كيف دمجنا مسمياتك الخاصة هنا
+    const notifierEnv = {
+      ...env,
+      TELEGRAM_BOT_TOKEN: process.env.ERROR_BOT_TOKEN || env.TELEGRAM_BOT_TOKEN || '',
+      TELEGRAM_ERROR_CHAT_ID: process.env.ERROR_CHANNEL_ID || env.TELEGRAM_ERROR_CHAT_ID || '',
+    };
+
     const normalizedContext: ErrorContext = {
       storeId: String(storeIdOrSlug),
       path: context?.path || '/',
@@ -43,46 +44,23 @@ export async function POST(req: NextRequest) {
       ...context
     };
 
-    // 2. تصنيف وتحويل الخطأ الخام لـ SystemError موحد وصارم
     const systemError = classifyError(rawError, normalizedContext);
 
-    // 3. بناء الـ Env بالقيم الحقيقية المطلوبة للـ Notifier والـ Redis والـ B2
-    const env: Env = {
-      TELEGRAM_ERROR_CHAT_ID: process.env.TELEGRAM_ERROR_CHAT_ID || '',
-      TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
-      UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL || '',
-      UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN || '',
-      B2_APPLICATION_KEY_ID: process.env.B2_APPLICATION_KEY_ID || '',
-      B2_APPLICATION_KEY: process.env.B2_APPLICATION_KEY || '',
-      B2_BUCKET_NAME: process.env.B2_BUCKET_NAME || '',
-      B2_ENDPOINT: process.env.B2_ENDPOINT || '',
-    } as unknown as Env;
-
-    // 4. استدعاء الـ Notifier الذكي الخاص بك للإرسال لتليجرام والحفظ في الـ B2
-    const notifierPromise = sendErrorToTelegram(systemError, env);
+    // 3. استدعاء الـ Notifier
+    const notifierPromise = sendErrorToTelegram(systemError, notifierEnv as any);
 
     if (ctx?.waitUntil) {
-      // إرسال صامت في الخلفية حتى لا ينتظر المتصفح رد الـ API
       ctx.waitUntil(notifierPromise);
     } else {
-      await notifierPromise; // Fallback إذا لم تدعم البيئة الحالية waitUntil
+      await notifierPromise;
     }
 
-    // 5. الرد بنجاح على العميل بأكواد مفهومة وآمنة
-    return NextResponse.json({
-      success: true,
-      code: systemError.code,
-      userMessage: systemError.userMessage,
-    });
+    return NextResponse.json({ success: true, code: systemError.code });
 
   } catch (routeError: any) {
-    console.error('🚨 فشل معالجة الخطأ داخل الـ API Route:', routeError);
+    console.error('🚨 [Report API] Failure:', routeError);
     return NextResponse.json(
-      {
-        success: false,
-        error: 'INTERNAL_ROUTER_ERROR',
-        message: routeError?.message || 'Failed to process and log the submitted error.',
-      },
+      { success: false, error: 'INTERNAL_ROUTER_ERROR' },
       { status: 500 }
     );
   }
