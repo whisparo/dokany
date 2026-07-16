@@ -3,7 +3,7 @@
 import { drizzle } from 'drizzle-orm/d1';
 import type { D1Database } from '@cloudflare/workers-types';
 import { stores, users } from '@/lib/db/schema'; 
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { allocateCloudinaryAccount } from '@/lib/services/cloudinary'; 
 import { classifyError } from '@/lib/errors/classifier';
 
@@ -28,31 +28,46 @@ export async function createStore(
   const db = drizzle(d1Database);
   let userId: string;
 
-  // 1️⃣ البحث عن المستخدم أو إنشائه
+  // 🛡️ [تعديل حاسم]: البحث الذكي بالـ Telegram ID كأولوية قصوى لمنع التكرار بسبب الـ Plus (+) في الرقم
+  const searchConditions = [];
+  if (data.telegramUserId) {
+    searchConditions.push(eq(users.telegramId, String(data.telegramUserId)));
+  }
+  searchConditions.push(eq(users.phoneNumber, data.phone));
+
   const existingUser = await db
     .select()
     .from(users)
-    .where(eq(users.phoneNumber, data.phone))
+    .where(or(...searchConditions))
     .get();
 
   if (existingUser) {
     userId = existingUser.id;
+    // تحديث البيانات لو ناقصة تأميناً للفلو
+    const updatePayload: Record<string, any> = {};
     if (!existingUser.telegramId && data.telegramUserId) {
+      updatePayload.telegramId = String(data.telegramUserId);
+    }
+    if (!existingUser.name || existingUser.name.trim() === '') {
+      updatePayload.name = data.name;
+    }
+
+    if (Object.keys(updatePayload).length > 0) {
       try {
         await db
           .update(users)
-          .set({ telegramId: String(data.telegramUserId), updatedAt: new Date() })
+          .set({ ...updatePayload, updatedAt: new Date() })
           .where(eq(users.id, existingUser.id));
-        console.log(`✅ [createStore] تم تحديث telegramId للمستخدم ${existingUser.id}`);
+        console.log(`✅ [createStore] تم تحديث بيانات المستخدم الحالي ${existingUser.id}`);
       } catch (updateError) {
-        console.error(`❌ [createStore] فشل تحديث telegramId للمستخدم ${existingUser.id}:`, updateError);
+        console.error(`❌ [createStore] فشل تحديث بيانات المستخدم ${existingUser.id}:`, updateError);
       }
     }
   } else {
     try {
       const generatedId = crypto.randomUUID(); 
       
-      // ✅ مطابقة رياضية تامة لـ InferInsertModel الخاصة بجدول الـ user بناءً على السكيما المبعوتة
+      // ✅ [تأمين القيود]: نرسل الـ merchantId مساوياً للـ id لإرضاء قيد chk_merchant_id_consistency الصارم
       const insertedUsers = await db
         .insert(users)
         .values({
@@ -60,11 +75,11 @@ export async function createStore(
           name: data.name,
           phoneNumber: data.phone,
           authMethod: 'phone',
-          status: 'active', // متوافق مع chk_user_status
+          status: 'active', 
           isVerified: true,
-          emailVerified: false, // 🧠 قفلنا الخطأ هنا: مررناها صريحة لأنها notNull في السكيما والـ Compiler مستنيها
+          emailVerified: false, 
           telegramId: data.telegramUserId ? String(data.telegramUserId) : null,
-          // تم حذف createdAt و updatedAt تماماً عشان الـ DB يحسبهم بالـ default الافتراضي (strftime)
+          merchantId: generatedId, // 👈 هنا مربط الفرس! التاجر هو الـ Merchant ID بتاع نفسه
         })
         .returning();
       
@@ -130,7 +145,6 @@ export async function createStore(
       cloudinaryAccountIndex: allocatedAccountIndex, 
       theme: JSON.stringify(defaultTheme), 
       isActive: true,
-      // الـ stores برضه لو ليها default للـ createdAt/updatedAt في السكيما شيل السطور اللي تحت، لو ملهاش سيب الـ Date
       createdAt: new Date(),
       updatedAt: new Date(),
     })
