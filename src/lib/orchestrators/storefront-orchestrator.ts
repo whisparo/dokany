@@ -6,6 +6,22 @@ import { adaptHeader, type HeaderAdapterResult } from '@/components/storefront/H
 import { adaptFooter, type FooterAdapterResult } from '@/components/storefront/Footer/Footer.adapter';
 import { notFound } from 'next/navigation';
 
+// 🛑 قائمة الكلمات المحجوزة التي لا يجب اعتبارها أسماء متاجر (لحماية الـ DB والـ Logs)
+const RESERVED_SLUGS = new Set([
+  'terms',
+  'privacy',
+  'about',
+  'contact',
+  'api',
+  'admin',
+  'dashboard',
+  'login',
+  'register',
+  'favicon.ico',
+  'robots.txt',
+  'sitemap.xml',
+]);
+
 // 🔥 العقد الموحد والوحيد لبيانات الواجهة كاملة (Strongly Typed Portfolio)
 export interface StorefrontPayload {
   storeInfo: {
@@ -33,7 +49,12 @@ export const StorefrontOrchestrator = {
     options: OrchestratorOptions = {}
   ): Promise<StorefrontPayload> {
     
-    // 1. فك وتأمين البارامترات وضبط الافتراضيات هندسياً لمنع انهيار الـ DB
+    // 1. حارس البوابة الفوري لمنع استهلاك باقة الـ D1/Redis في طلبات الصفحات الثابتة
+    if (RESERVED_SLUGS.has(storeSlug.toLowerCase())) {
+      notFound();
+    }
+
+    // 2. فك وتأمين البارامترات وضبط الافتراضيات هندسياً لمنع انهيار الـ DB
     const currentPage = Math.max(1, parseInt(options.page || '1', 10));
     const userCurrency = options.currency || 'EGP';
     
@@ -49,7 +70,7 @@ export const StorefrontOrchestrator = {
     };
 
     try {
-      // 2. سحب البيانات الخام مركزياً عبر الكاش الديناميكي لـ D1
+      // 3. سحب البيانات الخام مركزياً عبر الكاش الديناميكي لـ D1
       const rawData = await getStoreRawData(storeSlug, gridOptions);
       
       // حماية السيستم في حال عدم وجود المتجر
@@ -57,12 +78,12 @@ export const StorefrontOrchestrator = {
         notFound();
       }
 
-      // 3. نداء الأدابترز السيادية لتوزيع وتوجيه البيانات بالملي (تم تنظيف الـ Arguments)
+      // 4. نداء الأدابترز السيادية لتوزيع وتوجيه البيانات بالملي (تم تنظيف الـ Arguments)
       const adaptedPage = adaptProductPage(rawData, userCurrency); 
       const adaptedHeader = adaptHeader(rawData.store);
       const adaptedFooter = adaptFooter(rawData.store);
 
-      // 4. تجميع وترجيع الـ Payload النهائي النقي المستقر المتكامل مع الـ Layout
+      // 5. تجميع وترجيع الـ Payload النهائي النقي المستقر المتكامل مع الـ Layout
       return {
         storeInfo: {
           name: rawData.store.name,
@@ -74,7 +95,17 @@ export const StorefrontOrchestrator = {
         footer: adaptedFooter,
       };
 
-    } catch (error) {
+    } catch (error: any) {
+      // 🛡️ حارس الـ Next.js Not Found: 
+      // دالة notFound() تقوم داخلياً برمي خطأ يحمل رسالة NEXT_NOT_FOUND أو digest معين.
+      // يجب تمرير هذا الخطأ كما هو دون طباعة Log كأنه فشل كارثي في النظام.
+      if (
+        error?.message === 'NEXT_NOT_FOUND' || 
+        error?.digest === 'NEXT_NOT_FOUND'
+      ) {
+        throw error;
+      }
+
       console.error('[StorefrontOrchestrator] Critical Orchestration Failure:', error);
       notFound();
     }

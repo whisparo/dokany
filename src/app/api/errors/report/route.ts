@@ -1,4 +1,4 @@
-// src/app/api/ping/route.ts
+// src/app/api/errors/report/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { classifyError } from '@/lib/errors/classifier';
 import { sendErrorToTelegram } from '@/lib/errors/notifier';
@@ -20,16 +20,31 @@ export async function POST(req: NextRequest) {
       context: Partial<ErrorContext>;
     };
 
-    // 1. التحقق الفوري من الـ storeId الإلزامي لعزل البيانات في الـ Edge
-    if (!context?.storeId) {
+    // 1. التحقق الفوري من وجود الـ storeId أو الـ storeSlug لعدم رفض الطلب
+    // قمنا بتبسيط الشرط لكي يقبل المتوفر منهما لمنع حدوث الـ 400 Bad Request
+    const storeIdOrSlug = context?.storeId || (context as any)?.storeSlug;
+
+    if (!storeIdOrSlug) {
       return NextResponse.json(
-        { success: false, error: 'MISSING_STORE_ID', message: 'Mandatory "storeId" is required in error context.' },
+        { 
+          success: false, 
+          error: 'MISSING_STORE_IDENTIFIER', 
+          message: 'Mandatory "storeId" or "storeSlug" is required in error context.' 
+        },
         { status: 400 }
       );
     }
 
+    // تأمين الكائن وتجهيز الـ storeId بشكل سليم للـ Classifier والـ Notifier
+    const normalizedContext: ErrorContext = {
+      storeId: String(storeIdOrSlug),
+      path: context?.path || '/',
+      userAgent: context?.userAgent || 'Unknown',
+      ...context
+    };
+
     // 2. تصنيف وتحويل الخطأ الخام لـ SystemError موحد وصارم
-    const systemError = classifyError(rawError, context);
+    const systemError = classifyError(rawError, normalizedContext);
 
     // 3. بناء الـ Env بالقيم الحقيقية المطلوبة للـ Notifier والـ Redis والـ B2
     const env: Env = {
@@ -37,18 +52,13 @@ export async function POST(req: NextRequest) {
       TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
       UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL || '',
       UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN || '',
-      // أضف أي متغيرات بيئة أخرى يتطلبها نظام الـ B2 لديك هنا
       B2_APPLICATION_KEY_ID: process.env.B2_APPLICATION_KEY_ID || '',
       B2_APPLICATION_KEY: process.env.B2_APPLICATION_KEY || '',
       B2_BUCKET_NAME: process.env.B2_BUCKET_NAME || '',
       B2_ENDPOINT: process.env.B2_ENDPOINT || '',
     } as unknown as Env;
 
-    // 4. استدعاء الـ Notifier الذكي الخاص بك
-    // دالتك sendErrorToTelegram ستقوم تلقائياً بـ:
-    // - الحفظ الفوري في B2 (لجميع الأخطاء)
-    // - تصفية الـ Deduplication والـ Rate Limiting والـ Circuit Breaker (عبر Redis)
-    // - الإرسال السريع لـ Telegram إذا كان الخطأ 'critical' والـ shouldAlert = true
+    // 4. استدعاء الـ Notifier الذكي الخاص بك للإرسال لتليجرام والحفظ في الـ B2
     const notifierPromise = sendErrorToTelegram(systemError, env);
 
     if (ctx?.waitUntil) {
