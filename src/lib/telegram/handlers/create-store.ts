@@ -19,7 +19,7 @@ async function generateLoginLink(userId: string, storeId: string): Promise<strin
 }
 
 /**
- * 🏪 إنشاء متجر جديد ومستخدم ممتثل تماماً لـ الـ SQLite / D1 Types والسكيما الرسمية
+ * 🏪 إنشاء متجر جديد متوافق تماماً مع قيود SQLite و Drizzle Schemas
  */
 export async function createStore(
   d1Database: D1Database, 
@@ -28,10 +28,12 @@ export async function createStore(
   const db = drizzle(d1Database);
   let userId: string;
 
-  // 🛡️ [تعديل حاسم]: البحث الذكي بالـ Telegram ID كأولوية قصوى لمنع التكرار بسبب الـ Plus (+) في الرقم
+  // 1️⃣ البحث الذكي والآمن عن المستخدم الحالي لمنع التكرار وضرب الـ unique indexes
   const searchConditions = [];
   if (data.telegramUserId) {
     searchConditions.push(eq(users.telegramId, String(data.telegramUserId)));
+    // احتياطاً لو تم استخدام الـ telegramId كـ primary key في الخطوات السابقة
+    searchConditions.push(eq(users.id, String(data.telegramUserId)));
   }
   searchConditions.push(eq(users.phoneNumber, data.phone));
 
@@ -43,10 +45,13 @@ export async function createStore(
 
   if (existingUser) {
     userId = existingUser.id;
-    // تحديث البيانات لو ناقصة تأميناً للفلو
     const updatePayload: Record<string, any> = {};
+    
     if (!existingUser.telegramId && data.telegramUserId) {
       updatePayload.telegramId = String(data.telegramUserId);
+    }
+    if (!existingUser.merchantId) {
+      updatePayload.merchantId = existingUser.id; // التاجر هو الـ merchantId لنفسه
     }
     if (!existingUser.name || existingUser.name.trim() === '') {
       updatePayload.name = data.name;
@@ -58,16 +63,16 @@ export async function createStore(
           .update(users)
           .set({ ...updatePayload, updatedAt: new Date() })
           .where(eq(users.id, existingUser.id));
-        console.log(`✅ [createStore] تم تحديث بيانات المستخدم الحالي ${existingUser.id}`);
+        console.log(`✅ [createStore] تم تحديث بيانات المستخدم الحالي بنجاح: ${existingUser.id}`);
       } catch (updateError) {
         console.error(`❌ [createStore] فشل تحديث بيانات المستخدم ${existingUser.id}:`, updateError);
       }
     }
   } else {
+    // مستخدم جديد تماماً
     try {
       const generatedId = crypto.randomUUID(); 
       
-      // ✅ [تأمين القيود]: نرسل الـ merchantId مساوياً للـ id لإرضاء قيد chk_merchant_id_consistency الصارم
       const insertedUsers = await db
         .insert(users)
         .values({
@@ -79,28 +84,37 @@ export async function createStore(
           isVerified: true,
           emailVerified: false, 
           telegramId: data.telegramUserId ? String(data.telegramUserId) : null,
-          merchantId: generatedId, // 👈 هنا مربط الفرس! التاجر هو الـ Merchant ID بتاع نفسه
+          merchantId: generatedId, // إرضاء قيد chk_merchant_id_consistency
         })
         .returning();
       
       const newUser = insertedUsers[0];
       if (!newUser) throw new Error('BIZ_500: Failed to capture newly created user identity');
       userId = newUser.id;
-      console.log(`✅ [createStore] تم إنشاء مستخدم جديد ${userId}`);
+      console.log(`✅ [createStore] تم إنشاء مستخدم جديد تماماً: ${userId}`);
     } catch (insertError) {
       console.error('❌ [createStore] فشل إنشاء المستخدم الجديد:', insertError);
       throw classifyError(insertError);
     }
   }
 
-  // 2️⃣ توليد Slug نظيف
+  // 2️⃣ [حل معضلة الـ Slug العربي]: تنظيف الاسم وتوليد سلاج متوافق 100% مع قيد الـ GLOB '[a-z0-9]*[a-z0-9-]*'
   let slugBase = data.storeName
+    .toLowerCase()
     .trim()
     .replace(/\s+/g, '-') 
-    .replace(/[^\u0600-\u06FFa-zA-Z0-9-]/g, '') 
-    .normalize('NFC');
+    // حذف أي حروف غير إنجليزية أو أرقام أو شرطة للالتزام بالقيد الصارم للـ DB
+    .replace(/[^a-z0-9-]/g, '');
 
-  if (!slugBase) slugBase = 'store';
+  // لو الاسم كله عربي فـ slugBase هيطلع فاضي تماماً، هنا نتدخل ونولد اسم عشوائي متوافق
+  if (!slugBase || slugBase === '-' || slugBase.length < 2) {
+    slugBase = `store-${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  // للتأكيد التام أن أول حرف ليس شرطة لعدم مخالفة الـ GLOB
+  if (slugBase.startsWith('-')) {
+    slugBase = 's' + slugBase;
+  }
 
   const existingStore = await db
     .select()
@@ -115,7 +129,7 @@ export async function createStore(
   // 3️⃣ تخصيص حساب Cloudinary
   const allocatedAccountIndex = await allocateCloudinaryAccount(d1Database);
 
-  // 4️⃣ تجهيز كائن الـ Theme الصافي ليتوافق مع الـ SQLiteText
+  // 4️⃣ كائن الـ Theme
   const defaultTheme = {
     colors: {
       primary: '#2563eb',
@@ -131,7 +145,7 @@ export async function createStore(
     fontFamily: 'Cairo, sans-serif',
   };
 
-  // 5️⃣ إنشاء المتجر ومطابقته مع السكيما بدون أي ترقيع
+  // 5️⃣ إنشاء المتجر
   const insertedStores = await db
     .insert(stores)
     .values({
@@ -141,10 +155,13 @@ export async function createStore(
       slug: slug,
       currency: 'EGP',
       country: 'EG',
+      paymentGateway: 'cash', // تم التغيير لـ cash كخيار افتراضي آمن أو اتركه stripe حسب منطقك
       templateVersion: 'v1',
       cloudinaryAccountIndex: allocatedAccountIndex, 
       theme: JSON.stringify(defaultTheme), 
       isActive: true,
+      isVerified: false,
+      isFeatured: false,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
