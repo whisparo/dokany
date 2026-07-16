@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { classifyError } from '@/lib/errors/classifier';
 import { sendErrorToTelegram } from '@/lib/errors/notifier';
 import { type ErrorContext } from '@/lib/errors/types';
-import { getEnv } from '@/lib/env'; // 👈 استيراد دالة الـ Env الموحدة
+import { getEnv } from '@/lib/env';
 
 export const runtime = 'edge';
 
@@ -26,28 +26,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. استخدام الـ getEnv الموحدة (هتشتغل في كل البيئات)
+    // ✅ خد env كاملة من getEnv
     const env = getEnv();
 
-    // 2. تحديث الـ Env بالكائنات المحددة اللي بيحتاجها الـ Notifier
-    // لاحظ كيف دمجنا مسمياتك الخاصة هنا
-    const notifierEnv = {
-      ...env,
-      TELEGRAM_BOT_TOKEN: process.env.ERROR_BOT_TOKEN || env.TELEGRAM_BOT_TOKEN || '',
-      TELEGRAM_ERROR_CHAT_ID: process.env.ERROR_CHANNEL_ID || env.TELEGRAM_ERROR_CHAT_ID || '',
-    };
-
+    // ✅ استخدم env مباشرة، لأنها محتوي عليها كل المتغيرات المطلوبة
     const normalizedContext: ErrorContext = {
       storeId: String(storeIdOrSlug),
       path: context?.path || '/',
       userAgent: context?.userAgent || 'Unknown',
-      ...context
+      ...context,
     };
 
     const systemError = classifyError(rawError, normalizedContext);
 
-    // 3. استدعاء الـ Notifier
-    const notifierPromise = sendErrorToTelegram(systemError, notifierEnv as any);
+    // ✅ مرر env مباشرة (بدون `as any`، لأن Env متطابقة)
+    const notifierPromise = sendErrorToTelegram(systemError, env);
 
     if (ctx?.waitUntil) {
       ctx.waitUntil(notifierPromise);
@@ -56,7 +49,6 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true, code: systemError.code });
-
   } catch (routeError: any) {
     console.error('🚨 [Report API] Failure:', routeError);
     return NextResponse.json(
