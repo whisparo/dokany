@@ -6,6 +6,7 @@ import { chatSessions } from '@/lib/db/schema/chat-sessions';
 import type { OnboardingSession } from './types';
 
 type ChatSessionState = typeof chatSessions.$inferSelect['state'];
+type ChatSessionTimestamps = typeof chatSessions.$inferSelect['timestamps'];
 
 export interface SessionResult {
   session: OnboardingSession;
@@ -76,51 +77,39 @@ export async function saveSession(
 ): Promise<void> {
   try {
     const now = new Date();
+    const sessionId = crypto.randomUUID();
     const dbState = sessionData as ChatSessionState;
+    
+    // 🛡️ [الحل السحري لـ D1]: نمرر أوبجكت timestamps صريح ومتوافق مع الـ JSON Check Constraint
+    const dbTimestamps: ChatSessionTimestamps = {
+      firstMessageAt: timestamps?.createdAt ? timestamps.createdAt.getTime() : now.getTime(),
+      lastMessageAt: timestamps?.lastActivity ? timestamps.lastActivity.getTime() : now.getTime(),
+    };
 
-    // 🛡️ [تعديل حاسم]: ابحث عن أي جلسة نشطة حالية لهذا المستخدم أولاً لتحديثها مباشرة بـ ID محدد
-    const existingActiveRecord = await db
-      .select()
-      .from(chatSessions)
-      .where(
-        and(
-          eq(chatSessions.platform, platform),
-          eq(chatSessions.externalId, externalId),
-          isNull(chatSessions.deletedAt)
-        )
-      )
-      .limit(1)
-      .get();
-
-    if (existingActiveRecord) {
-      // تحديث صريح للسجل النشط الحالي لمنع حدوث التكرار (Duplicates) في الـ DB نهائياً
-      await db
-        .update(chatSessions)
-        .set({
+    await db
+      .insert(chatSessions)
+      .values({
+        id: sessionId,
+        platform,
+        externalId,
+        state: dbState,
+        timestamps: dbTimestamps, // مبعوت صراحة كـ Object عشان الـ Drizzle يحوله لـ JSON سليم
+        lastActivityAt: timestamps?.lastActivity || now,
+        createdAt: timestamps?.createdAt || now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [chatSessions.platform, chatSessions.externalId],
+        set: {
           state: dbState,
+          timestamps: dbTimestamps, // تحديث صريح أيضاً
           lastActivityAt: timestamps?.lastActivity || now,
           updatedAt: now,
-        })
-        .where(eq(chatSessions.id, existingActiveRecord.id));
-        
-      console.log(`💾 [Memory Service] Session updated successfully for ID: ${existingActiveRecord.id}`);
-    } else {
-      // إدخال سجل جديد تماماً في حال لم تكن هناك جلسة نشطة سابقة
-      const sessionId = crypto.randomUUID();
-      await db
-        .insert(chatSessions)
-        .values({
-          id: sessionId,
-          platform,
-          externalId,
-          state: dbState,
-          lastActivityAt: timestamps?.lastActivity || now,
-          createdAt: timestamps?.createdAt || now,
-          updatedAt: now,
-        });
+          deletedAt: null, // تأمين الجلسات المحذوفة
+        },
+      });
 
-      console.log(`💾 [Memory Service] New session created with ID: ${sessionId}`);
-    }
+    console.log(`💾 [Memory Service] Session upserted successfully for ${externalId}`);
   } catch (error) {
     console.error('❌ [Memory Service] Error saving session:', error);
     throw error;
