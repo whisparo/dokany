@@ -38,8 +38,19 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     };
   }
 
+  // 🎯 جلب فوري للمستخدم من قاعدة البيانات لتأمين القرارات ومنع التداخل
+  const dbUser = ctx.telegramUserId 
+    ? await db.query.users.findFirst({ where: eq(users.id, String(ctx.telegramUserId)) })
+    : null;
+
   // 3️⃣ تأمين الـ Contact المباشر القادم من زر التليجرام
-  if (ctx.contact && (!ctx.session || !ctx.session.step || ctx.session.step === 'phone')) {
+  if (ctx.contact) {
+    // حماية قصوى: لو مسجل تليفونه بالفعل في الـ DB، تخطى خطوة الهاتف وتوجه للاسم فوراً
+    if (dbUser && dbUser.phoneNumber) {
+      console.log('⚡ [Onboarding Contact Bypass] Phone already exists in DB. Redirecting to name.');
+      ctx.session = { ...ctx.session, step: 'name', phone: dbUser.phoneNumber };
+      return handleNameStep(ctx);
+    }
     ctx.session = { ...ctx.session, step: 'phone' };
     return handlePhoneStep(ctx);
   }
@@ -48,24 +59,20 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
   if (!ctx.session || !ctx.session.step || Object.keys(ctx.session).length === 0) {
     console.log(`⚠️ [Onboarding] Session lost for ${ctx.externalId}, reconstructing from DB...`);
     
-    const existingUser = ctx.telegramUserId 
-      ? await db.query.users.findFirst({ where: eq(users.id, String(ctx.telegramUserId)) })
-      : null;
-
-    if (!existingUser) {
+    if (!dbUser) {
       ctx.session = { step: 'phone' };
     } else {
-      const existingStore = await db.query.stores.findFirst({ where: eq(stores.ownerId, existingUser.id) });
+      const existingStore = await db.query.stores.findFirst({ where: eq(stores.ownerId, dbUser.id) });
       
       if (existingStore) {
         ctx.session = { 
           step: 'completed', 
-          phone: existingUser.phoneNumber || undefined, 
-          name: existingUser.name,
-          email: existingUser.email || undefined 
+          phone: dbUser.phoneNumber || undefined, 
+          name: dbUser.name,
+          email: dbUser.email || undefined 
         };
-      } else if (!existingUser.name || existingUser.name.trim() === '') {
-        ctx.session = { step: 'name', phone: existingUser.phoneNumber || undefined };
+      } else if (!dbUser.name || dbUser.name.trim() === '') {
+        ctx.session = { step: 'name', phone: dbUser.phoneNumber || undefined };
       } else {
         const currentMsg = ctx.message?.trim() || '';
         const niches = ['ملابس', '👗 ملابس', 'إلكترونيات', '📱 إلكترونيات', 'تجميل', '💄 تجميل', 'مجوهرات', '💍 مجوهرات', 'أحذية', '👟 أحذية', 'اكسسوارات', '👜 اكسسوارات', 'أخرى', '📦 أخرى', '📦 تخصص آخر', 'تخصص آخر'];
@@ -75,23 +82,23 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
         if (isNicheClick) {
           ctx.session = {
             step: 'niche',
-            phone: existingUser.phoneNumber || undefined,
-            name: existingUser.name,
-            email: existingUser.email || undefined,
-            storeName: `متجر ${existingUser.name || 'دكاني'}`
+            phone: dbUser.phoneNumber || undefined,
+            name: dbUser.name,
+            email: dbUser.email || undefined,
+            storeName: `متجر ${dbUser.name || 'دكاني'}`
           };
-        } else if (!existingUser.email || existingUser.email.trim() === '') {
+        } else if (!dbUser.email || dbUser.email.trim() === '') {
           ctx.session = {
             step: 'email',
-            phone: existingUser.phoneNumber || undefined,
-            name: existingUser.name,
-            storeName: `متجر ${existingUser.name || 'دكاني'}`
+            phone: dbUser.phoneNumber || undefined,
+            name: dbUser.name,
+            storeName: `متجر ${dbUser.name || 'دكاني'}`
           };
         } else {
           ctx.session = { 
             step: 'store', 
-            phone: existingUser.phoneNumber || undefined, 
-            name: existingUser.name 
+            phone: dbUser.phoneNumber || undefined, 
+            name: dbUser.name 
           };
         }
       }
@@ -115,10 +122,6 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
   // ==========================================
   // 🎯 حماية صريحة ومباشرة ضد الـ Race Condition الخاص بالتليجرام
   // ==========================================
-  const dbUser = ctx.telegramUserId 
-    ? await db.query.users.findFirst({ where: eq(users.id, String(ctx.telegramUserId)) })
-    : null;
-
   let currentStep = ctx.session.step as OnboardingStep;
 
   // قوة الداتابيز: لو الرقم متسجل والاسم لسه فاضي، إنت حتماً في خطوة الاسم name مهما قالت الذاكرة المؤقتة
