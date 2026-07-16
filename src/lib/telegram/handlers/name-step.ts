@@ -11,11 +11,7 @@ interface SecureHandlerContext extends HandlerContext {
 }
 
 export async function handleNameStep(ctx: SecureHandlerContext): Promise<HandlerResult> {
-  // 🎯 0️⃣ حارس الأمان الصارم: لو مش خطوة الـ name أو مفيش جلسة، اخرج فوراً لمنع التداخل مع التليفون
-  if (!ctx.session || ctx.session.step !== 'name') {
-    return { reply: '', session: ctx.session }; 
-  }
-
+  const db = getDb(ctx.env);
   const name = ctx.message ? ctx.message.trim() : '';
 
   // تخطي الأوامر العامة
@@ -23,8 +19,32 @@ export async function handleNameStep(ctx: SecureHandlerContext): Promise<Handler
     return { reply: '', session: ctx.session }; 
   }
 
+  // 🛡️ [تعديل حاسم لمنع الـ Race Condition]:
+  // إذا كانت الجلسة معلقة على الهاتف، ولكن المستخدم يمتلك تليفوناً مسجلاً في الـ DB ولا يمتلك اسماً بعد،
+  // نقوم بمزامنة الجلسة أوتوماتيكياً ونسمح له بالمرور كـ Name.
+  let isSessionValid = ctx.session && ctx.session.step === 'name';
+
+  if (!isSessionValid && ctx.telegramUserId) {
+    const dbUser = await db.query.users.findFirst({
+      where: eq(users.id, String(ctx.telegramUserId)),
+    });
+
+    // لو عنده تليفون ولسه اسمه فاضي، ده معناه إنه في خطوة الاسم فعلياً والـ DB اتأخرت في التحديث
+    if (dbUser && dbUser.phoneNumber && !dbUser.name) {
+      console.log(`⚡ [NameStep Bypass] Detected race condition. User ${ctx.telegramUserId} has phone but no name. Restoring 'name' step.`);
+      isSessionValid = true;
+      if (ctx.session) {
+        ctx.session.step = 'name';
+      }
+    }
+  }
+
+  // 🎯 0️⃣ حارس الأمان الصارم: لو لسه مش مؤهل للـ name، اخرج فوراً
+  if (!isSessionValid || !ctx.session) {
+    return { reply: '', session: ctx.session }; 
+  }
+
   // 1️⃣ حارس التحقق من صحة الاسم (تأكيد إنه مش رقم هاتف ناتج عن تداخل التليجرام)
-  // لو الاسم بيبدأ بـ + أو عبارة عن أرقام فقط، ده معناه تداخل من خطوة الهاتف
   const isPhoneNumber = /^\+?[0-9\s\-]{7,20}$/.test(name);
 
   if (name.length < 2 || name.length > 40 || isPhoneNumber) {
@@ -34,8 +54,6 @@ export async function handleNameStep(ctx: SecureHandlerContext): Promise<Handler
       session: ctx.session,
     };
   }
-
-  const db = getDb(ctx.env);
 
   // 2️⃣ تحديث الداتابيز بأمان
   try {
