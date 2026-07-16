@@ -1,7 +1,7 @@
 // src/components/storefront/ProductGrid/ProductGrid.tsx
 
 import Link from 'next/link';
-import { RotateCcw, ArrowLeft, PackageX } from 'lucide-react'; // أيقونات هندسية بريميوم بدلاً من الإيموجي
+import { RotateCcw, ArrowLeft, PackageX } from 'lucide-react'; 
 import { ProductCard } from '../ProductCard';
 import { Typography } from '@/components/shared/Typography';
 import Button from '@/components/shared/Button';
@@ -9,11 +9,9 @@ import { getProductGridTheme } from './ProductGrid.theme';
 import type { ProductGridAdapterResult } from './ProductGrid.adapter';
 import { cn } from '@/lib/utils';
 
-// ============================================================
-// 📦 الأنواع
-// ============================================================
 export interface ProductGridProps {
   data: ProductGridAdapterResult;
+  storeSlug: string; 
   columns?: 1 | 2 | 3 | 4 | 5 | 6;
   showAddToCart?: boolean;
   showRating?: boolean;
@@ -24,11 +22,9 @@ export interface ProductGridProps {
   className?: string;
 }
 
-// ============================================================
-// 🧠 المكون الرئيسي (Server Component)
-// ============================================================
 export function ProductGrid({
   data,
+  storeSlug, 
   columns = 4,
   showAddToCart = true,
   showRating = true,
@@ -62,7 +58,10 @@ export function ProductGrid({
         <div className={theme.emptyState.actions}>
           {viewAllHref && (
             <Button variant="outline" className="rounded-xl h-9 text-xs" asChild>
-              <Link href={viewAllHref}>تصفح المجموعات الأخرى</Link>
+              {/* ✅ حماية: قمنا بتغليف النص داخل span ليكون هناك عنصر ابن واحد صريح */}
+              <Link href={viewAllHref}>
+                <span>تصفح المجموعات الأخرى</span>
+              </Link>
             </Button>
           )}
           <LocalReloadButton />
@@ -76,12 +75,12 @@ export function ProductGrid({
       aria-label={title || 'قائمة المنتجات'}
       data-testid="product-grid"
       className="w-full"
-      dir="rtl" // 👈 تدبيس التوجيه من اليمين إلى اليسار صراحة هنا لمنع عشوائية المتصفحات
+      dir="rtl" 
     >
       {/* ✅ 2. الـ Header (دعم الـ RTL بالأيقونات الهندسية الناعمة) */}
       {(title || description || viewAllHref) && (
         <div className={theme.header.container}>
-          <div className="text-start"> {/* تأمين محاذاة النص لليمين صراحة */}
+          <div className="text-start"> 
             {title && (
               <Typography variant="h2" className={theme.header.title}>
                 {title}
@@ -103,17 +102,19 @@ export function ProductGrid({
               asChild 
               className={theme.header.viewAllButton}
             >
-              <Link href={viewAllHref} className="flex items-center gap-1">
-                {viewAllText}
-                {/* قلب اتجاه حركة السهم ليتحرك لليمين (العربي) في الـ Hover بدلاً من اليسار */}
-                <ArrowLeft size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
+              {/* ✅ حماية فائقة: تغليف محتويات الـ Link بالكامل داخل span واحدة لتجنب انهيار الـ Slot */}
+              <Link href={viewAllHref}>
+                <span className="flex items-center gap-1">
+                  {viewAllText}
+                  <ArrowLeft size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
+                </span>
               </Link>
             </Button>
           )}
         </div>
       )}
 
-      {/* ✅ 3. الـ Grid (توزيع مصفوف من اليمين إلى اليسار تلقائياً بناءً على الـ dir) */}
+      {/* ✅ 3. الـ Grid */}
       <div 
         className={cn(theme.container, "text-right")} 
         role="list"
@@ -123,6 +124,7 @@ export function ProductGrid({
           <div key={product.id} role="listitem" className="w-full">
             <ProductCard
               data={product}
+              storeSlug={storeSlug} 
               showAddToCart={showAddToCart}
               showRating={showRating}
               priority={index < 2}
@@ -133,7 +135,7 @@ export function ProductGrid({
         ))}
       </div>
 
-      {/* ✅ 4. الـ Footer الـ متطابق بالملي مع داتا الأدابتر الجديدة */}
+      {/* ✅ 4. الـ Footer */}
       {products.length > 0 && pagination && (
         <div className={theme.footer.container}>
           <Typography variant="caption" className={theme.footer.text}>
@@ -161,7 +163,7 @@ function LocalReloadButton() {
       }}
     >
       <RotateCcw size={14} />
-      إعادة المحاولة
+      <span>إعادة المحاولة</span>
     </Button>
   );
 }

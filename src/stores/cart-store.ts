@@ -4,17 +4,15 @@ import { create } from 'zustand';
 import { persist, devtools } from 'zustand/middleware';
 
 // ============================================================
-// 📦 الأنواع (Types)
+// 📦 الأنواع (Types) - تم تنظيفها تماماً وفصل مسؤوليات الـ Item عن الـ Store
 // ============================================================
 
 export interface CartItem {
-  /** معرف فريد (productId + variantId) */
-  id: string;
+  id: string;          /** معرف فريد (productId_variantId أو productId) */
   productId: string;
   variantId?: string;
   name: string;
-  /** السعر بالقرش (integer) - للقراءة والعرض المحلي فقط */
-  price: number;
+  price: number;       /** السعر بالقرش (integer) */
   quantity: number;
   image?: string;
   maxStock?: number;
@@ -34,6 +32,7 @@ export interface CartStore {
   items: CartItem[];
   totalQuantity: number;
   totalPrice: number;
+  isOpen: boolean; // 👈 إضافة حالة الفتح والغلق
   
   // حالة المزامنة
   isSyncing: boolean;
@@ -43,7 +42,9 @@ export interface CartStore {
   hasHydrated: boolean;
   
   // عمليات السلة
-  addItem: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
+  setIsOpen: (open: boolean) => void; // 👈 إضافة دوال التحكم بالفتح
+  toggleCart: () => void;            // 👈 إضافة تبديل الحالة
+  addItem: (item: Omit<CartItem, 'id' | 'quantity'> & { id?: string; quantity?: number }) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   clearCart: () => void;
@@ -60,6 +61,17 @@ export interface CartStore {
 }
 
 // ============================================================
+// 🛠️ Utilities الداعمة للعمليات
+// ============================================================
+
+export const createCartItemKey = (
+  productId: string,
+  variantId?: string
+): string => {
+  return variantId ? `${productId}_${variantId}` : productId;
+};
+
+// ============================================================
 // 🛠️ الثوابت (Constants)
 // ============================================================
 
@@ -74,8 +86,8 @@ const MAX_QUANTITY = 999;
 export const useCartStore = create<CartStore>()(
   devtools(
     persist(
-      (set: (state: Partial<CartStore> | ((state: CartStore) => Partial<CartStore>)) => void, get: () => CartStore) => {
-        // ✅ Closure-scoped variables معزولة تماماً
+      (set, get) => {
+        // ✅ Closure-scoped variables معزولة تماماً للمزامنة
         let syncTimeoutId: ReturnType<typeof setTimeout> | null = null;
         let activeAbortController: AbortController | null = null;
         let validateAbortController: AbortController | null = null;
@@ -85,17 +97,16 @@ export const useCartStore = create<CartStore>()(
         // ============================================================
         
         const recalculateTotals = (items: CartItem[]) => {
-          const totalQuantity = items.reduce((sum, i: CartItem) => sum + i.quantity, 0);
+          const totalQuantity = items.reduce((sum, i) => sum + i.quantity, 0);
           const totalPrice = items.reduce(
-            (sum, i: CartItem) => sum + Math.round(i.price * i.quantity),
+            (sum, i) => sum + Math.round(i.price * i.quantity),
             0
           );
           return { totalQuantity, totalPrice };
         };
         
-        // ✅ تحسين: إضافة تحقق من quantity
         const validateItem = (item: Partial<CartItem>): boolean => {
-          if (!item.id || !item.productId || !item.name) {
+          if (!item.productId || !item.name) {
             console.error('[Cart] Invalid item: missing required fields', item);
             return false;
           }
@@ -112,14 +123,12 @@ export const useCartStore = create<CartStore>()(
           return true;
         };
         
-        // ✅ تحسين: التحقق من وجود عناصر قبل الجدولة
         const triggerSync = () => {
           if (syncTimeoutId !== null) {
             clearTimeout(syncTimeoutId);
             syncTimeoutId = null;
           }
           
-          // ✅ التحقق المبكر
           const state = get();
           if (state.items.length === 0) return;
           
@@ -141,6 +150,7 @@ export const useCartStore = create<CartStore>()(
           items: [],
           totalQuantity: 0,
           totalPrice: 0,
+          isOpen: false, // 👈 القيمة الافتراضية مغلق
           isSyncing: false,
           lastSyncedAt: null,
           syncError: null,
@@ -148,16 +158,19 @@ export const useCartStore = create<CartStore>()(
           hasHydrated: false,
           
           setHasHydrated: (state: boolean) => set({ hasHydrated: state }),
+          setIsOpen: (open: boolean) => set({ isOpen: open }),
+          toggleCart: () => set((state) => ({ isOpen: !state.isOpen })),
           
           // ============================================================
-          // ➕ إضافة منتج
+          // ➕ إضافة منتج (تم تعديلها لتظل السلة مغلقة عند الإضافة)
           // ============================================================
-          addItem: (newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
+          addItem: (newItem) => {
             if (!validateItem(newItem)) return;
             
+            const finalId = newItem.id || createCartItemKey(newItem.productId, newItem.variantId);
             const { items } = get();
             const quantityToAdd = Math.min(newItem.quantity ?? 1, MAX_QUANTITY);
-            const existingIndex = items.findIndex((i: CartItem) => i.id === newItem.id);
+            const existingIndex = items.findIndex((i) => i.id === finalId);
             
             let updatedItems: CartItem[];
             
@@ -169,18 +182,28 @@ export const useCartStore = create<CartStore>()(
                 MAX_QUANTITY
               );
               
-              updatedItems = items.map((item: CartItem, idx: number) =>
+              updatedItems = items.map((item, idx) =>
                 idx === existingIndex ? { ...item, quantity: newQuantity } : item
               );
             } else {
               updatedItems = [
                 ...items,
-                { ...newItem, quantity: quantityToAdd } as CartItem,
+                {
+                  id: finalId,
+                  productId: newItem.productId,
+                  variantId: newItem.variantId,
+                  name: newItem.name,
+                  price: newItem.price,
+                  image: newItem.image,
+                  maxStock: newItem.maxStock,
+                  quantity: quantityToAdd,
+                } as CartItem,
               ];
             }
             
             set({
               items: updatedItems,
+              isOpen: false, // 👈 🎯 تم التعديل هنا لتبقى مغلقة ولا تفتح في وجه العميل تلقائياً
               ...recalculateTotals(updatedItems),
             });
             
@@ -192,7 +215,7 @@ export const useCartStore = create<CartStore>()(
           // ============================================================
           removeItem: (id: string) => {
             const { items } = get();
-            const updatedItems = items.filter((item: CartItem) => item.id !== id);
+            const updatedItems = items.filter((item) => item.id !== id);
             
             set({
               items: updatedItems,
@@ -212,7 +235,7 @@ export const useCartStore = create<CartStore>()(
             }
             
             const { items } = get();
-            const existingIndex = items.findIndex((item: CartItem) => item.id === id);
+            const existingIndex = items.findIndex((item) => item.id === id);
             
             if (existingIndex === -1) return;
             
@@ -225,7 +248,7 @@ export const useCartStore = create<CartStore>()(
               return;
             }
             
-            const updatedItems = items.map((item: CartItem, idx: number) =>
+            const updatedItems = items.map((item, idx) =>
               idx === existingIndex ? { ...item, quantity: finalQuantity } : item
             );
             
@@ -241,13 +264,11 @@ export const useCartStore = create<CartStore>()(
           // 🗑️ تفريغ السلة
           // ============================================================
           clearCart: () => {
-            // ✅ إلغاء أي sync مؤجل
             if (syncTimeoutId !== null) {
               clearTimeout(syncTimeoutId);
               syncTimeoutId = null;
             }
             
-            // ✅ إلغاء آمن باستخدام الـ Optional Chaining
             activeAbortController?.abort();
             activeAbortController = null;
             
@@ -270,11 +291,9 @@ export const useCartStore = create<CartStore>()(
           syncCart: async () => {
             const { items } = get();
             
-            // ✅ إلغاء آمن باستخدام الـ Optional Chaining
             if (activeAbortController) {
               activeAbortController.abort();
               activeAbortController = null;
-              
               await new Promise((resolve) => setTimeout(resolve, 0));
             }
             
@@ -294,16 +313,20 @@ export const useCartStore = create<CartStore>()(
             
             while (attempt < MAX_SYNC_RETRIES) {
               try {
-                const startTime = performance.now();
+                const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
                 
+                const idempotencyKey = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                  ? crypto.randomUUID()
+                  : Math.random().toString(36).substring(2, 15);
+
                 const response = await fetch('/api/cart/sync', {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
-                    'Idempotency-Key': crypto.randomUUID(),
+                    'Idempotency-Key': idempotencyKey,
                   },
                   body: JSON.stringify({
-                    items: items.map((item: CartItem) => ({
+                    items: items.map((item) => ({
                       productId: item.productId,
                       variantId: item.variantId,
                       quantity: item.quantity,
@@ -317,7 +340,8 @@ export const useCartStore = create<CartStore>()(
                 }
                 
                 const data: CartSyncResponse = await response.json();
-                const duration = performance.now() - startTime;
+                const endTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                const duration = endTime - startTime;
                 console.log(`[Cart] Sync completed in ${duration.toFixed(2)}ms`);
                 
                 if (data.warnings && data.warnings.length > 0) {
@@ -341,10 +365,7 @@ export const useCartStore = create<CartStore>()(
                 }
                 
                 attempt++;
-                console.error(
-                  `[Cart] Sync attempt ${attempt}/${MAX_SYNC_RETRIES} failed:`,
-                  error
-                );
+                console.error(`[Cart] Sync attempt ${attempt}/${MAX_SYNC_RETRIES} failed:`, error);
                 
                 if (attempt >= MAX_SYNC_RETRIES) {
                   set({
@@ -362,16 +383,13 @@ export const useCartStore = create<CartStore>()(
             }
           },
           
-          // ============================================================
-          // 🔁 إعادة محاولة المزامنة
-          // ============================================================
           retrySync: async () => {
             set({ syncError: null, lastSyncFailed: false });
             await get().syncCart();
           },
           
           // ============================================================
-          // ✅ التحقق الصارم من المخزون
+          // ✅ التحقق الصارم من المخزون (نسخة مصححة وخالية من أخطاء الـ Types)
           // ============================================================
           validateStock: async () => {
             const { items } = get();
@@ -388,7 +406,7 @@ export const useCartStore = create<CartStore>()(
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  items: items.map((i: CartItem) => ({
+                  items: items.map((i) => ({
                     id: i.id,
                     productId: i.productId,
                     variantId: i.variantId,
@@ -400,31 +418,32 @@ export const useCartStore = create<CartStore>()(
               
               if (!response.ok) throw new Error('Stock validation failed');
               
-              // ✅ حماية كسر النوع بالأمان الصارم لعدم قراءة unknown
               const { validated } = (await response.json()) as {
                 validated: Array<{ id: string; maxStock: number; currentPrice?: number }>;
               };
               
-              const updatedItems = items
-                .map((item: CartItem) => {
-                  const validation = validated.find(
-                    (v: { id: string; maxStock: number; currentPrice?: number }) =>
-                      v.id === item.id
-                  );
+              // 1. نقوم بالـ map والـ filter في خطوة واحدة ذكية وتحديد النوع كـ CartItem صريح
+              const updatedItems: CartItem[] = items
+                .map((item) => {
+                  const validation = validated.find((v) => v.id === item.id);
                   
                   if (!validation) {
                     console.warn(`[Cart] Item ${item.id} is out of stock or deleted`);
                     return null;
                   }
                   
-                  return {
+                  // نرجع كائن متوافق 100% مع الـ CartItem Interface
+                  const updatedItem: CartItem = {
                     ...item,
                     quantity: Math.min(item.quantity, validation.maxStock),
-                    maxStock: validation.maxStock,
+                    maxStock: validation.maxStock, // الـ TypeScript الحين يعلم أنه متوافق
                     price: validation.currentPrice ?? item.price,
                   };
+                  
+                  return updatedItem;
                 })
-                .filter((item) => item !== null && item.quantity > 0) as CartItem[];
+                // الفلترة للتخلص من الـ null والـ quantities الصفرية بطريقة يعشقها الـ TS compiler
+                .filter((item): item is CartItem => item !== null && item.quantity > 0);
               
               set({
                 items: updatedItems,
@@ -441,10 +460,7 @@ export const useCartStore = create<CartStore>()(
             }
           },
           
-          // ============================================================
-          // 🔍 Helpers
-          // ============================================================
-          getItemById: (id: string) => get().items.find((item: CartItem) => item.id === id),
+          getItemById: (id: string) => get().items.find((item) => item.id === id),
           getItemCount: () => get().items.length,
         };
       },
@@ -473,42 +489,30 @@ export const useCartStore = create<CartStore>()(
 // ============================================================
 
 export const useCartItems = () => {
-  return useCartStore((state: CartStore) => 
-    state.hasHydrated ? state.items : []
-  );
+  return useCartStore((state) => state.hasHydrated ? state.items : []);
 };
 
 export const useCartTotal = () => {
-  return useCartStore((state: CartStore) => 
-    state.hasHydrated ? state.totalPrice : 0
-  );
+  return useCartStore((state) => state.hasHydrated ? state.totalPrice : 0);
 };
 
 export const useCartCount = () => {
-  return useCartStore((state: CartStore) => 
-    state.hasHydrated ? state.totalQuantity : 0
-  );
+  return useCartStore((state) => state.hasHydrated ? state.totalQuantity : 0);
 };
 
-export const useIsCartReady = () => useCartStore((state: CartStore) => state.hasHydrated);
+export const useIsCartReady = () => useCartStore((state) => state.hasHydrated);
 
 export const useCartSyncState = () =>
-  useCartStore((state: CartStore) => ({
+  useCartStore((state) => ({
     isSyncing: state.isSyncing,
     syncError: state.syncError,
     lastSyncFailed: state.lastSyncFailed,
   }));
+
 // ============================================================
-// 🛠️ Utilities
+// 🛠 *Utilities*
 // ============================================================
 
 export const formatPrice = (priceInCents: number): string => {
   return `${(priceInCents / 100).toFixed(2)} جنيه`;
-};
-
-export const createCartItemKey = (
-  productId: string,
-  variantId?: string
-): string => {
-  return variantId ? `${productId}_${variantId}` : productId;
 };

@@ -57,7 +57,7 @@ export function adaptProductPage(
     {
       page: gridOptions.page,
       limit: gridOptions.limit,
-      totalCountFromDB: totalCount, // تعشيق التوتال الحقيقي
+      totalCountFromDB: totalCount,
     }
   );
 

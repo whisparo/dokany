@@ -17,14 +17,35 @@ export default function StoreError({
   const router = useRouter();
 
   useEffect(() => {
-    console.error('[StoreError Boundary]:', error);
+    // 1. تسجيل محلي في الـ Console للتطوير السريع
+    console.error('[StoreError Boundary Caught]:', error);
+
+    // 2. 🚀 [شغل بريميوم] إرسال التقرير فوراً للـ API الخاص بنا للتسجيل في R2 / تليجرام
+    const reportErrorToSystem = async () => {
+      try {
+        await fetch('/api/errors/report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: 'UI_BOUNDARY_001', // كود موحد لأخطاء واجهة المستخدم
+            message: error.message || 'خطأ غير معروف في واجهة المتجر',
+            stack: error.stack,
+            digest: error.digest, // الـ correlationId الفعلي في Next.js
+            url: window.location.href,
+            userAgent: navigator.userAgent,
+          }),
+        });
+      } catch (reportingError) {
+        // نضمن تماماً عدم إيقاف الصفحة أو حدوث سكتة قلبية للمنظومة لو السيرفر واقع
+        console.error('[System Error Notifier Failed]:', reportingError);
+      }
+    };
+
+    reportErrorToSystem();
   }, [error]);
 
   return (
-    // ✅ شلنا الـ role من هنا عشان نقفل خطأ الـ TypeScript فوراً
     <Container maxWidth="md" className="py-20 text-center" as="main">
-      
-      {/* ✅ نقلنا الـ alert للحاوية الفعلية للخطأ عشان الـ Screen Readers تقرأها صح بنظافة */}
       <div role="alert" aria-live="assertive" className="flex flex-col items-center">
         
         {/* أيقونة تحذيرية صديقة للـ A11y */}
@@ -32,11 +53,11 @@ export default function StoreError({
           ⚠️
         </div>
 
-        <Typography variant="h2" className="mb-4">
+        <Typography variant="h2" className="mb-4 font-bold text-destructive">
           حدث خطأ غير متوقع
         </Typography>
 
-        <Typography variant="body1" className="text-muted-foreground mb-6">
+        <Typography variant="body1" className="text-muted-foreground mb-6 max-w-md leading-relaxed">
           نعتذر، واجهنا مشكلة أثناء تحميل بيانات المتجر. برجاء إعادة المحاولة أو العودة للصفحة الرئيسية.
         </Typography>
 
@@ -45,15 +66,20 @@ export default function StoreError({
             إعادة المحاولة
           </Button>
 
+          {/* استخدام router.push للرئيسية بدون ريلود كامل */}
           <Button variant="outline" onClick={() => router.push('/')}>
             الرئيسية
           </Button>
         </div>
 
+        {/* عرض الـ Error ID بشكل فخم ومنظم للعميل ليسهّل الدعم الفني */}
         {error.digest && (
-          <div className="mt-8 rounded-md bg-muted p-2 select-all">
-            <Typography variant="caption" className="text-muted-foreground font-mono block">
-              Error ID: {error.digest}
+          <div className="mt-8 rounded-lg bg-muted/60 p-3 select-all border border-muted flex flex-col items-center gap-1">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
+              رمز تتبع المشكلة (Reference ID)
+            </span>
+            <Typography variant="caption" className="text-foreground font-mono block font-semibold">
+              {error.digest}
             </Typography>
           </div>
         )}

@@ -2,13 +2,11 @@
 
 import { 
   forwardRef, 
-  cloneElement, 
-  isValidElement, 
   type HTMLAttributes, 
   type ReactNode,
-  type ComponentPropsWithoutRef,
   type ElementRef,
 } from 'react';
+import { Slot } from '@radix-ui/react-slot'; // 👈 نستخدم الـ Slot الرسمي لتفادي كوارث الـ cloneElement
 import { cn } from '@/lib/utils';
 
 // ============================================================
@@ -68,7 +66,7 @@ const maxWidthClasses: Record<ContainerMaxWidth, string> = {
 };
 
 // ============================================================
-// 🧠 المكون الرئيسي (بنية Polymorphic نقية بدون any)
+// 🧠 المكون الرئيسي (بنية Polymorphic نقية ومحصنة بالكامل)
 // ============================================================
 const ContainerComponent = forwardRef<HTMLElement, ContainerProps>(
   (
@@ -99,24 +97,29 @@ const ContainerComponent = forwardRef<HTMLElement, ContainerProps>(
       className
     );
     
-    if (asChild && isValidElement(children)) {
-      const child = children as React.ReactElement<ComponentPropsWithoutRef<'div'>>;
-      
-      return cloneElement(child, {
-        className: cn(containerClasses, child.props.className),
-        role,
-        'aria-label': ariaLabel,
-        'aria-labelledby': ariaLabelledBy,
-        ...props,
-      });
+    // ✅ الحل الاحترافي: لو asChild مفعلة، بنرمي الحمل على الـ Slot الجاهز من Radix
+    // وده بيهم بدمج الـ classes والـ props بأمان حتى لو الـ child جواه نصوص أو تفاصيل معقدة
+    if (asChild) {
+      return (
+        <Slot
+          ref={ref}
+          className={containerClasses}
+          role={role}
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledBy}
+          {...props}
+        >
+          {/* ✅ حماية إضافية: بنضمن دايماً إن فيه عنصر واحد فرعي مغلف حتى لو اتبعث غلط */}
+          {typeof children === 'string' ? <span>{children}</span> : children}
+        </Slot>
+      );
     }
     
-    // الحل الأنيق: بنجبر الكومبيلر يشوف الـ Component كـ Tag ديناميكي يقبل الـ Ref العام
     const Tag = Component as 'div';
     
     return (
       <Tag
-        ref={ref as React.Ref<HTMLDivElement>} // كاستينج لنوع صريح ومتوافق مع الـ Tag الافتراضي بدون any
+        ref={ref as React.Ref<HTMLDivElement>} 
         className={containerClasses}
         role={role}
         aria-label={ariaLabel}
@@ -131,7 +134,6 @@ const ContainerComponent = forwardRef<HTMLElement, ContainerProps>(
 
 ContainerComponent.displayName = 'Container';
 
-// تصدير المكون بنوعه الديناميكي الصحيح لتجنب أي مشاكل عند الاستدعاء من الخارج
 export const Container = ContainerComponent as <E extends ContainerElement = 'div'>(
   props: ContainerProps & { as?: E } & { ref?: React.Ref<ElementRef<E>> }
 ) => ReactNode;

@@ -13,24 +13,20 @@ export default async function StorePage({ params, searchParams }: StorePageProps
   const { storeSlug } = await params;
   const sParams = await searchParams;
 
-  // 🎛️ نداء الأوركسترا مباشرة بسطر واحد فاخر
   const payload = await StorefrontOrchestrator.fetchPagePayload(storeSlug, sParams);
 
   return (
     <div className="w-full flex flex-col">
-      
-      {/* 1. الهيرو واخد راحته وعرض الشاشة كاملة وبيلزق تلقائي بفضل الـ Layout الخارجي */}
       <Hero payload={payload.hero} />
       
-      {/* 2. حاوية الجريد محبوسة في صندوقها الـ 7xl المستقل بمسافة رأسية فخمة */}
       <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-12 pb-16">
         <ProductGrid 
           data={payload.productGrid} 
+          storeSlug={storeSlug} // 👈 مررنا الـ storeSlug هنا بمنتهى النظافة
           title="منتجات المتجر"
           description="تصفح أحدث المنتجات المضافة"
         />
       </div>
-
     </div>
   );
 }

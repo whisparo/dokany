@@ -1,0 +1,144 @@
+🏛️ المعمارية النهائية لصفحة المتجر – نسخة الـ Senior Reviewer
+📌 المقدمة
+هذه المعمارية تطبق فصلًا تامًا بين البيانات، المنطق، والعرض في صفحة المتجر (Storefront) لمشروع Next.js 15 (App Router) الذي يعمل على Cloudflare Edge. الهدف: قابلية قصوى للتوسع، صيانة بدون تعقيد، وأداء Edge-Ready دون أية تبعيات ثقيلة.
+
+🧱 هيكل الصفحة (Page Architecture)
+1. طبقة البيانات (Data Layer)
+الملف: src/lib/data/store-data-fetcher.ts
+
+المسؤولية: جلب البيانات الخام من D1 (أو Mock) مع تخزين مؤقت (unstable_cache) لتقليل ضغط القاعدة.
+
+المخرجات: كائن RawStorePageData يحتوي على store و filteredProducts و totalCount.
+
+2. طبقة التكيف (Adapter Layer)
+الملف: src/lib/adapters/product-page.adapter.ts
+
+المسؤولية: تحويل البيانات الخام إلى payload جاهز للـ UI.
+
+المخرجات: ProductPagePayload يحتوي على hero و productGrid.
+
+التفاصيل:
+
+يستدعي adaptHero(store) لتجهيز بيانات الهيرو.
+
+يستدعي adaptProductGrid(products, options) لتجهيز بيانات الشبكة مع دعم Pagination.
+
+3. طبقة المكونات (Component Layer)
+كل مكون معقد يتكون من ثلاثة ملفات ضمن مجلده الخاص:
+
+الملف	المسؤولية
+Component.tsx	الـ UI الصرف (JSX) بدون أي منطق أو جلب بيانات.
+Component.theme.ts	دوال تولد كلاسات Tailwind بناءً على variant و props.
+Component.adapter.ts	دوال نقية لتنظيف البيانات الخاصة بهذا المكون.
+index.ts	تصدير المكون والأدوات المرتبطة به.
+المكونات الحالية:
+
+Hero
+
+ProductGrid
+
+ProductCard
+
+(قادم: Checkout, Cart)
+
+4. طبقة الصفحة (Page Layer)
+الملف: app/(storefront)/[storeSlug]/page.tsx
+
+المسؤولية: تجميع المكونات وترتيبها في الصفحة.
+
+التفاصيل:
+
+يستدعي getProductPageData(storeSlug, page, limit).
+
+يمرر payload.hero إلى <Hero />.
+
+يمرر payload.productGrid إلى <ProductGrid />.
+
+📂 هيكل الملفات (Files Structure)
+text
+src/
+├── lib/
+│   ├── adapters/
+│   │   └── product-page.adapter.ts        # يجمع أدابترات الصفحة
+│   └── data/
+│       └── store-data-fetcher.ts          # جلب البيانات الخام مع Cache
+├── components/
+│   └── storefront/
+│       ├── Hero/
+│       │   ├── Hero.tsx
+│       │   ├── Hero.theme.ts
+│       │   ├── Hero.adapter.ts
+│       │   └── index.ts
+│       ├── ProductGrid/
+│       │   ├── ProductGrid.tsx
+│       │   ├── ProductGrid.theme.ts
+│       │   ├── ProductGrid.adapter.ts
+│       │   └── index.ts
+│       ├── ProductCard/
+│       │   ├── ProductCard.tsx
+│       │   ├── ProductCard.theme.ts
+│       │   ├── ProductCard.adapter.ts
+│       │   └── index.ts
+│       ├── Footer/                        # (مضمن في layout.tsx)
+│       └── Header/                        # (مضمن في layout.tsx)
+└── app/
+    └── (storefront)/
+        └── [storeSlug]/
+            ├── layout.tsx                 # الهيكل العام (Header + Footer)
+            └── page.tsx                   # تجميع المكونات
+🔄 تدفق البيانات (Data Flow)
+text
+[Client Request]
+    │
+    ▼
+page.tsx
+    │
+    ▼
+getProductPageData(storeSlug, page, limit)
+    │
+    ▼
+getStoreRawData(storeSlug, { page, limit })  ← unstable_cache
+    │
+    ├── fetchStoreInfo(storeSlug)
+    │       └── Store
+    │
+    └── fetchStoreProducts(storeId, { page, limit })
+            ├── filteredProducts (Product[])
+            └── totalCount (number)
+    │
+    ▼
+adaptProductPage(rawData, gridOptions)
+    │
+    ├── adaptHero(store)          → HeroPayload
+    │
+    └── adaptProductGrid(products, { page, limit, totalCount })
+            └── adaptProductCard(product)   → ProductCardAdapterResult
+    │
+    ▼
+ProductPagePayload { hero, productGrid }
+    │
+    ▼
+<Hero payload={hero} />
+<ProductGrid data={productGrid} />
+🧠 المبادئ المعمارية (Architectural Principles)
+المبدأ	التوضيح
+فصل البيانات عن العرض	لا يحتوي أي مكون على منطق جلب أو تحويل بيانات.
+فصل التصميم عن المنطق	Theme منفصل عن UI، مما يسمح بتغيير التصميم دون لمس الـ JSX.
+Pure Adapters	جميع دوال الأدابتر خالية من الآثار الجانبية (Side Effects).
+Edge-Ready	لا يتم استخدام fs, path, أو أي وحدات غير مدعومة في Edge.
+Type Safety	استخدام صارم للـ TypeScript بدون any أو unknown غير ضروري.
+Caching First	unstable_cache يمنع تكرار جلب البيانات عند كل طلب.
+Mobile First	التصميم يبدأ من الموبايل ويُحسَّن للشاشات الأكبر.
+✅ الضوابط الصارمة (Strict Rules)
+ممنوع استخدام as any أو @ts-ignore.
+
+ممنوع كتابة منطق جلب البيانات داخل المكونات.
+
+ممنوع كتابة دوال تحويل بيانات داخل المكونات.
+
+ممنوع استخدام useEffect أو useState في Server Components.
+
+إلزامي أن يكون لكل مكون مركب: UI, Theme, Adapter في ملفات منفصلة.
+
+إلزامي أن تكون جميع الأدابترات دوالًا نقية (Pure Functions).
+

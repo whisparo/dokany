@@ -3,6 +3,8 @@ import React from 'react';
 import { Header } from '@/components/storefront/Header';
 import { Footer } from '@/components/storefront/Footer';
 import { StorefrontOrchestrator } from '@/lib/orchestrators/storefront-orchestrator';
+// 🚀 استيراد الـ CartDrawer الـ High-End
+import { CartDrawer } from '@/components/storefront/CartDrawer'; 
 
 export default async function StorefrontLayout({ children, params }: { children: React.ReactNode; params: Promise<{ storeSlug: string }> }) {
   const { storeSlug } = await params;
@@ -11,11 +13,15 @@ export default async function StorefrontLayout({ children, params }: { children:
   return (
     <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950">
       <Header payload={payload.header} />
-      {/* رجعناه طبيعي flex-1 وبدون أي margin علوي قاطع */}
+      
       <main className="flex-1 flex flex-col w-full">
         {children}
       </main>
+      
       <Footer payload={payload.footer} />
+
+      {/* 🚀 استدعاء السلة الجانبية لتعمل في أي مكان بالمتجر */}
+      <CartDrawer />
     </div>
   );
 }

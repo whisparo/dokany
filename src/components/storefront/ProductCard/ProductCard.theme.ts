@@ -11,43 +11,39 @@ interface ThemeProps {
 }
 
 // ============================================================
-// 🎨 الـ Theme الرئيسي (Premium Seamless Edition)
+// 🎨 الـ Theme الرئيسي الموحد (Sharp Bottom & Equal Height Edition)
 // ============================================================
 export function getProductCardTheme({ variant, isOutOfStock }: ThemeProps) {
   return {
-    // ✅ الحاوية الرئيسية: طيرنا الـ border تماماً واعتمدنا على ظل فائق النعومة متلاشي (Premium Dynamic Shadow)
+    // ✅ الحاوية الرئيسية: حواف حادة من الأسفل تماماً لمنع الدوران السفلي (Sharp Bottom)
     container: cn(
       'group relative flex w-full flex-col overflow-hidden bg-card',
       'rounded-t-2xl rounded-b-none transition-all duration-500 backface-hidden',
       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
-      // 🌟 استبدلنا الـ shadow القديم بظل مطاطي ناعم جداً مريح للعين
-      'shadow-[0_8px_30px_rgb(0,0,0,0.02)] dark:shadow-none',
+      'shadow-[0_2px_12px_rgba(0,0,0,0.03)] dark:shadow-none border border-slate-200/60 dark:border-slate-800/50',
       
-      // Default variant - (سايح وطاير مع الـ Hover)
       variant === 'default' && [
-        'hover:shadow-[0_20px_40px_rgba(0,0,0,0.04)] dark:hover:shadow-none',
+        'hover:shadow-[0_20px_40px_rgba(0,0,0,0.05)] dark:hover:shadow-none',
         !isOutOfStock && 'hover:-translate-y-1.5',
       ],
       
-      // Compact variant
       variant === 'compact' && [
-        'flex-row items-center gap-3.5 p-2.5',
+        'flex-row items-center gap-3.5 p-2.5 rounded-2xl', // الـ compact يفضل دائري بالكامل لأنه شريط صغير
         'hover:shadow-[0_12px_24px_rgba(0,0,0,0.03)]',
       ],
       
-      // Horizontal variant
       variant === 'horizontal' && [
-        'flex-col sm:flex-row gap-4 p-3.5',
-        'hover:shadow-[0_20px_40px_rgba(0,0,0,0.04)] dark:hover:shadow-none',
+        'flex-col sm:flex-row gap-4 p-3.5 rounded-2xl', // الـ horizontal يفضل دائري بالكامل لتناسق الأبعاد
+        'hover:shadow-[0_20px_40px_rgba(0,0,0,0.05)] dark:hover:shadow-none',
         !isOutOfStock && 'hover:-translate-y-1',
       ]
     ),
     
-    // ✅ حاوية الصورة: طيرنا الـ border-b والحدود تماماً عشان تسيح جوه الكارت
+    // ✅ حاوية الصورة: واخد bg-slate-50/90 لحماية تباين الصور البيضاء وبوردر سفلي خفيف جداً
     imageContainer: cn(
-      'relative overflow-hidden bg-slate-50 dark:bg-slate-900', 
+      'relative overflow-hidden bg-slate-50/90 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/40', 
       variant === 'default' && 'aspect-[1/1] w-full',
-      variant === 'compact' && 'h-14 w-14 shrink-0 rounded-xl',
+      variant === 'compact' && 'h-14 w-14 shrink-0 rounded-xl border-none',
       variant === 'horizontal' && 'h-48 w-full sm:h-32 sm:w-36 shrink-0 rounded-xl'
     ),
     
@@ -62,20 +58,20 @@ export function getProductCardTheme({ variant, isOutOfStock }: ThemeProps) {
       variant === 'horizontal' && 'transition-transform duration-700 ease-out group-hover:scale-105'
     ),
     
-    // ✅ حاوية المحتوى
+    // ✅ حاوية المحتوى: تثبيت الـ min-h لتوحيد الارتفاع الكلي للكروت تماماً حتى لو فيه سطر خصم أو طلب توفر
     content: cn(
-      'flex flex-1 flex-col',
-      variant === 'default' && 'p-3.5 sm:p-4.5', // بحب أزود الـ padding سنة بسيطة مع التصميم السايح بيدي فخامة
+      'flex flex-1 flex-col justify-between',
+      variant === 'default' && 'p-3 sm:p-4 min-h-[120px] sm:min-h-[140px]', 
       variant === 'compact' && 'flex-1 min-w-0 space-y-0.5',
       variant === 'horizontal' && 'py-0.5 justify-between'
     ),
     
-    // ✅ عنوان المنتج (المسافات اللي بتريح العين)
+    // ✅ عنوان المنتج
     title: cn(
       'text-slate-800 dark:text-slate-100 transition-colors duration-300',
       variant === 'default' && [
-        'line-clamp-2 font-medium tracking-tight leading-snug text-sm sm:text-base',
-        'min-h-[2.6rem] sm:min-h-[3rem]', 
+        'line-clamp-2 font-medium tracking-tight leading-snug text-xs sm:text-sm',
+        'min-h-[2.4rem] sm:min-h-[2.8rem]', 
         'group-hover:text-primary-600 dark:group-hover:text-primary-400',
       ],
       variant === 'compact' && [
@@ -90,52 +86,58 @@ export function getProductCardTheme({ variant, isOutOfStock }: ThemeProps) {
     
     // ✅ السعر الرئيسي
     price: cn(
-      'font-bold tracking-tight text-primary-600 dark:text-primary-400',
-      variant === 'default' && 'text-sm sm:text-base mt-1',
+      'font-bold tracking-tight text-primary-600 dark:text-primary-400 whitespace-nowrap',
+      variant === 'default' && 'text-xs sm:text-sm',
       variant === 'compact' && 'text-sm font-bold',
       variant === 'horizontal' && 'text-sm sm:text-base'
     ),
     
     // ✅ السعر الأصلي (قبل الخصم)
-    originalPrice: 'text-[10px] sm:text-xs text-slate-400 line-through block mt-0.5',
+    originalPrice: 'text-[9px] sm:text-[11px] text-slate-400 line-through block mt-0.5',
     
-    // ✅ الوسوم الذكية الطائرة (Smart Badges)
+    // ✅ شارة الخصم الذكية الطائرة فوق الصورة فقط
     badges: {
       container: 'absolute start-2.5 top-2.5 flex flex-col gap-1.5 z-10',
-      outOfStock: cn(
-        'inline-flex items-center rounded-lg bg-slate-900/90 dark:bg-red-500/90',
-        'px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-md shadow-sm'
-      ),
       discount: cn(
         'inline-flex items-center rounded-lg bg-emerald-500/90',
         'px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-md shadow-sm animate-fade-in'
       ),
     },
     
-    // ✅ زر السلة الطائر (شيلنا الـ shadow القديم التقيل وضبطناه ليكون عايم)
-    quickAddButton: cn(
-      'absolute bottom-3 end-3 rounded-xl bg-white/95 dark:bg-slate-900/95 p-2.5',
-      'shadow-[0_8px_20px_rgba(0,0,0,0.06)] dark:shadow-none backdrop-blur-md',
-      'opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0',
-      'max-sm:opacity-100 max-sm:translate-y-0', 
-      'transition-all duration-300 ease-out hover:scale-110 active:scale-95',
-      'hover:bg-primary-600 dark:hover:bg-primary-600 text-primary-600 dark:text-primary-400'
+    // ✅ حالة المخزون الذكية (اللمبة والنقطة التفاعلية) 🟢 / 🔴
+    stockStatus: {
+      container: 'flex items-center gap-1.5 mt-0.5',
+      dot: cn(
+        'h-1.5 w-1.5 rounded-full transition-all duration-300',
+        isOutOfStock ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]' : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
+      ),
+      text: cn(
+        'text-[10px] sm:text-[11px] font-semibold tracking-tight',
+        isOutOfStock ? 'text-red-500' : 'text-slate-500'
+      )
+    },
+
+    // ✅ زر "اسأل عن التوفر" البريميوم
+    askAvailabilityButton: cn(
+      'text-[10px] sm:text-[11px] font-bold text-primary-600 dark:text-primary-400',
+      'hover:text-primary-700 transition-colors duration-200',
+      'flex items-center gap-1 bg-primary-50 dark:bg-primary-950/40 px-2 py-0.5 sm:py-1 rounded-lg mt-0.5'
     ),
     
     // ✅ قسم التقييم
     rating: {
       container: 'mt-1 mb-2 flex items-center gap-1',
-      star: 'h-3.5 w-3.5 fill-amber-400 text-amber-400',
-      value: 'font-semibold text-slate-600 dark:text-slate-400 text-[11px] sm:text-xs',
-      count: 'text-slate-400 text-[11px] sm:text-xs',
+      star: 'h-3 w-3 fill-amber-400 text-amber-400',
+      value: 'font-semibold text-slate-600 dark:text-slate-400 text-[10px] sm:text-xs',
+      count: 'text-slate-400 text-[10px] sm:text-xs',
     },
     
-    // ✅ زر الإضافة الأساسي بالأسفل
+    // ✅ زر الإضافة الأساسي بالأسفل (تم تبسيطه لربطه بالـ layout الموحد)
     addToCartButton: cn(
       'rounded-xl shadow-sm transition-all duration-300 text-xs font-semibold',
-      variant === 'default' && 'h-8 sm:h-9 px-3.5 sm:px-4 max-sm:hidden bg-slate-900 hover:bg-primary-600 text-white active:scale-95 dark:bg-slate-800 dark:hover:bg-primary-600 border-none',
+      variant === 'default' && 'h-8 sm:h-9 px-3.5 sm:px-4 bg-slate-900 hover:bg-primary-600 text-white active:scale-95 dark:bg-slate-800 dark:hover:bg-primary-600 border-none',
       variant === 'horizontal' && 'px-5 h-9 bg-primary-600 hover:bg-primary-700 active:scale-95 shadow-primary-100 text-white border-none',
-      isOutOfStock && 'opacity-60 cursor-not-allowed'
+      isOutOfStock && 'hidden'
     ),
   };
 }

@@ -1,10 +1,11 @@
 // src/lib/telegram/handlers/phone-step.ts
-import { drizzle } from 'drizzle-orm/d1';
 import type { D1Database } from '@cloudflare/workers-types';
 import { users, stores } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import type { HandlerContext, HandlerResult } from '@/lib/telegram/types';
 import { isValidPhone } from './onboarding-helpers';
+import { saveSession } from '../memory';
+import { getDb } from '@/lib/db'; // 👈 استيراد التهيئة الموحدة لقاعدة البيانات
 
 interface SecureHandlerContext extends HandlerContext {
   env: { DB: D1Database };
@@ -25,7 +26,8 @@ export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<Handle
     };
   }
 
-  const db = drizzle(ctx.env.DB);
+  // تهيئة الداتابيز بشكل موحد ومحمي
+  const db = getDb(ctx.env);
   const contact = ctx.contact;
   
   let phone = contact?.phone_number || (ctx.message ? ctx.message.trim() : '');
@@ -42,18 +44,14 @@ export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<Handle
   }
 
   // 3️⃣ التحقق من التكرار في قاعدة البيانات
-  const existingUser = await db
-    .select()
-    .from(users)
-    .where(eq(users.phoneNumber, phone))
-    .get();
+  const existingUser = await db.query.users.findFirst({
+    where: eq(users.phoneNumber, phone),
+  });
   
   if (existingUser) {
-    const existingStore = await db
-      .select()
-      .from(stores)
-      .where(eq(stores.ownerId, existingUser.id))
-      .get();
+    const existingStore = await db.query.stores.findFirst({
+      where: eq(stores.ownerId, existingUser.id),
+    });
     
     if (existingStore) {
       return {
@@ -82,13 +80,24 @@ export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<Handle
     console.error('❌ [PhoneStep] Failed to insert user to DB:', error);
   }
 
-  // 5️⃣ 🚀 النجاح الصريح، الانتقال لـ name
+  // 5️⃣ 🚀 تجهيز الجلسة الجديدة للانتقال لخطوة الـ name
+  const nextSession = { 
+    step: 'name' as const,      
+    phone: phone,      
+  };
+
+  // 💾 حفظ الجلسة في الميموري/الداتابيز فوراً لمنع الـ Desync
+  try {
+    await saveSession(db, ctx.platform, ctx.externalId, nextSession);
+    console.log(`💾 [PhoneStep] Session saved successfully for next step: name`);
+  } catch (error) {
+    console.error('❌ [PhoneStep] Failed to save session to memory:', error);
+  }
+
+  // 6️⃣ إرجاع رد النجاح والانتقال للخطوة التالية
   return {
     reply: `✅ تم تفعيل وتأكيد رقم هاتفك بنجاح (${phone}).\n\n👋 يرجى الآن إدخال اسمك الشخصي (اسم التاجر):`,
     buttons: [[{ text: '🔙 رجوع', value: 'رجوع' }]], 
-    session: { 
-      step: 'name',      
-      phone: phone,      
-    },
+    session: nextSession,
   };
 }

@@ -47,7 +47,7 @@ export function adaptHero(
   return {
     title: store.name.trim(),
     description: store.description?.trim() || 'اكتشف أفضل المنتجات في متجرنا',
-    image: store.bannerImage || '/images/default-banner.png',
+    image: store.coverImage || '/images/default-banner.png',
     ctaText: showCta ? ctaText : undefined,
     ctaLink: showCta ? ctaLink : undefined,
     variant,
