@@ -4,22 +4,84 @@ import { Redis } from '@upstash/redis/cloudflare';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getEnv } from '@/lib/env';
 import { sendErrorToTelegram } from '@/lib/errors/notifier';
-import { classifyError } from '@/lib/errors/classifier';
+import { SystemError } from '@/lib/errors/types';
 
 export const runtime = 'edge';
 
 export async function GET(request: NextRequest) {
+  // ✅ استخدم new URL بدلاً من request.nextUrl (أكثر توافقاً مع Edge)
+  const url = new URL(request.url);
+
+  // ✅ اختبار تليجرام: ?test=true
+  if (url.searchParams.get('test') === 'true') {
+    const env = getEnv();
+    console.log('🔍 [Ping] Test mode activated!');
+    console.log('🔍 [Ping] TELEGRAM_BOT_TOKEN exists?', !!env.TELEGRAM_BOT_TOKEN);
+    console.log('🔍 [Ping] TELEGRAM_ERROR_CHAT_ID:', env.TELEGRAM_ERROR_CHAT_ID);
+
+    const testError = new SystemError({
+      code: 'TEST_001',
+      userMessage: '🧪 هذا خطأ تجريبي لتأكيد وصول الرسائل لتليجرام',
+      technicalMessage: 'Test error triggered manually via ?test=true',
+      category: 'system',
+      severity: 'critical',
+      shouldAlert: true,
+      retryable: false,
+      metadata: { path: '/api/ping?test=true', storeId: 'global' },
+    });
+
+    await sendErrorToTelegram(testError, env);
+    return NextResponse.json({
+      success: true,
+      message: 'Test error sent to Telegram. Check your channel!',
+    });
+  }
+
+  // ✅ اختبار عبر Header (X-Test: true) كبديل أكثر موثوقية
+  if (request.headers.get('x-test') === 'true') {
+    const env = getEnv();
+    console.log('🔍 [Ping] Test mode activated via Header!');
+
+    const testError = new SystemError({
+      code: 'TEST_002',
+      userMessage: '🧪 هذا خطأ تجريبي عبر الـ Header',
+      technicalMessage: 'Test error triggered via X-Test header',
+      category: 'system',
+      severity: 'critical',
+      shouldAlert: true,
+      retryable: false,
+      metadata: { path: '/api/ping', storeId: 'global' },
+    });
+
+    await sendErrorToTelegram(testError, env);
+    return NextResponse.json({
+      success: true,
+      message: 'Test error sent to Telegram via Header!',
+    });
+  }
+
+  // ============================================================
+  // المسار العادي (اختبار Rate Limit)
+  // ============================================================
   try {
     const env = getEnv();
     const redisUrl = env.UPSTASH_REDIS_REST_URL;
     const redisToken = env.UPSTASH_REDIS_REST_TOKEN;
 
     if (!redisUrl || !redisToken) {
-      // ✅ إرسال خطأ إلى Telegram
-      const error = new Error('Redis env vars missing');
-      const systemError = classifyError(error, { path: '/api/ping', storeId: 'global' });
+      const systemError = new SystemError({
+        code: 'REDIS_001',
+        userMessage: 'Redis env vars missing',
+        technicalMessage: 'Redis configuration missing in environment',
+        category: 'system',
+        severity: 'critical',
+        shouldAlert: true,
+        retryable: false,
+        metadata: { path: '/api/ping', storeId: 'global' },
+      });
+
       await sendErrorToTelegram(systemError, env);
-      
+
       return NextResponse.json(
         { error: 'Redis configuration missing' },
         { status: 500 }
@@ -43,16 +105,31 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    // ✅ إرسال الخطأ إلى Telegram
     const env = getEnv();
-    const systemError = classifyError(error, { path: '/api/ping', storeId: 'global' });
+    const errorObj = error instanceof Error ? error : new Error(String(error));
+
+    const systemError = new SystemError({
+      code: 'PING_001',
+      userMessage: 'خطأ في اختبار الـ Ping',
+      technicalMessage: errorObj.message,
+      category: 'system',
+      severity: 'critical',
+      shouldAlert: true,
+      retryable: false,
+      metadata: {
+        path: '/api/ping',
+        storeId: 'global',
+        originalStack: errorObj.stack,
+      },
+    });
+
     await sendErrorToTelegram(systemError, env);
 
     console.error('Ping error:', error);
     return NextResponse.json(
       {
         error: 'Internal error',
-        details: error instanceof Error ? error.message : String(error),
+        details: errorObj.message,
       },
       { status: 500 }
     );
