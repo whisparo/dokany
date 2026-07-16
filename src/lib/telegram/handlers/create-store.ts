@@ -10,7 +10,7 @@ import { classifyError } from '@/lib/errors/classifier';
 interface CreateStoreInput {
   phone: string;
   name: string;
-  storeName: string;
+  storeName: string; // الاسم اللي كتبه التاجر (مثلاً: "متجر الفرسان" أو "الفرسان")
   telegramUserId?: string | number;
 }
 
@@ -28,11 +28,10 @@ export async function createStore(
   const db = drizzle(d1Database);
   let userId: string;
 
-  // 1️⃣ البحث الذكي والآمن عن المستخدم الحالي لمنع التكرار وضرب الـ unique indexes
+  // 1️⃣ البحث الذكي والآمن عن المستخدم الحالي
   const searchConditions = [];
   if (data.telegramUserId) {
     searchConditions.push(eq(users.telegramId, String(data.telegramUserId)));
-    // احتياطاً لو تم استخدام الـ telegramId كـ primary key في الخطوات السابقة
     searchConditions.push(eq(users.id, String(data.telegramUserId)));
   }
   searchConditions.push(eq(users.phoneNumber, data.phone));
@@ -51,7 +50,7 @@ export async function createStore(
       updatePayload.telegramId = String(data.telegramUserId);
     }
     if (!existingUser.merchantId) {
-      updatePayload.merchantId = existingUser.id; // التاجر هو الـ merchantId لنفسه
+      updatePayload.merchantId = existingUser.id;
     }
     if (!existingUser.name || existingUser.name.trim() === '') {
       updatePayload.name = data.name;
@@ -69,7 +68,6 @@ export async function createStore(
       }
     }
   } else {
-    // مستخدم جديد تماماً
     try {
       const generatedId = crypto.randomUUID(); 
       
@@ -84,7 +82,7 @@ export async function createStore(
           isVerified: true,
           emailVerified: false, 
           telegramId: data.telegramUserId ? String(data.telegramUserId) : null,
-          merchantId: generatedId, // إرضاء قيد chk_merchant_id_consistency
+          merchantId: generatedId,
         })
         .returning();
       
@@ -98,34 +96,41 @@ export async function createStore(
     }
   }
 
-  // 2️⃣ [توليد الـ Slug العربي أو الإنجليزي الآمن]:
-  // يقبل الحروف الإنجليزية، الأرقام، الشرطة، ونطاق الحروف العربية بالكامل [أ-ي]
-  let slugBase = data.storeName
+  // 2️⃣ [توليد الـ Slug وتنظيف اسم المتجر بذكاء]:
+  // إزالة كلمة "متجر" أو "shop" المتكررة من بداية الاسم لتجنب تكرارها في الـ UI
+  let cleanStoreName = data.storeName.trim();
+  const storePrefixRegex = /^(متجر|shop|store)\s+/i;
+  if (storePrefixRegex.test(cleanStoreName)) {
+    cleanStoreName = cleanStoreName.replace(storePrefixRegex, '');
+  }
+
+  // بناء الـ Slug من الاسم النظيف
+  let slugBase = cleanStoreName
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, '-') // استبدال أي مسافات بشرطات
-    // حذف أي رموز غريبة أخرى والاحتفاظ بـ: a-z و 0-9 والحروف العربية والشرطة
-    .replace(/[^a-z0-9أ-ي-]/g, '');
+    .replace(/\s+/g, '-') // استبدال المسافات بشرطات
+    .replace(/[^a-z0-9أ-ي-]/g, ''); // تنظيف من أي رموز غريبة
 
-  // لو الاسم كله رموز غريبة ونتج عنه slug فارغ
   if (!slugBase || slugBase === '-' || slugBase.length < 2) {
     slugBase = `store-${Math.random().toString(36).slice(2, 7)}`;
   }
 
-  // التأكد التام من أن الـ slug لا يبدأ بشرطة لعدم تعارض الـ GLOB
   if (slugBase.startsWith('-')) {
     slugBase = 's' + slugBase;
   }
 
+  // فك التشفير احتياطاً لضمان عدم تخزين رموز غريبة في قاعدة البيانات
+  const decodedSlug = decodeURIComponent(slugBase);
+
   const existingStore = await db
     .select()
     .from(stores)
-    .where(eq(stores.slug, slugBase))
+    .where(eq(stores.slug, decodedSlug))
     .get();
 
   const slug = existingStore
-    ? `${slugBase}-${Math.random().toString(36).slice(2, 6)}`
-    : slugBase;
+    ? `${decodedSlug}-${Math.random().toString(36).slice(2, 6)}`
+    : decodedSlug;
 
   // 3️⃣ تخصيص حساب Cloudinary
   const allocatedAccountIndex = await allocateCloudinaryAccount(d1Database);
@@ -146,13 +151,13 @@ export async function createStore(
     fontFamily: 'Cairo, sans-serif',
   };
 
-  // 5️⃣ إنشاء المتجر
+  // 5️⃣ إنشاء المتجر بالاسم النظيف والـ Slug السليم
   const insertedStores = await db
     .insert(stores)
     .values({
       id: crypto.randomUUID(), 
       ownerId: userId,
-      name: data.storeName,
+      name: cleanStoreName, // 👈 بنسجل الاسم النظيف هنا (بدون كلمة "متجر" المكررة)
       slug: slug,
       currency: 'EGP',
       country: 'EG',
@@ -181,7 +186,6 @@ export async function createStore(
   const dashboardLink = await generateLoginLink(userId, newStore.id);
 
   return {
-    // ✅ تم تعديل الرابط ليتناسب مع هيكل الـ storefront عندك (مباشر بدون /m/)
     url: `https://dokany.pages.dev/${slug}`,
     dashboardLink,
   };
