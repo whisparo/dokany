@@ -103,8 +103,10 @@ export async function POST(req: NextCloudflareRequest) {
       }
 
       if (result.session) {
-        const updatedSession: OnboardingSession = { ...session, ...result.session };
-        await saveSession(db, 'telegram', chatId, updatedSession, timestamps);
+        // 🎯 مزامنة طازجة قبل الحفظ لمنع سباق التزامن عند الضغط السريع
+        const { session: latestSession, timestamps: latestTimestamps } = await loadSession(db, 'telegram', chatId);
+        const updatedSession: OnboardingSession = { ...latestSession, ...result.session };
+        await saveSession(db, 'telegram', chatId, updatedSession, latestTimestamps);
       }
 
       const sent = await sendTelegramMessage(chatId, result.reply, result.buttons, result.persistentButtons);
@@ -136,8 +138,9 @@ export async function POST(req: NextCloudflareRequest) {
       const result = await handleGetDashboard(enrichedCtx);
 
       if (result.session) {
-        const updatedSession: OnboardingSession = { ...session, ...result.session };
-        await saveSession(db, 'telegram', baseCtx.externalId, updatedSession, timestamps);
+        const { session: latestSession, timestamps: latestTimestamps } = await loadSession(db, 'telegram', baseCtx.externalId);
+        const updatedSession: OnboardingSession = { ...latestSession, ...result.session };
+        await saveSession(db, 'telegram', baseCtx.externalId, updatedSession, latestTimestamps);
       }
 
       const sent = await sendTelegramMessage(baseCtx.externalId, result.reply, result.buttons, result.persistentButtons);
@@ -153,8 +156,15 @@ export async function POST(req: NextCloudflareRequest) {
     const result = await handleOnboarding(enrichedCtx);
 
     if (result.session) {
-      const updatedSession: OnboardingSession = { ...session, ...result.session };
-      await saveSession(db, 'telegram', baseCtx.externalId, updatedSession, timestamps);
+      // 🎯 تأمين الحفظ الحاسم: قراءة فورية للجلسة الحالية من قاعدة البيانات لتجنب دمج بيانات منتهية الصلاحية
+      const { session: latestSession, timestamps: latestTimestamps } = await loadSession(db, 'telegram', baseCtx.externalId);
+      const updatedSession: OnboardingSession = { 
+        ...latestSession, 
+        ...result.session 
+      };
+      
+      await saveSession(db, 'telegram', baseCtx.externalId, updatedSession, latestTimestamps);
+      console.log(`💾 [Webhook] Session safely synchronized to DB: ${updatedSession.step}`);
     }
 
     const sent = await sendTelegramMessage(baseCtx.externalId, result.reply, result.buttons, result.persistentButtons);
