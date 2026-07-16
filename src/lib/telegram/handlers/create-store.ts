@@ -19,7 +19,7 @@ async function generateLoginLink(userId: string, storeId: string): Promise<strin
 }
 
 /**
- * 🏪 إنشاء متجر جديد متوافق تماماً مع قيود SQLite و Drizzle Schemas
+ * 🏪 إنشاء متجر جديد متوافق تماماً مع قيود SQLite و Drizzle Schemas ودعم كامل للعربي
  */
 export async function createStore(
   d1Database: D1Database, 
@@ -98,20 +98,21 @@ export async function createStore(
     }
   }
 
-  // 2️⃣ [حل معضلة الـ Slug العربي]: تنظيف الاسم وتوليد سلاج متوافق 100% مع قيد الـ GLOB '[a-z0-9]*[a-z0-9-]*'
+  // 2️⃣ [توليد الـ Slug العربي أو الإنجليزي الآمن]:
+  // يقبل الحروف الإنجليزية، الأرقام، الشرطة، ونطاق الحروف العربية بالكامل [أ-ي]
   let slugBase = data.storeName
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, '-') 
-    // حذف أي حروف غير إنجليزية أو أرقام أو شرطة للالتزام بالقيد الصارم للـ DB
-    .replace(/[^a-z0-9-]/g, '');
+    .replace(/\s+/g, '-') // استبدال أي مسافات بشرطات
+    // حذف أي رموز غريبة أخرى والاحتفاظ بـ: a-z و 0-9 والحروف العربية والشرطة
+    .replace(/[^a-z0-9أ-ي-]/g, '');
 
-  // لو الاسم كله عربي فـ slugBase هيطلع فاضي تماماً، هنا نتدخل ونولد اسم عشوائي متوافق
+  // لو الاسم كله رموز غريبة ونتج عنه slug فارغ
   if (!slugBase || slugBase === '-' || slugBase.length < 2) {
     slugBase = `store-${Math.random().toString(36).slice(2, 7)}`;
   }
 
-  // للتأكيد التام أن أول حرف ليس شرطة لعدم مخالفة الـ GLOB
+  // التأكد التام من أن الـ slug لا يبدأ بشرطة لعدم تعارض الـ GLOB
   if (slugBase.startsWith('-')) {
     slugBase = 's' + slugBase;
   }
@@ -155,7 +156,7 @@ export async function createStore(
       slug: slug,
       currency: 'EGP',
       country: 'EG',
-      paymentGateway: 'cash', // تم التغيير لـ cash كخيار افتراضي آمن أو اتركه stripe حسب منطقك
+      paymentGateway: 'cash', 
       templateVersion: 'v1',
       cloudinaryAccountIndex: allocatedAccountIndex, 
       theme: JSON.stringify(defaultTheme), 
@@ -174,13 +175,14 @@ export async function createStore(
     );
   }
 
-  console.log(`✅ [createStore] تم إنشاء المتجر بنجاح وتخصيص كلوديناري رقم: ${allocatedAccountIndex}`);
+  console.log(`✅ [createStore] تم إنشاء المتجر بنجاح بالرابط: ${slug}`);
 
   // 6️⃣ روابط الـ Dashboard
   const dashboardLink = await generateLoginLink(userId, newStore.id);
 
   return {
-    url: `https://dokany.pages.dev/m/${slug}`,
+    // ✅ تم تعديل الرابط ليتناسب مع هيكل الـ storefront عندك (مباشر بدون /m/)
+    url: `https://dokany.pages.dev/${slug}`,
     dashboardLink,
   };
 }

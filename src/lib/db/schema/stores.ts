@@ -138,7 +138,7 @@ export const stores = sqliteTable(
     check('chk_store_slug_not_empty', sql`${table.slug} != ''`),
     
     // دعم الحلاف الصغيرة والأرقام والشرطة بدون فراغات
-    check('chk_store_slug_format', sql`${table.slug} GLOB '[a-z0-9]*[a-z0-9-]*'`),
+    check('chk_store_slug_format', sql`${table.slug} GLOB '[a-z0-9أ-ي]*[a-z0-9أ-ي-]*'`),
     check('chk_country_code', sql`${table.country} GLOB '[A-Z][A-Z]'`),
     check('chk_currency_code', sql`${table.currency} GLOB '[A-Z][A-Z][A-Z]'`),
     check('chk_payment_gateway', sql`${table.paymentGateway} IN ('stripe', 'paypal', 'paymob', 'cash')`),

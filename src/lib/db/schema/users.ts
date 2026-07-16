@@ -35,10 +35,11 @@ export const users = sqliteTable(
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
   },
   (table) => [
+    // ✅ تم التعديل هنا لتجنب أي Deprecated Errors في إصدارات Drizzle الجديدة
     foreignKey({
-      columns: [table.deletedBy],
-      foreignColumns: [table.id],
-      name: 'user_deleted_by_fkey'
+      name: 'user_deleted_by_fkey',
+      columns: [table.deletedBy] as const,
+      foreignColumns: [table.id] as const,
     }).onDelete('set null').onUpdate('cascade'),
 
     check('chk_user_role', sql`${table.role} IN ('merchant', 'admin', 'support', 'moderator', 'enterprise')`),
@@ -109,7 +110,11 @@ export const sessions = sqliteTable(
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
   },
   (table) => [
-    foreignKey({ columns: [table.userId], foreignColumns: [users.id], name: 'session_user_id_fkey' }).onDelete('cascade').onUpdate('cascade'),
+    foreignKey({ 
+      name: 'session_user_id_fkey',
+      columns: [table.userId] as const, 
+      foreignColumns: [users.id] as const 
+    }).onDelete('cascade').onUpdate('cascade'),
     uniqueIndex('session_token_unique').on(table.token),
     check('chk_session_revoke_reason', sql`${table.revokedReason} IN ('user_logout', 'security_breach', 'admin_revoke', 'expired', 'token_rotation')`),
     check('chk_revoked_consistency', sql`(${table.isRevoked} = 0 OR ${table.revokedAt} IS NOT NULL)`),
@@ -161,7 +166,11 @@ export const passwordHistory = sqliteTable(
     userAgent: text('user_agent'),
   },
   (table) => [
-    foreignKey({ columns: [table.changedBy], foreignColumns: [users.id], name: 'password_history_changed_by_fkey' }).onDelete('set null').onUpdate('cascade'),
+    foreignKey({ 
+      name: 'password_history_changed_by_fkey',
+      columns: [table.changedBy] as const, 
+      foreignColumns: [users.id] as const 
+    }).onDelete('set null').onUpdate('cascade'),
     index('password_history_user_id_idx').on(table.userId),
     check('chk_password_history_not_empty', sql`${table.passwordHash} != ''`),
   ]
