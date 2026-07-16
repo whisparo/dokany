@@ -1,5 +1,5 @@
 // src/lib/telegram/handlers/onboarding-flow.ts
-import type { D1Database } from '@cloudflare/workers-types'; // 👈 استيراد النوع الصارم والأصلي لـ D1
+import type { D1Database } from '@cloudflare/workers-types'; 
 import { users, stores } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { deleteSession, saveSession } from '../memory'; 
@@ -12,17 +12,14 @@ import { handleStoreStep } from './store-step';
 import { handleEmailStep } from './email-step'; 
 import { handleNicheStep } from './niche-step';
 
-// 🎯 الهيكل التتابعي الخماسي الصارم للمنصة
 const STEPS = ['phone', 'name', 'store', 'email', 'niche'] as const;
 type OnboardingStep = (typeof STEPS)[number];
 
-// تأمين بيئة الـ Edge والـ Workers بالأنواع الصريحة بنسبة 100%
 export interface SecureHandlerContext extends HandlerContext {
-  env: { DB: D1Database }; // 👈 وداعاً لأي any
+  env: { DB: D1Database }; 
 }
 
 export async function handleOnboarding(ctx: SecureHandlerContext): Promise<HandlerResult> {
-  // تهيئة الداتابيز لايف وبشكل موحد
   const db = getDb(ctx.env);
 
   // 1️⃣ لو الحساب مكتمل، ارميه على لوحة التحكم فوراً
@@ -103,7 +100,7 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     // حفظ الجلسة المكتشفة في الذاكرة فوراً لقفل الثغرة
     await saveSession(db, ctx.platform, ctx.externalId, { ...ctx.session });
 
-    // 🚀 [الـ Short-Circuit السحري]: التوجيه الفوري للمعالج المختص دون النزول والخلط مع الكود السفلي
+    // 🚀 [الـ Short-Circuit السحري]
     const healedStep = ctx.session.step as OnboardingStep;
     console.log(`⚡ [Self-Healing] Forwarding message immediately to handling step: ${healedStep}`);
     switch (healedStep) {
@@ -115,8 +112,22 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     }
   }
 
-  // الجلسة مستقرة مسبقاً، التقط الكلمة الحالية والأمر الحالي ونفذ بشكل طبيعي
-  const step = ctx.session.step as OnboardingStep;
+  // ==========================================
+  // 🎯 حماية صريحة ومباشرة ضد الـ Race Condition الخاص بالتليجرام
+  // ==========================================
+  const dbUser = ctx.telegramUserId 
+    ? await db.query.users.findFirst({ where: eq(users.id, String(ctx.telegramUserId)) })
+    : null;
+
+  let currentStep = ctx.session.step as OnboardingStep;
+
+  // قوة الداتابيز: لو الرقم متسجل والاسم لسه فاضي، إنت حتماً في خطوة الاسم name مهما قالت الذاكرة المؤقتة
+  if (dbUser && dbUser.phoneNumber && (!dbUser.name || dbUser.name.trim() === '')) {
+    currentStep = 'name';
+    ctx.session.step = 'name';
+  }
+
+  const step = currentStep;
   const msg = ctx.message ? ctx.message.trim() : '';
 
   // 5️⃣ الأوامر والعمليات العامة
@@ -235,12 +246,8 @@ export async function handleGetDashboard(ctx: SecureHandlerContext): Promise<Han
 
   const loginLink = `https://dokany.pages.dev/dashboard?user=${user.id}&store=${store.id}`;
 
-    return {
-
+  return {
     reply: `🔗 تم تجهيز رابط الدخول الخاص بك لمتجر "${store.name}":`,
-
     buttons: [[{ text: '🚀 افتح لوحة التحكم', url: loginLink }]],
-
   };
-
 }
