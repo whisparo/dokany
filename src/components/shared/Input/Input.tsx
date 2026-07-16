@@ -10,8 +10,11 @@ export interface InputProps
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type = 'text', label, error, required, id, ...props }, ref) => {
-    // توليد ID فريد لكل إنبوت في حال عدم تمريره لدعم Accessibility (ربط الليبل بالإنبوت)
-    const inputId = id || React.useId();
+    // ✅ 1. استدعاء الـ Hook بشكل صريح ومستقل لتجنب الـ Conditional Hook Call Error
+    const uniqueId = React.useId();
+
+    // ✅ 2. ربط الـ id الممرر أو الـ ID الفريد المولَّد
+    const inputId = id || uniqueId;
 
     return (
       <div className="w-full space-y-2 text-start">
