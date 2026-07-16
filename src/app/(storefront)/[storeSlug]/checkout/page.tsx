@@ -5,6 +5,7 @@ import { Checkout } from '@/components/storefront/Checkout';
 import { getCheckoutRawData, getSessionId } from '@/lib/data/checkout-data-fetcher'; // 👈 استوردنا getSessionId
 import { getStoreRawData } from '@/lib/data/store-data-fetcher';
 import type { Metadata } from 'next';
+export const runtime = 'edge';
 
 export async function generateMetadata({
   params,
