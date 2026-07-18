@@ -6,7 +6,6 @@ import { getEnv } from '@/lib/env';
 import { sendErrorToTelegram } from '@/lib/errors/notifier';
 import { SystemError } from '@/lib/errors/types';
 
-export const runtime = 'edge';
 
 export async function GET(request: NextRequest) {
   // ✅ استخدم new URL بدلاً من request.nextUrl (أكثر توافقاً مع Edge)

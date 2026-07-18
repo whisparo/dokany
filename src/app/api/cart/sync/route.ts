@@ -2,7 +2,6 @@
 import { NextResponse } from 'next/server';
 // 1️⃣ استيراد الأنواع الرسمية من ملف الأنواع الموحد اللي عندك
 import type { Product } from '@/types'; 
-export const runtime = 'edge';
 
 // 2️⃣ تعريف واجهة الـ Payload المتوقع استقباله من الفرونت إند بدقة
 interface CartSyncPayload {

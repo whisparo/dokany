@@ -3,7 +3,6 @@
 import { auth } from '@/lib/auth';
 import { toNextJsHandler } from 'better-auth/next-js';
 import { NextResponse, type NextRequest } from 'next/server';
-export const runtime = 'edge';
 
 // جلب الـ Object اللي جواه معالجات الـ Methods منفصلة
 const authHandlers = toNextJsHandler(auth);

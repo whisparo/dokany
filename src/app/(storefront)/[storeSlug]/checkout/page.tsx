@@ -1,11 +1,11 @@
 // app/(storefront)/[storeSlug]/checkout/page.tsx
 
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { Checkout } from '@/components/storefront/Checkout';
-import { getCheckoutRawData, getSessionId } from '@/lib/data/checkout-data-fetcher'; // 👈 استوردنا getSessionId
+import { getCheckoutRawData, getSessionId } from '@/lib/data/checkout-data-fetcher';
 import { getStoreRawData } from '@/lib/data/store-data-fetcher';
+import { handleCheckoutSubmit } from './checkout.actions'; // 👈 الـ Import النظيف من الملف الجديد
 import type { Metadata } from 'next';
-export const runtime = 'edge';
 
 export async function generateMetadata({
   params,
@@ -20,19 +20,6 @@ export async function generateMetadata({
   };
 }
 
-async function handleCheckoutSubmit(
-  storeSlug: string,
-  data: {
-    customer: any;
-    shippingId: string;
-    paymentId: string;
-  }
-) {
-  'use server';
-  console.log('[Server Action] Order submitted successfully:', data);
-  redirect(`/${storeSlug}/order-confirmation`);
-}
-
 export default async function CheckoutPage({
   params,
   searchParams,
@@ -42,19 +29,14 @@ export default async function CheckoutPage({
 }) {
   const { storeSlug } = await params;
   
-  // 1. التأكد من وجود المتجر وجلب بياناته الأساسية
   const storeRaw = await getStoreRawData(storeSlug, { page: 1, limit: 1 });
   if (!storeRaw) notFound();
 
-  // ✅ 2. جلب الـ Session ID الفعلي للعميل من الـ cookies لجلب سلته بشكل صحيح
   const sessionId = await getSessionId();
-
-  // ✅ 3. تمرير الـ sessionId للـ Fetcher عشان ميرجعش سلة فاضية ويطردنا
   const rawData = await getCheckoutRawData(storeRaw.store.id, undefined, sessionId);
 
-  // إذا كانت السلة فارغة أو مفيش منتجات، ارجع فوراً للمتجر
   if (!rawData || !rawData.cartItems || rawData.cartItems.length === 0) {
-    redirect(`/${storeSlug}`);
+    notFound(); // أو redirect للرئيسية حسب منطق عملك
   }
 
   const boundSubmitAction = handleCheckoutSubmit.bind(null, storeSlug);

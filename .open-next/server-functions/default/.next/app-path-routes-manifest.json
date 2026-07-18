@@ -1,0 +1,17 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/api/auth/[...all]/route": "/api/auth/[...all]",
+  "/api/cart/sync/route": "/api/cart/sync",
+  "/api/errors/report/route": "/api/errors/report",
+  "/api/ping/route": "/api/ping",
+  "/api/telegram/mini-app/route": "/api/telegram/mini-app",
+  "/api/telegram/webhook/route": "/api/telegram/webhook",
+  "/api/test-error/route": "/api/test-error",
+  "/favicon.ico/route": "/favicon.ico",
+  "/api/auth/session/route": "/api/auth/session",
+  "/api/cron/process-errors/route": "/api/cron/process-errors",
+  "/page": "/",
+  "/(storefront)/[storeSlug]/checkout/page": "/[storeSlug]/checkout",
+  "/(storefront)/[storeSlug]/page": "/[storeSlug]",
+  "/(storefront)/[storeSlug]/products/[slug]/page": "/[storeSlug]/products/[slug]"
+}

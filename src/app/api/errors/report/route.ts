@@ -5,7 +5,6 @@ import { sendErrorToTelegram } from '@/lib/errors/notifier';
 import { type ErrorContext } from '@/lib/errors/types';
 import { getEnv } from '@/lib/env';
 
-export const runtime = 'edge';
 
 export async function POST(req: NextRequest) {
   const ctx = (req as any).context;

@@ -2,7 +2,6 @@
 import { verifyTelegramInitData } from '@/lib/telegram/auth';
 import { NextRequest, NextResponse } from 'next/server';
 
-export const runtime = 'edge';
 
 interface MiniAppRequestBody {
   initData: string;

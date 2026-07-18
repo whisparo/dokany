@@ -2,8 +2,8 @@
 
 import { getDb } from '@/lib/db';
 import { idempotency as idempotencyTable } from '@/lib/db/schema/idempotency';
-import { eq } from 'drizzle-orm';
-import type { Env } from '@/lib/env'; // ✅ استيراد النوع الموحد من env.ts
+import { eq, and } from 'drizzle-orm';
+import type { Env } from '@/lib/env';
 
 const PENDING_TIMEOUT_SECONDS = 30;
 
@@ -15,7 +15,7 @@ export const idempotency = {
   ): Promise<T> {
     const db = getDb(env);
 
-    // 1. محاولة الإدراج الذرية
+    // 1. محاولة الإدراج الذرية (الخطوة دي سليمة عندك)
     const insertResult = await db
       .insert(idempotencyTable)
       .values({
@@ -26,7 +26,7 @@ export const idempotency = {
       .onConflictDoNothing()
       .returning({ key: idempotencyTable.key });
 
-    // 2. إذا كان هناك تعارض (المفتاح موجود مسبقاً)
+    // 2. إذا كان المفتاح موجوداً مسبقاً
     if (insertResult.length === 0) {
       const existing = await db
         .select()
@@ -40,60 +40,62 @@ export const idempotency = {
 
       const record = existing[0];
 
-      // ✅ حالة مكتملة بنجاح → إرجاع النتيجة فوراً
+      // ✅ حالة مكتملة بنجاح
       if (record.status === 'completed') {
         return JSON.parse(record.result!);
       }
 
-      // ✅ حالة فشل سابقة → نسمح بإعادة المحاولة (نُحدّث إلى pending ونكمل)
+      // 🛑 حماية ضد الـ Race Condition في حالة إعادة المحاولة (Failed)
       if (record.status === 'failed') {
-        await db
+        const updateResult = await db
           .update(idempotencyTable)
           .set({
             status: 'pending',
             createdAt: new Date(),
+            result: null, // تصفير رسالة الخطأ السابقة
           })
-          .where(eq(idempotencyTable.key, key));
+          .where(and(
+            eq(idempotencyTable.key, key),
+            eq(idempotencyTable.status, 'failed') // الحماية هنا!
+          ));
 
-        // نكمل إلى الخطوة 3 لتنفيذ fn()
+        // لو مفيش صفوف اتحدثت، معناه إن طلب متزامن تاني خطف الـ Lock وحولها لـ pending
+        if (updateResult.meta.changes === 0) {
+          throw new Error('Operation already in progress, please retry later');
+        }
       }
-      // ✅ حالة معلقة (Pending) ولكن انتهت صلاحيتها (أكثر من 30 ثانية)
+      
+      // 🛑 حماية ضد الـ Race Condition في حالة الـ Timeout
       else if (record.status === 'pending') {
         const now = new Date();
         const elapsed = (now.getTime() - new Date(record.createdAt).getTime()) / 1000;
 
         if (elapsed > PENDING_TIMEOUT_SECONDS) {
-          // نعتبر أنها فشلت، نحدّثها إلى failed ونسمح بإعادة المحاولة
-          await db
-            .update(idempotencyTable)
-            .set({
-              status: 'failed',
-              result: JSON.stringify({ error: 'Timeout: Operation took too long' }),
-            })
-            .where(eq(idempotencyTable.key, key));
-
-          // نعيد المحاولة (نمرّر الطلب الحالي ليكون هو المُنفذ الجديد)
-          await db
+          const updateResult = await db
             .update(idempotencyTable)
             .set({
               status: 'pending',
-              createdAt: new Date(),
+              createdAt: new Date(), // تجديد الـ Lock لـ 30 ثانية جديدة
             })
-            .where(eq(idempotencyTable.key, key));
+            .where(and(
+              eq(idempotencyTable.key, key),
+              eq(idempotencyTable.status, 'pending'), // الحماية هنا!
+              eq(idempotencyTable.createdAt, record.createdAt) // التأكد إن التوقيت لم يتغير
+            ));
+
+          if (updateResult.meta.changes === 0) {
+            throw new Error('Operation already in progress, please retry later');
+          }
         } else {
-          // لا تزال قيد المعالجة منذ أقل من 30 ثانية → نرفض الطلب
           throw new Error('Operation already in progress, please retry later');
         }
       }
-
-      // بعد معالجة الحالات الخاصة، نمرّر إلى أسفل لتنفيذ fn()
     }
 
-    // 3. تنفيذ كود البزنس (العملية الأساسية)
+    // 3. تنفيذ كود البزنس الآمن
     try {
       const result = await fn();
 
-      // تحديث السجل وحفظ النتيجة (نجاح)
       await db
         .update(idempotencyTable)
         .set({
@@ -105,8 +107,7 @@ export const idempotency = {
 
       return result;
     } catch (error) {
-      // 4. ✅ عند الفشل: لا نحذف المفتاح!
-      // نقوم بتحديث الحالة إلى failed مع تخزين رسالة الخطأ
+      // 4. تسجيل الفشل بدقة لتسهيل إعادة المحاولة الآمنة
       await db
         .update(idempotencyTable)
         .set({

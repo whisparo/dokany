@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: "standalone",
   images: {
     // 🌟 بنفتح تصريح رسمي لكل السيرفرات الشهيرة اللي ممكن تسحب منها صور منتجات أو هيرو
     remotePatterns: [

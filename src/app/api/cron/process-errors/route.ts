@@ -5,7 +5,6 @@ import { processErrorQueue } from '@/lib/errors/background-processor';
 import type { Env } from '@/lib/env';
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'edge';
 
 /**
  * بناء كائن البيئة من process.env.
