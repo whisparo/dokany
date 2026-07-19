@@ -16,7 +16,7 @@ Object.defineProperty = function(o, p, a) {
 
   
   
-  globalThis.openNextDebug = false;globalThis.openNextVersion = "3.10.1";
+  globalThis.openNextDebug = false;globalThis.openNextVersion = "4.0.2";globalThis.nextVersion = "15.5.0";
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -905,16 +905,17 @@ globalThis.__dirname ??= "";
 var NEXT_DIR = path.join(__dirname, ".next");
 var OPEN_NEXT_DIR = path.join(__dirname, ".open-next");
 debug({ NEXT_DIR, OPEN_NEXT_DIR });
-var NextConfig = { "env": {}, "eslint": { "ignoreDuringBuilds": false }, "typescript": { "ignoreBuildErrors": false, "tsconfigPath": "tsconfig.json" }, "distDir": ".next", "cleanDistDir": true, "assetPrefix": "", "cacheMaxMemorySize": 52428800, "configOrigin": "next.config.ts", "useFileSystemPublicRoutes": true, "generateEtags": true, "pageExtensions": ["tsx", "ts", "jsx", "js"], "poweredByHeader": true, "compress": true, "images": { "deviceSizes": [640, 750, 828, 1080, 1200, 1920, 2048, 3840], "imageSizes": [16, 32, 48, 64, 96, 128, 256, 384], "path": "/_next/image", "loader": "default", "loaderFile": "", "domains": [], "disableStaticImages": false, "minimumCacheTTL": 60, "formats": ["image/webp"], "dangerouslyAllowSVG": false, "contentSecurityPolicy": "script-src 'none'; frame-src 'none'; sandbox;", "contentDispositionType": "attachment", "remotePatterns": [{ "protocol": "https", "hostname": "images.unsplash.com" }, { "protocol": "https", "hostname": "**", "port": "", "pathname": "**" }], "unoptimized": false }, "devIndicators": { "position": "bottom-left" }, "onDemandEntries": { "maxInactiveAge": 6e4, "pagesBufferLength": 5 }, "amp": { "canonicalBase": "" }, "basePath": "", "sassOptions": {}, "trailingSlash": false, "i18n": null, "productionBrowserSourceMaps": false, "excludeDefaultMomentLocales": true, "serverRuntimeConfig": {}, "publicRuntimeConfig": {}, "reactProductionProfiling": false, "reactStrictMode": null, "reactMaxHeadersLength": 6e3, "httpAgentOptions": { "keepAlive": true }, "logging": {}, "expireTime": 31536e3, "staticPageGenerationTimeout": 60, "output": "standalone", "modularizeImports": { "@mui/icons-material": { "transform": "@mui/icons-material/{{member}}" }, "lodash": { "transform": "lodash/{{member}}" } }, "outputFileTracingRoot": "C:\\Users\\PC\\Desktop\\dokany", "experimental": { "nodeMiddleware": false, "cacheLife": { "default": { "stale": 300, "revalidate": 900, "expire": 4294967294 }, "seconds": { "stale": 0, "revalidate": 1, "expire": 60 }, "minutes": { "stale": 300, "revalidate": 60, "expire": 3600 }, "hours": { "stale": 300, "revalidate": 3600, "expire": 86400 }, "days": { "stale": 300, "revalidate": 86400, "expire": 604800 }, "weeks": { "stale": 300, "revalidate": 604800, "expire": 2592e3 }, "max": { "stale": 300, "revalidate": 2592e3, "expire": 4294967294 } }, "cacheHandlers": {}, "cssChunking": true, "multiZoneDraftMode": false, "appNavFailHandling": false, "prerenderEarlyExit": true, "serverMinification": true, "serverSourceMaps": false, "linkNoTouchStart": false, "caseSensitiveRoutes": false, "clientSegmentCache": false, "preloadEntriesOnStart": true, "clientRouterFilter": true, "clientRouterFilterRedirects": false, "fetchCacheKeyPrefix": "", "middlewarePrefetch": "flexible", "optimisticClientCache": true, "manualClientBasePath": false, "cpus": 11, "memoryBasedWorkersCount": false, "imgOptConcurrency": null, "imgOptTimeoutInSeconds": 7, "imgOptMaxInputPixels": 268402689, "imgOptSequentialRead": null, "isrFlushToDisk": true, "workerThreads": false, "optimizeCss": false, "nextScriptWorkers": false, "scrollRestoration": false, "externalDir": false, "disableOptimizedLoading": false, "gzipSize": true, "craCompat": false, "esmExternals": true, "fullySpecified": false, "swcTraceProfiling": false, "forceSwcTransforms": false, "largePageDataBytes": 128e3, "turbo": { "root": "C:\\Users\\PC\\Desktop\\dokany" }, "typedRoutes": false, "typedEnv": false, "parallelServerCompiles": false, "parallelServerBuildTraces": false, "ppr": false, "authInterrupts": false, "webpackMemoryOptimizations": false, "optimizeServerReact": true, "useEarlyImport": false, "viewTransition": false, "staleTimes": { "dynamic": 0, "static": 300 }, "serverComponentsHmrCache": true, "staticGenerationMaxConcurrency": 8, "staticGenerationMinPagesPerWorker": 25, "dynamicIO": false, "inlineCss": false, "useCache": false, "optimizePackageImports": ["lucide-react", "date-fns", "lodash-es", "ramda", "antd", "react-bootstrap", "ahooks", "@ant-design/icons", "@headlessui/react", "@headlessui-float/react", "@heroicons/react/20/solid", "@heroicons/react/24/solid", "@heroicons/react/24/outline", "@visx/visx", "@tremor/react", "rxjs", "@mui/material", "@mui/icons-material", "recharts", "react-use", "effect", "@effect/schema", "@effect/platform", "@effect/platform-node", "@effect/platform-browser", "@effect/platform-bun", "@effect/sql", "@effect/sql-mssql", "@effect/sql-mysql2", "@effect/sql-pg", "@effect/sql-squlite-node", "@effect/sql-squlite-bun", "@effect/sql-squlite-wasm", "@effect/sql-squlite-react-native", "@effect/rpc", "@effect/rpc-http", "@effect/typeclass", "@effect/experimental", "@effect/opentelemetry", "@material-ui/core", "@material-ui/icons", "@tabler/icons-react", "mui-core", "react-icons/ai", "react-icons/bi", "react-icons/bs", "react-icons/cg", "react-icons/ci", "react-icons/di", "react-icons/fa", "react-icons/fa6", "react-icons/fc", "react-icons/fi", "react-icons/gi", "react-icons/go", "react-icons/gr", "react-icons/hi", "react-icons/hi2", "react-icons/im", "react-icons/io", "react-icons/io5", "react-icons/lia", "react-icons/lib", "react-icons/lu", "react-icons/md", "react-icons/pi", "react-icons/ri", "react-icons/rx", "react-icons/si", "react-icons/sl", "react-icons/tb", "react-icons/tfi", "react-icons/ti", "react-icons/vsc", "react-icons/wi"], "trustHostHeader": false, "isExperimentalCompile": false }, "htmlLimitedBots": "Mediapartners-Google|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview", "bundlePagesRouterDependencies": false, "configFileName": "next.config.ts" };
-var BuildId = "NAINKjNAftX0CGTd06Wxd";
+var NextConfig = { "env": {}, "eslint": { "ignoreDuringBuilds": false }, "typescript": { "ignoreBuildErrors": false, "tsconfigPath": "tsconfig.json" }, "typedRoutes": false, "distDir": ".next", "cleanDistDir": true, "assetPrefix": "", "cacheMaxMemorySize": 52428800, "configOrigin": "next.config.ts", "useFileSystemPublicRoutes": true, "generateEtags": true, "pageExtensions": ["tsx", "ts", "jsx", "js"], "poweredByHeader": true, "compress": true, "images": { "deviceSizes": [640, 750, 828, 1080, 1200, 1920, 2048, 3840], "imageSizes": [16, 32, 48, 64, 96, 128, 256, 384], "path": "/_next/image", "loader": "default", "loaderFile": "", "domains": [], "disableStaticImages": false, "minimumCacheTTL": 60, "formats": ["image/webp"], "dangerouslyAllowSVG": false, "contentSecurityPolicy": "script-src 'none'; frame-src 'none'; sandbox;", "contentDispositionType": "attachment", "remotePatterns": [{ "protocol": "https", "hostname": "images.unsplash.com" }, { "protocol": "https", "hostname": "**", "port": "", "pathname": "**" }], "unoptimized": false }, "devIndicators": { "position": "bottom-left" }, "onDemandEntries": { "maxInactiveAge": 6e4, "pagesBufferLength": 5 }, "amp": { "canonicalBase": "" }, "basePath": "", "sassOptions": {}, "trailingSlash": false, "i18n": null, "productionBrowserSourceMaps": false, "excludeDefaultMomentLocales": true, "serverRuntimeConfig": {}, "publicRuntimeConfig": {}, "reactProductionProfiling": false, "reactStrictMode": null, "reactMaxHeadersLength": 6e3, "httpAgentOptions": { "keepAlive": true }, "logging": {}, "compiler": {}, "expireTime": 31536e3, "staticPageGenerationTimeout": 60, "output": "standalone", "modularizeImports": { "@mui/icons-material": { "transform": "@mui/icons-material/{{member}}" }, "lodash": { "transform": "lodash/{{member}}" } }, "outputFileTracingRoot": "C:\\Users\\PC\\Desktop\\dokany", "experimental": { "useSkewCookie": false, "cacheLife": { "default": { "stale": 300, "revalidate": 900, "expire": 4294967294 }, "seconds": { "stale": 30, "revalidate": 1, "expire": 60 }, "minutes": { "stale": 300, "revalidate": 60, "expire": 3600 }, "hours": { "stale": 300, "revalidate": 3600, "expire": 86400 }, "days": { "stale": 300, "revalidate": 86400, "expire": 604800 }, "weeks": { "stale": 300, "revalidate": 604800, "expire": 2592e3 }, "max": { "stale": 300, "revalidate": 2592e3, "expire": 4294967294 } }, "cacheHandlers": {}, "cssChunking": true, "multiZoneDraftMode": false, "appNavFailHandling": false, "prerenderEarlyExit": true, "serverMinification": true, "serverSourceMaps": false, "linkNoTouchStart": false, "caseSensitiveRoutes": false, "clientSegmentCache": false, "clientParamParsing": false, "dynamicOnHover": false, "preloadEntriesOnStart": true, "clientRouterFilter": true, "clientRouterFilterRedirects": false, "fetchCacheKeyPrefix": "", "middlewarePrefetch": "flexible", "optimisticClientCache": true, "manualClientBasePath": false, "cpus": 11, "memoryBasedWorkersCount": false, "imgOptConcurrency": null, "imgOptTimeoutInSeconds": 7, "imgOptMaxInputPixels": 268402689, "imgOptSequentialRead": null, "imgOptSkipMetadata": null, "isrFlushToDisk": true, "workerThreads": false, "optimizeCss": false, "nextScriptWorkers": false, "scrollRestoration": false, "externalDir": false, "disableOptimizedLoading": false, "gzipSize": true, "craCompat": false, "esmExternals": true, "fullySpecified": false, "swcTraceProfiling": false, "forceSwcTransforms": false, "largePageDataBytes": 128e3, "typedEnv": false, "parallelServerCompiles": false, "parallelServerBuildTraces": false, "ppr": false, "authInterrupts": false, "webpackMemoryOptimizations": false, "optimizeServerReact": true, "viewTransition": false, "routerBFCache": false, "removeUncaughtErrorAndRejectionListeners": false, "validateRSCRequestHeaders": false, "staleTimes": { "dynamic": 0, "static": 300 }, "serverComponentsHmrCache": true, "staticGenerationMaxConcurrency": 8, "staticGenerationMinPagesPerWorker": 25, "cacheComponents": false, "inlineCss": false, "useCache": false, "globalNotFound": false, "devtoolSegmentExplorer": true, "browserDebugInfoInTerminal": false, "optimizeRouterScrolling": false, "optimizePackageImports": ["lucide-react", "date-fns", "lodash-es", "ramda", "antd", "react-bootstrap", "ahooks", "@ant-design/icons", "@headlessui/react", "@headlessui-float/react", "@heroicons/react/20/solid", "@heroicons/react/24/solid", "@heroicons/react/24/outline", "@visx/visx", "@tremor/react", "rxjs", "@mui/material", "@mui/icons-material", "recharts", "react-use", "effect", "@effect/schema", "@effect/platform", "@effect/platform-node", "@effect/platform-browser", "@effect/platform-bun", "@effect/sql", "@effect/sql-mssql", "@effect/sql-mysql2", "@effect/sql-pg", "@effect/sql-sqlite-node", "@effect/sql-sqlite-bun", "@effect/sql-sqlite-wasm", "@effect/sql-sqlite-react-native", "@effect/rpc", "@effect/rpc-http", "@effect/typeclass", "@effect/experimental", "@effect/opentelemetry", "@material-ui/core", "@material-ui/icons", "@tabler/icons-react", "mui-core", "react-icons/ai", "react-icons/bi", "react-icons/bs", "react-icons/cg", "react-icons/ci", "react-icons/di", "react-icons/fa", "react-icons/fa6", "react-icons/fc", "react-icons/fi", "react-icons/gi", "react-icons/go", "react-icons/gr", "react-icons/hi", "react-icons/hi2", "react-icons/im", "react-icons/io", "react-icons/io5", "react-icons/lia", "react-icons/lib", "react-icons/lu", "react-icons/md", "react-icons/pi", "react-icons/ri", "react-icons/rx", "react-icons/si", "react-icons/sl", "react-icons/tb", "react-icons/tfi", "react-icons/ti", "react-icons/vsc", "react-icons/wi"], "trustHostHeader": false, "isExperimentalCompile": false }, "htmlLimitedBots": "[\\w-]+-Google|Google-[\\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight", "bundlePagesRouterDependencies": false, "configFileName": "next.config.ts", "turbopack": { "root": "C:\\Users\\PC\\Desktop\\dokany" } };
+var BuildId = "nBENUUBovTvmQN_ZMDeDP";
 var RoutesManifest = { "basePath": "", "rewrites": { "beforeFiles": [], "afterFiles": [], "fallback": [] }, "redirects": [{ "source": "/:path+/", "destination": "/:path+", "internal": true, "statusCode": 308, "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$" }], "routes": { "static": [{ "page": "/", "regex": "^/(?:/)?$", "routeKeys": {}, "namedRegex": "^/(?:/)?$" }, { "page": "/_not-found", "regex": "^/_not\\-found(?:/)?$", "routeKeys": {}, "namedRegex": "^/_not\\-found(?:/)?$" }, { "page": "/favicon.ico", "regex": "^/favicon\\.ico(?:/)?$", "routeKeys": {}, "namedRegex": "^/favicon\\.ico(?:/)?$" }], "dynamic": [{ "page": "/api/auth/[...all]", "regex": "^/api/auth/(.+?)(?:/)?$", "routeKeys": { "nxtPall": "nxtPall" }, "namedRegex": "^/api/auth/(?<nxtPall>.+?)(?:/)?$" }, { "page": "/[storeSlug]", "regex": "^/([^/]+?)(?:/)?$", "routeKeys": { "nxtPstoreSlug": "nxtPstoreSlug" }, "namedRegex": "^/(?<nxtPstoreSlug>[^/]+?)(?:/)?$" }, { "page": "/[storeSlug]/checkout", "regex": "^/([^/]+?)/checkout(?:/)?$", "routeKeys": { "nxtPstoreSlug": "nxtPstoreSlug" }, "namedRegex": "^/(?<nxtPstoreSlug>[^/]+?)/checkout(?:/)?$" }, { "page": "/[storeSlug]/products/[slug]", "regex": "^/([^/]+?)/products/([^/]+?)(?:/)?$", "routeKeys": { "nxtPstoreSlug": "nxtPstoreSlug", "nxtPslug": "nxtPslug" }, "namedRegex": "^/(?<nxtPstoreSlug>[^/]+?)/products/(?<nxtPslug>[^/]+?)(?:/)?$" }], "data": { "static": [], "dynamic": [] } }, "locales": [] };
 var ConfigHeaders = [];
-var PrerenderManifest = { "version": 4, "routes": { "/favicon.ico": { "initialHeaders": { "cache-control": "public, max-age=0, must-revalidate", "content-type": "image/x-icon", "x-next-cache-tags": "_N_T_/layout,_N_T_/favicon.ico/layout,_N_T_/favicon.ico/route,_N_T_/favicon.ico" }, "experimentalBypassFor": [{ "type": "header", "key": "Next-Action" }, { "type": "header", "key": "content-type", "value": "multipart/form-data;.*" }], "initialRevalidateSeconds": false, "srcRoute": "/favicon.ico", "dataRoute": null, "allowHeader": ["host", "x-matched-path", "x-prerender-revalidate", "x-prerender-revalidate-if-generated", "x-next-revalidated-tags", "x-next-revalidate-tag-token"] }, "/": { "experimentalBypassFor": [{ "type": "header", "key": "Next-Action" }, { "type": "header", "key": "content-type", "value": "multipart/form-data;.*" }], "initialRevalidateSeconds": false, "srcRoute": "/", "dataRoute": "/index.rsc", "allowHeader": ["host", "x-matched-path", "x-prerender-revalidate", "x-prerender-revalidate-if-generated", "x-next-revalidated-tags", "x-next-revalidate-tag-token"] } }, "dynamicRoutes": {}, "notFoundRoutes": [], "preview": { "previewModeId": "ee27a5a390b79c273c936994fcb4a3d6", "previewModeSigningKey": "e6bd1dc08c5acfbe563921cd83bc61be282539e8173dcd126c3942d2f28fa6f3", "previewModeEncryptionKey": "f5764b7e997b1e3395bee5e8bada75c693c4d537fae6b4c6d648f8f0b2a53a8a" } };
+var PrerenderManifest = { "version": 4, "routes": { "/favicon.ico": { "initialHeaders": { "cache-control": "public, max-age=0, must-revalidate", "content-type": "image/x-icon", "x-next-cache-tags": "_N_T_/layout,_N_T_/favicon.ico/layout,_N_T_/favicon.ico/route,_N_T_/favicon.ico" }, "experimentalBypassFor": [{ "type": "header", "key": "next-action" }, { "type": "header", "key": "content-type", "value": "multipart/form-data;.*" }], "initialRevalidateSeconds": false, "srcRoute": "/favicon.ico", "dataRoute": null, "allowHeader": ["host", "x-matched-path", "x-prerender-revalidate", "x-prerender-revalidate-if-generated", "x-next-revalidated-tags", "x-next-revalidate-tag-token"] }, "/": { "experimentalBypassFor": [{ "type": "header", "key": "next-action" }, { "type": "header", "key": "content-type", "value": "multipart/form-data;.*" }], "initialRevalidateSeconds": false, "srcRoute": "/", "dataRoute": "/index.rsc", "allowHeader": ["host", "x-matched-path", "x-prerender-revalidate", "x-prerender-revalidate-if-generated", "x-next-revalidated-tags", "x-next-revalidate-tag-token"] }, "/_not-found": { "initialStatus": 404, "experimentalBypassFor": [{ "type": "header", "key": "next-action" }, { "type": "header", "key": "content-type", "value": "multipart/form-data;.*" }], "initialRevalidateSeconds": false, "srcRoute": "/_not-found", "dataRoute": "/_not-found.rsc", "allowHeader": ["host", "x-matched-path", "x-prerender-revalidate", "x-prerender-revalidate-if-generated", "x-next-revalidated-tags", "x-next-revalidate-tag-token"] } }, "dynamicRoutes": {}, "notFoundRoutes": [], "preview": { "previewModeId": "0bae51aae859b8e8e22fdc3d91220292", "previewModeSigningKey": "6e973c9658e19d8fc15b59c72bcccc3c9e53eafe9ba37a8feeb3bd2184b3f454", "previewModeEncryptionKey": "a16269f7d9a1163bb02d948ed0741f91f3ab4870a17b95f792a8e268f935eca6" } };
 var MiddlewareManifest = { "version": 3, "middleware": {}, "functions": {}, "sortedMiddleware": [] };
-var AppPathRoutesManifest = { "/_not-found/page": "/_not-found", "/api/auth/[...all]/route": "/api/auth/[...all]", "/api/cart/sync/route": "/api/cart/sync", "/api/errors/report/route": "/api/errors/report", "/api/ping/route": "/api/ping", "/api/test-error/route": "/api/test-error", "/api/telegram/mini-app/route": "/api/telegram/mini-app", "/api/telegram/webhook/route": "/api/telegram/webhook", "/favicon.ico/route": "/favicon.ico", "/api/auth/session/route": "/api/auth/session", "/api/cron/process-errors/route": "/api/cron/process-errors", "/page": "/", "/(storefront)/[storeSlug]/page": "/[storeSlug]", "/(storefront)/[storeSlug]/products/[slug]/page": "/[storeSlug]/products/[slug]", "/(storefront)/[storeSlug]/checkout/page": "/[storeSlug]/checkout" };
+var AppPathRoutesManifest = { "/_not-found/page": "/_not-found", "/api/auth/[...all]/route": "/api/auth/[...all]", "/api/cart/sync/route": "/api/cart/sync", "/api/errors/report/route": "/api/errors/report", "/api/ping/route": "/api/ping", "/api/telegram/mini-app/route": "/api/telegram/mini-app", "/api/telegram/webhook/route": "/api/telegram/webhook", "/favicon.ico/route": "/favicon.ico", "/api/test-error/route": "/api/test-error", "/api/auth/session/route": "/api/auth/session", "/api/cron/process-errors/route": "/api/cron/process-errors", "/page": "/", "/(storefront)/[storeSlug]/checkout/page": "/[storeSlug]/checkout", "/(storefront)/[storeSlug]/products/[slug]/page": "/[storeSlug]/products/[slug]", "/(storefront)/[storeSlug]/page": "/[storeSlug]" };
 var FunctionsConfigManifest = { "version": 1, "functions": {} };
 var PagesManifest = { "/_app": "pages/_app.js", "/_error": "pages/_error.js", "/_document": "pages/_document.js", "/404": "pages/404.html" };
 process.env.NEXT_BUILD_ID = BuildId;
+process.env.OPEN_NEXT_BUILD_ID = NextConfig.deploymentId ?? BuildId;
 process.env.NEXT_PREVIEW_MODE_ID = PrerenderManifest?.preview?.previewModeId;
 
 // node_modules/@opennextjs/aws/dist/http/openNextResponse.js
@@ -1355,6 +1356,61 @@ init_stream();
 
 // node_modules/@opennextjs/aws/dist/utils/cache.js
 init_logger();
+
+// node_modules/@opennextjs/aws/dist/utils/semver.js
+function compareSemver(v1, operator, v2) {
+  let versionDiff = 0;
+  if (v1 === "latest") {
+    versionDiff = 1;
+  } else {
+    if (/^[^\d]/.test(v1)) {
+      v1 = v1.substring(1);
+    }
+    if (/^[^\d]/.test(v2)) {
+      v2 = v2.substring(1);
+    }
+    const [major1, minor1 = 0, patch1 = 0] = v1.split(".").map(Number);
+    const [major2, minor2 = 0, patch2 = 0] = v2.split(".").map(Number);
+    if (Number.isNaN(major1) || Number.isNaN(major2)) {
+      throw new Error("The major version is required.");
+    }
+    if (major1 !== major2) {
+      versionDiff = major1 - major2;
+    } else if (minor1 !== minor2) {
+      versionDiff = minor1 - minor2;
+    } else if (patch1 !== patch2) {
+      versionDiff = patch1 - patch2;
+    }
+  }
+  switch (operator) {
+    case "=":
+      return versionDiff === 0;
+    case ">=":
+      return versionDiff >= 0;
+    case "<=":
+      return versionDiff <= 0;
+    case ">":
+      return versionDiff > 0;
+    case "<":
+      return versionDiff < 0;
+    default:
+      throw new Error(`Unsupported operator: ${operator}`);
+  }
+}
+
+// node_modules/@opennextjs/aws/dist/utils/cache.js
+async function isStale(key, tags, lastModified) {
+  if (!compareSemver(globalThis.nextVersion, ">=", "16.0.0")) {
+    return false;
+  }
+  if (globalThis.openNextConfig.dangerous?.disableTagCache) {
+    return false;
+  }
+  if (globalThis.tagCache.mode === "nextMode") {
+    return tags.length === 0 ? false : await globalThis.tagCache.isStale?.(tags, lastModified) ?? false;
+  }
+  return await globalThis.tagCache.isStale?.(key, lastModified) ?? false;
+}
 async function hasBeenRevalidated(key, tags, cacheEntry) {
   if (globalThis.openNextConfig.dangerous?.disableTagCache) {
     return false;
@@ -1394,7 +1450,7 @@ var VARY_HEADER = "RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Route
 var NEXT_SEGMENT_PREFETCH_HEADER = "next-router-segment-prefetch";
 var NEXT_PRERENDER_HEADER = "x-nextjs-prerender";
 var NEXT_POSTPONED_HEADER = "x-nextjs-postponed";
-async function computeCacheControl(path3, body, host, revalidate, lastModified) {
+async function computeCacheControl(path3, body, host, revalidate, lastModified, isStaleFromTagCache = false) {
   let finalRevalidate = CACHE_ONE_YEAR;
   const existingRoute = Object.entries(PrerenderManifest?.routes ?? {}).find((p) => p[0] === path3)?.[1];
   if (revalidate === void 0 && existingRoute) {
@@ -1412,16 +1468,20 @@ async function computeCacheControl(path3, body, host, revalidate, lastModified) 
       etag
     };
   }
-  if (finalRevalidate !== CACHE_ONE_YEAR) {
-    const sMaxAge = Math.max(finalRevalidate - age, 1);
+  const isSSG = finalRevalidate === CACHE_ONE_YEAR;
+  const remainingTtl = Math.max(finalRevalidate - age, 1);
+  const isStaleFromTime = !isSSG && remainingTtl === 1;
+  const isStale2 = isStaleFromTime || isStaleFromTagCache;
+  if (!isSSG || isStaleFromTagCache) {
+    const sMaxAge = isStaleFromTagCache ? 1 : remainingTtl;
     debug("sMaxAge", {
       finalRevalidate,
       age,
       lastModified,
-      revalidate
+      revalidate,
+      isStaleFromTagCache
     });
-    const isStale = sMaxAge === 1;
-    if (isStale) {
+    if (isStale2) {
       let url = NextConfig.trailingSlash ? `${path3}/` : path3;
       if (NextConfig.basePath) {
         url = `${NextConfig.basePath}${url}`;
@@ -1439,7 +1499,7 @@ async function computeCacheControl(path3, body, host, revalidate, lastModified) 
     }
     return {
       "cache-control": `s-maxage=${sMaxAge}, stale-while-revalidate=${CACHE_ONE_MONTH}`,
-      "x-opennext-cache": isStale ? "STALE" : "HIT",
+      "x-opennext-cache": isStale2 ? "STALE" : "HIT",
       etag
     };
   }
@@ -1466,14 +1526,14 @@ function getBodyForAppRouter(event, cachedValue) {
     return { body: cachedValue.rsc, additionalHeaders: {} };
   }
 }
-async function generateResult(event, localizedPath, cachedValue, lastModified) {
+async function generateResult(event, localizedPath, cachedValue, lastModified, isStaleFromTagCache = false) {
   debug("Returning result from experimental cache");
   let body = "";
   let type = "application/octet-stream";
   let isDataRequest = false;
   let additionalHeaders = {};
   if (cachedValue.type === "app") {
-    isDataRequest = Boolean(event.headers.rsc);
+    isDataRequest = event.headers.rsc === "1";
     if (isDataRequest) {
       const { body: appRouterBody, additionalHeaders: appHeaders } = getBodyForAppRouter(event, cachedValue);
       body = appRouterBody;
@@ -1489,7 +1549,7 @@ async function generateResult(event, localizedPath, cachedValue, lastModified) {
   } else {
     throw new Error("generateResult called with unsupported cache value type, only 'app' and 'page' are supported");
   }
-  const cacheControl = await computeCacheControl(localizedPath, body, event.headers.host, cachedValue.revalidate, lastModified);
+  const cacheControl = await computeCacheControl(localizedPath, body, event.headers.host, cachedValue.revalidate, lastModified, isStaleFromTagCache);
   return {
     type: "core",
     // Sometimes other status codes can be cached, like 404. For these cases, we should return the correct status code
@@ -1546,20 +1606,21 @@ async function cacheInterceptor(event) {
       if (!cachedData?.value) {
         return event;
       }
+      const tags = getTagsFromValue(cachedData.value);
       if (cachedData.value?.type === "app" || cachedData.value?.type === "route") {
-        const tags = getTagsFromValue(cachedData.value);
         const _hasBeenRevalidated = cachedData.shouldBypassTagCache ? false : await hasBeenRevalidated(localizedPath, tags, cachedData);
         if (_hasBeenRevalidated) {
           return event;
         }
       }
+      const _isStale = cachedData.shouldBypassTagCache ? false : await isStale(localizedPath, tags, cachedData.lastModified ?? Date.now());
       const host = event.headers.host;
       switch (cachedData?.value?.type) {
         case "app":
         case "page":
-          return generateResult(event, localizedPath, cachedData.value, cachedData.lastModified);
+          return generateResult(event, localizedPath, cachedData.value, cachedData.lastModified, _isStale);
         case "redirect": {
-          const cacheControl = await computeCacheControl(localizedPath, "", host, cachedData.value.revalidate, cachedData.lastModified);
+          const cacheControl = await computeCacheControl(localizedPath, "", host, cachedData.value.revalidate, cachedData.lastModified, _isStale);
           return {
             type: "core",
             statusCode: cachedData.value.meta?.status ?? 307,
@@ -1572,7 +1633,7 @@ async function cacheInterceptor(event) {
           };
         }
         case "route": {
-          const cacheControl = await computeCacheControl(localizedPath, cachedData.value.body, host, cachedData.value.revalidate, cachedData.lastModified);
+          const cacheControl = await computeCacheControl(localizedPath, cachedData.value.body, host, cachedData.value.revalidate, cachedData.lastModified, _isStale);
           const isBinary = isBinaryContentType(String(cachedData.value.meta?.headers?.["content-type"]));
           return {
             type: "core",
@@ -2204,7 +2265,7 @@ function handleTrailingSlashRedirect(event) {
     return false;
   }
   const emptyBody = emptyReadableStream();
-  if (NextConfig.trailingSlash && !event.headers["x-nextjs-data"] && !event.rawPath.endsWith("/") && !event.rawPath.match(/[\w-]+\.[\w]+$/g)) {
+  if (NextConfig.trailingSlash && !(event.query.__nextDataReq === "1") && !event.rawPath.endsWith("/") && !event.rawPath.match(/[\w-]+\.[\w]+$/g)) {
     const headersLocation = event.url.split("?");
     return {
       type: event.type,
@@ -2451,6 +2512,18 @@ var geoHeaderToNextHeader = {
   "x-open-next-latitude": "x-vercel-ip-latitude",
   "x-open-next-longitude": "x-vercel-ip-longitude"
 };
+var NEXT_INTERNAL_HEADERS = [
+  "x-middleware-rewrite",
+  "x-middleware-redirect",
+  "x-middleware-set-cookie",
+  "x-middleware-skip",
+  "x-middleware-override-headers",
+  "x-middleware-next",
+  "x-now-route-matches",
+  "x-matched-path",
+  "x-nextjs-data",
+  "x-next-resume-state-length"
+];
 function applyMiddlewareHeaders(eventOrResult, middlewareHeaders) {
   const isResult = isInternalResult(eventOrResult);
   const headers = eventOrResult.headers;
@@ -2470,7 +2543,8 @@ async function routingHandler(event, { assetResolver }) {
       }
     }
     for (const key of Object.keys(event.headers)) {
-      if (key.startsWith(INTERNAL_HEADER_PREFIX) || key.startsWith(MIDDLEWARE_HEADER_PREFIX)) {
+      const lowerCaseKey = key.toLowerCase();
+      if (lowerCaseKey.startsWith(INTERNAL_HEADER_PREFIX) || lowerCaseKey.startsWith(MIDDLEWARE_HEADER_PREFIX) || NEXT_INTERNAL_HEADERS.includes(lowerCaseKey)) {
         delete event.headers[key];
       }
     }
