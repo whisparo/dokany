@@ -6,12 +6,12 @@
   "/api/ping/route": "/api/ping",
   "/api/telegram/mini-app/route": "/api/telegram/mini-app",
   "/api/telegram/webhook/route": "/api/telegram/webhook",
-  "/favicon.ico/route": "/favicon.ico",
   "/api/test-error/route": "/api/test-error",
+  "/favicon.ico/route": "/favicon.ico",
   "/api/auth/session/route": "/api/auth/session",
   "/api/cron/process-errors/route": "/api/cron/process-errors",
   "/page": "/",
-  "/(storefront)/[storeSlug]/checkout/page": "/[storeSlug]/checkout",
   "/(storefront)/[storeSlug]/products/[slug]/page": "/[storeSlug]/products/[slug]",
+  "/(storefront)/[storeSlug]/checkout/page": "/[storeSlug]/checkout",
   "/(storefront)/[storeSlug]/page": "/[storeSlug]"
 }
