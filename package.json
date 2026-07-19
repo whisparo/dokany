@@ -9,8 +9,7 @@
     "deploy": "bun run build && bunx wrangler pages deploy .open-next --project-name=dokany --commit-dirty=true",
     "lint": "next lint",
     "db:push": "bunx drizzle-kit push",
-    "db:studio": "bunx drizzle-kit studio",
-    "cf-typegen": "wrangler types"
+    "db:studio": "bunx drizzle-kit studio"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1081.0",
@@ -34,7 +33,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260702.1",
     "@eslint/eslintrc": "^3.3.6",
-    "@opennextjs/cloudflare": "latest",
+    "@opennextjs/cloudflare": "1.19.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19.2.17",

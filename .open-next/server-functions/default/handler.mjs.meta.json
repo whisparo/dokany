@@ -3155,6 +3155,21 @@
       "imports": [],
       "format": "cjs"
     },
+    ".open-next/server-functions/default/.next/server/app/(storefront)/[storeSlug]/products/[slug]/page_client-reference-manifest.js": {
+      "bytes": 11016,
+      "imports": [],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/.next/server/app/(storefront)/[storeSlug]/checkout/page_client-reference-manifest.js": {
+      "bytes": 10898,
+      "imports": [],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/.next/server/app/(storefront)/[storeSlug]/page_client-reference-manifest.js": {
+      "bytes": 10622,
+      "imports": [],
+      "format": "cjs"
+    },
     ".open-next/server-functions/default/.next/server/app/api/cron/process-errors/route_client-reference-manifest.js": {
       "bytes": 8093,
       "imports": [],
@@ -3195,13 +3210,23 @@
       "imports": [],
       "format": "cjs"
     },
+    ".open-next/server-functions/default/.next/server/app/_not-found/page_client-reference-manifest.js": {
+      "bytes": 8063,
+      "imports": [],
+      "format": "cjs"
+    },
     ".open-next/server-functions/default/.next/server/app/api/ping/route_client-reference-manifest.js": {
       "bytes": 8062,
       "imports": [],
       "format": "cjs"
     },
+    ".open-next/server-functions/default/.next/server/app/page_client-reference-manifest.js": {
+      "bytes": 7988,
+      "imports": [],
+      "format": "cjs"
+    },
     ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.js": {
-      "bytes": 58425,
+      "bytes": 31841,
       "imports": [
         {
           "path": "fs",
@@ -3217,6 +3242,21 @@
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/deep-freeze.js",
           "kind": "require-call",
           "original": "../shared/lib/deep-freeze"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/app/(storefront)/[storeSlug]/products/[slug]/page_client-reference-manifest.js",
+          "kind": "require-call",
+          "original": "C:\\Users\\PC\\Desktop\\dokany\\.open-next\\server-functions\\default\\.next\\server\\app\\(storefront)\\[storeSlug]\\products\\[slug]\\page_client-reference-manifest.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/app/(storefront)/[storeSlug]/checkout/page_client-reference-manifest.js",
+          "kind": "require-call",
+          "original": "C:\\Users\\PC\\Desktop\\dokany\\.open-next\\server-functions\\default\\.next\\server\\app\\(storefront)\\[storeSlug]\\checkout\\page_client-reference-manifest.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/app/(storefront)/[storeSlug]/page_client-reference-manifest.js",
+          "kind": "require-call",
+          "original": "C:\\Users\\PC\\Desktop\\dokany\\.open-next\\server-functions\\default\\.next\\server\\app\\(storefront)\\[storeSlug]\\page_client-reference-manifest.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/app/api/cron/process-errors/route_client-reference-manifest.js",
@@ -3259,9 +3299,19 @@
           "original": "C:\\Users\\PC\\Desktop\\dokany\\.open-next\\server-functions\\default\\.next\\server\\app\\api\\cart\\sync\\route_client-reference-manifest.js"
         },
         {
+          "path": ".open-next/server-functions/default/.next/server/app/_not-found/page_client-reference-manifest.js",
+          "kind": "require-call",
+          "original": "C:\\Users\\PC\\Desktop\\dokany\\.open-next\\server-functions\\default\\.next\\server\\app\\_not-found\\page_client-reference-manifest.js"
+        },
+        {
           "path": ".open-next/server-functions/default/.next/server/app/api/ping/route_client-reference-manifest.js",
           "kind": "require-call",
           "original": "C:\\Users\\PC\\Desktop\\dokany\\.open-next\\server-functions\\default\\.next\\server\\app\\api\\ping\\route_client-reference-manifest.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/app/page_client-reference-manifest.js",
+          "kind": "require-call",
+          "original": "C:\\Users\\PC\\Desktop\\dokany\\.open-next\\server-functions\\default\\.next\\server\\app\\page_client-reference-manifest.js"
         }
       ],
       "format": "cjs"
@@ -5246,7 +5296,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/composable-cache.cjs": {
-      "bytes": 10489,
+      "bytes": 10490,
       "imports": [
         {
           "path": "node:stream/web",
@@ -5257,7 +5307,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/cache.cjs": {
-      "bytes": 20962,
+      "bytes": 20963,
       "imports": [],
       "format": "cjs"
     },
@@ -5593,7 +5643,7 @@
       "format": "esm"
     },
     ".open-next/server-functions/default/index.mjs": {
-      "bytes": 83113,
+      "bytes": 83011,
       "imports": [
         {
           "path": "node:module",
@@ -6740,6 +6790,15 @@
         ".open-next/server-functions/default/node_modules/next/dist/shared/lib/deep-freeze.js": {
           "bytesInOutput": 586
         },
+        ".open-next/server-functions/default/.next/server/app/(storefront)/[storeSlug]/products/[slug]/page_client-reference-manifest.js": {
+          "bytesInOutput": 10294
+        },
+        ".open-next/server-functions/default/.next/server/app/(storefront)/[storeSlug]/checkout/page_client-reference-manifest.js": {
+          "bytesInOutput": 10170
+        },
+        ".open-next/server-functions/default/.next/server/app/(storefront)/[storeSlug]/page_client-reference-manifest.js": {
+          "bytesInOutput": 9885
+        },
         ".open-next/server-functions/default/.next/server/app/api/cron/process-errors/route_client-reference-manifest.js": {
           "bytesInOutput": 7356
         },
@@ -6764,11 +6823,17 @@
         ".open-next/server-functions/default/.next/server/app/api/cart/sync/route_client-reference-manifest.js": {
           "bytesInOutput": 7327
         },
+        ".open-next/server-functions/default/.next/server/app/_not-found/page_client-reference-manifest.js": {
+          "bytesInOutput": 7312
+        },
         ".open-next/server-functions/default/.next/server/app/api/ping/route_client-reference-manifest.js": {
           "bytesInOutput": 7311
         },
+        ".open-next/server-functions/default/.next/server/app/page_client-reference-manifest.js": {
+          "bytesInOutput": 7226
+        },
         ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.js": {
-          "bytesInOutput": 47670
+          "bytesInOutput": 22920
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/app-render/action-async-storage-instance.js": {
           "bytesInOutput": 501
@@ -7044,10 +7109,10 @@
           "bytesInOutput": 1216
         },
         ".open-next/server-functions/default/composable-cache.cjs": {
-          "bytesInOutput": 6634
+          "bytesInOutput": 6635
         },
         ".open-next/server-functions/default/cache.cjs": {
-          "bytesInOutput": 13440
+          "bytesInOutput": 13441
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/next-server.js": {
           "bytesInOutput": 26601
@@ -7056,10 +7121,10 @@
           "bytesInOutput": 612
         },
         ".open-next/server-functions/default/index.mjs": {
-          "bytesInOutput": 57141
+          "bytesInOutput": 57046
         }
       },
-      "bytes": 3736283
+      "bytes": 3756327
     }
   }
 }

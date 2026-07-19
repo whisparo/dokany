@@ -44,6 +44,13 @@
       "static/chunks/main-app-3c4f938eec0d8c78.js",
       "static/chunks/app/api/ping/route-00274ba64ee796d7.js"
     ],
+    "/api/test-error/route": [
+      "static/chunks/webpack-32c3119eb3ab9a86.js",
+      "static/chunks/4bd1b696-9896586e4f971635.js",
+      "static/chunks/587-873719b1ad307049.js",
+      "static/chunks/main-app-3c4f938eec0d8c78.js",
+      "static/chunks/app/api/test-error/route-102c265681915ec6.js"
+    ],
     "/api/telegram/mini-app/route": [
       "static/chunks/webpack-32c3119eb3ab9a86.js",
       "static/chunks/4bd1b696-9896586e4f971635.js",
@@ -57,13 +64,6 @@
       "static/chunks/587-873719b1ad307049.js",
       "static/chunks/main-app-3c4f938eec0d8c78.js",
       "static/chunks/app/api/telegram/webhook/route-45089bb06bb197c8.js"
-    ],
-    "/api/test-error/route": [
-      "static/chunks/webpack-32c3119eb3ab9a86.js",
-      "static/chunks/4bd1b696-9896586e4f971635.js",
-      "static/chunks/587-873719b1ad307049.js",
-      "static/chunks/main-app-3c4f938eec0d8c78.js",
-      "static/chunks/app/api/test-error/route-102c265681915ec6.js"
     ],
     "/api/auth/session/route": [
       "static/chunks/webpack-32c3119eb3ab9a86.js",
@@ -117,14 +117,16 @@
       "static/chunks/40-aa43b7aee6c16142.js",
       "static/chunks/app/(storefront)/[storeSlug]/not-found-e49b676f606f40d8.js"
     ],
-    "/(storefront)/[storeSlug]/checkout/page": [
+    "/(storefront)/[storeSlug]/page": [
       "static/chunks/webpack-32c3119eb3ab9a86.js",
       "static/chunks/4bd1b696-9896586e4f971635.js",
       "static/chunks/587-873719b1ad307049.js",
       "static/chunks/main-app-3c4f938eec0d8c78.js",
       "static/chunks/40-aa43b7aee6c16142.js",
       "static/chunks/565-8c01d07ad244e3c9.js",
-      "static/chunks/app/(storefront)/[storeSlug]/checkout/page-56a4ba2bb4f32134.js"
+      "static/chunks/366-1f7ad112f7d3ca57.js",
+      "static/chunks/601-18c498c5561576e5.js",
+      "static/chunks/app/(storefront)/[storeSlug]/page-a9b13fa77a97240d.js"
     ],
     "/(storefront)/[storeSlug]/products/[slug]/page": [
       "static/chunks/webpack-32c3119eb3ab9a86.js",
@@ -137,16 +139,14 @@
       "static/chunks/601-18c498c5561576e5.js",
       "static/chunks/app/(storefront)/[storeSlug]/products/[slug]/page-70d608bbb4df4774.js"
     ],
-    "/(storefront)/[storeSlug]/page": [
+    "/(storefront)/[storeSlug]/checkout/page": [
       "static/chunks/webpack-32c3119eb3ab9a86.js",
       "static/chunks/4bd1b696-9896586e4f971635.js",
       "static/chunks/587-873719b1ad307049.js",
       "static/chunks/main-app-3c4f938eec0d8c78.js",
       "static/chunks/40-aa43b7aee6c16142.js",
       "static/chunks/565-8c01d07ad244e3c9.js",
-      "static/chunks/366-1f7ad112f7d3ca57.js",
-      "static/chunks/601-18c498c5561576e5.js",
-      "static/chunks/app/(storefront)/[storeSlug]/page-a9b13fa77a97240d.js"
+      "static/chunks/app/(storefront)/[storeSlug]/checkout/page-56a4ba2bb4f32134.js"
     ]
   }
 }
