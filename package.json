@@ -5,12 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "dev:cloudflare": "bunx wrangler pages dev .open-next",
-    "build": "next build && bunx @opennextjs/cloudflare build --skip-build && node scripts/add-routes.js && node scripts/rename-worker.js",
+    "build": "next build && npx @opennextjs/cloudflare build --skip-build && node scripts/add-routes.js && node scripts/rename-worker.js",
     "deploy": "bun run build && bunx wrangler pages deploy .open-next --project-name=dokany --commit-dirty=true",
     "lint": "next lint",
     "db:push": "bunx drizzle-kit push",
     "db:studio": "bunx drizzle-kit studio",
-    "clean": "rmdir /s node_modules .open-next 2>nul & del package-lock.json 2>nul"
+    "clean": "rm -rf node_modules .open-next package-lock.json || rmdir /s node_modules .open-next 2>nul & del package-lock.json 2>nul"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1081.0",
