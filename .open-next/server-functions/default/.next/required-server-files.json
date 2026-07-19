@@ -60,7 +60,18 @@
       "dangerouslyAllowSVG": false,
       "contentSecurityPolicy": "script-src 'none'; frame-src 'none'; sandbox;",
       "contentDispositionType": "attachment",
-      "remotePatterns": [],
+      "remotePatterns": [
+        {
+          "protocol": "https",
+          "hostname": "images.unsplash.com"
+        },
+        {
+          "protocol": "https",
+          "hostname": "**",
+          "port": "",
+          "pathname": "**"
+        }
+      ],
       "unoptimized": false
     },
     "devIndicators": {
@@ -291,16 +302,6 @@
     "configFileName": "next.config.ts",
     "turbopack": {
       "root": "C:\\Users\\PC\\Desktop\\dokany"
-    },
-    "_originalRewrites": {
-      "beforeFiles": [
-        {
-          "source": "/:storeSlug/:path*",
-          "destination": "/_worker.js?storeSlug=:storeSlug&path=:path*"
-        }
-      ],
-      "afterFiles": [],
-      "fallback": []
     }
   },
   "appDir": "C:\\Users\\PC\\Desktop\\dokany",

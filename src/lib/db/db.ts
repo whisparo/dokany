@@ -2,27 +2,13 @@
 
 import { drizzle } from 'drizzle-orm/d1';
 import type { D1Database } from '@cloudflare/workers-types';
-import { schema } from './index';
+import { schema } from './index'; // ✅ الـ schema الكامل
 
-// ✅ النوع اللي بنتعامل معاه
-type EnvWithDB = {
-  DB: D1Database;
-};
-
-// ✅ دالة واضحة وبدون any (تقبل أي object فيه خاصية DB)
-export function getDb(env: EnvWithDB): ReturnType<typeof drizzle> {
+export function getDb(env: { DB: D1Database }) {
   return drizzle(env.DB, { schema });
 }
 
-// ✅ دالة مساعدة للبيئات المختلفة (مع أي للاستخدام الداخلي)
-export function getDbSafe(env?: any) {
-  const db = env?.DB 
-    ?? (globalThis as any).env?.DB 
-    ?? process.env.DB;
+// ✅ هذا هو النوع الدقيق الذي نريده
+export type DbInstance = ReturnType<typeof getDb>;
 
-  if (!db) {
-    throw new Error('❌ D1 Database binding not found');
-  }
-
-  return drizzle(db, { schema });
-}
+export type D1Transaction = Parameters<Parameters<DbInstance['transaction']>[0]>[0];

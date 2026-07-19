@@ -1,7 +1,7 @@
 {
   "/_not-found/page": "/_not-found",
-  "/api/auth/[...all]/route": "/api/auth/[...all]",
   "/api/cart/sync/route": "/api/cart/sync",
+  "/api/auth/[...all]/route": "/api/auth/[...all]",
   "/api/errors/report/route": "/api/errors/report",
   "/api/ping/route": "/api/ping",
   "/api/telegram/mini-app/route": "/api/telegram/mini-app",

@@ -3292,7 +3292,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-      "bytes": 62511,
+      "bytes": 62290,
       "imports": [
         {
           "path": "path",
@@ -4457,7 +4457,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/auth/[...all]/route.js": {
-      "bytes": 10967,
+      "bytes": 10993,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/router/utils/app-paths.js",
@@ -4594,7 +4594,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/auth/session/route.js": {
-      "bytes": 10877,
+      "bytes": 10903,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/router/utils/app-paths.js",
@@ -6418,7 +6418,7 @@
       "format": "esm"
     },
     ".open-next/server-functions/default/index.mjs": {
-      "bytes": 84680,
+      "bytes": 84471,
       "imports": [
         {
           "path": "node:module",
@@ -7670,7 +7670,7 @@
           "bytesInOutput": 7717
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-          "bytesInOutput": 50879
+          "bytesInOutput": 50682
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/app-render/action-async-storage-instance.js": {
           "bytesInOutput": 501
@@ -7820,13 +7820,13 @@
           "bytesInOutput": 46497
         },
         ".open-next/server-functions/default/.next/server/app/api/auth/[...all]/route.js": {
-          "bytesInOutput": 11246
+          "bytesInOutput": 11272
         },
         ".open-next/server-functions/default/.next/server/app/api/errors/report/route.js": {
           "bytesInOutput": 8144
         },
         ".open-next/server-functions/default/.next/server/app/api/auth/session/route.js": {
-          "bytesInOutput": 11157
+          "bytesInOutput": 11183
         },
         ".open-next/server-functions/default/.next/server/app/api/test-error/route.js": {
           "bytesInOutput": 7966
@@ -8003,10 +8003,10 @@
           "bytesInOutput": 612
         },
         ".open-next/server-functions/default/index.mjs": {
-          "bytesInOutput": 58476
+          "bytesInOutput": 58279
         }
       },
-      "bytes": 4267913
+      "bytes": 4267571
     }
   }
 }

@@ -14,13 +14,7 @@
   ],
   "headers": [],
   "rewrites": {
-    "beforeFiles": [
-      {
-        "source": "/:storeSlug/:path*",
-        "destination": "/_worker.js?storeSlug=:storeSlug&path=:path*",
-        "regex": "^(?:/([^/]+?))(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))?(?:/)?$"
-      }
-    ],
+    "beforeFiles": [],
     "afterFiles": [],
     "fallback": []
   },

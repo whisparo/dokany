@@ -1,7 +1,7 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
-  "/api/auth/[...all]/route": "app/api/auth/[...all]/route.js",
   "/api/cart/sync/route": "app/api/cart/sync/route.js",
+  "/api/auth/[...all]/route": "app/api/auth/[...all]/route.js",
   "/api/errors/report/route": "app/api/errors/report/route.js",
   "/api/ping/route": "app/api/ping/route.js",
   "/api/telegram/mini-app/route": "app/api/telegram/mini-app/route.js",
