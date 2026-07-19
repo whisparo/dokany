@@ -11,6 +11,7 @@ import {
 import { sql, eq, and, isNull } from 'drizzle-orm';
 import { type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
+import type { D1Database } from '@cloudflare/workers-types';
 
 // ============================================
 // 📦 أنواع TypeScript

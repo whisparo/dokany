@@ -3,39 +3,36 @@
 import { unstable_cache } from 'next/cache';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, and } from 'drizzle-orm';
-import { stores, products } from '@/lib/db/schema'; 
+import { stores, products } from '@/lib/db/schema';
 import type { ProductImage, ProductMetadata } from '@/lib/db/schema/products';
 import type { Store, Product } from '@/types';
 import type { RawStorePageData } from '@/lib/adapters/product-page.adapter';
-import { getRequestContext } from '@cloudflare/next-on-pages';
+import type { D1Database } from '@cloudflare/workers-types';
 
-// تمثيل صارم للبيئة بدون any
-interface CustomCloudflareEnv {
-  DB: D1Database;
-}
+// ============================================================
+// 🔌 الحصول على اتصال قاعدة البيانات
+// ============================================================
 
 /**
- * 🗄️ الحصول على اتصال قاعدة البيانات من Cloudflare Context
+ * الحصول على اتصال D1 من البيئة
+ * - في Cloudflare Pages: `process.env.DB` متاح كـ Binding
+ * - في التطوير المحلي: يمكن استخدام `process.env.DB` أو Mock
  */
 function getDb() {
-  try {
-    const context = getRequestContext();
-    const env = context.env as unknown as CustomCloudflareEnv;
-    const d1DB = env.DB;
-    
-    if (!d1DB) {
-      throw new Error("D1 Database Binding (DB) is missing from Cloudflare environment.");
-    }
-    
-    return drizzle(d1DB);
-  } catch (error) {
-    console.error("❌ [getDb] Failed to initialize D1 database context:", error);
-    throw new Error("Database connection could not be established.");
+  const dbBinding = process.env.DB as unknown as D1Database;
+
+  if (!dbBinding) {
+    console.error('❌ [getDb] D1 Database binding (DB) is missing from process.env');
+    // في بيئة التطوير المحلي، قد لا يكون DB متاحاً، نستخدم كائن وهمي
+    // لكن في الإنتاج، هذا لن يحدث لأن Pages توفر الـ Binding
+    throw new Error('D1 Database binding not available');
   }
+
+  return drizzle(dbBinding);
 }
 
 // ============================================================
-// 🗄️ دوال جلب البيانات الحقيقية 100%
+// 🗄️ دوال جلب البيانات الفعلية
 // ============================================================
 
 async function fetchStoreInfo(storeSlug: string): Promise<Store | null> {
@@ -53,11 +50,11 @@ async function fetchStoreInfo(storeSlug: string): Promise<Store | null> {
   let storeTheme = undefined;
   if (rawStore.theme) {
     try {
-      storeTheme = typeof rawStore.theme === 'string' 
-        ? JSON.parse(rawStore.theme) 
+      storeTheme = typeof rawStore.theme === 'string'
+        ? JSON.parse(rawStore.theme)
         : rawStore.theme;
     } catch (e) {
-      console.error("❌ Failed to parse store theme JSON:", e);
+      console.error('❌ Failed to parse store theme JSON:', e);
     }
   }
 
@@ -68,7 +65,7 @@ async function fetchStoreInfo(storeSlug: string): Promise<Store | null> {
         ? JSON.parse(rawStore.settings)
         : rawStore.settings;
     } catch (e) {
-      console.error("❌ Failed to parse store settings JSON:", e);
+      console.error('❌ Failed to parse store settings JSON:', e);
     }
   }
 
@@ -79,7 +76,7 @@ async function fetchStoreInfo(storeSlug: string): Promise<Store | null> {
     slug: rawStore.slug,
     shopName: rawStore.shopName ?? rawStore.name,
     description: rawStore.description ?? 'أفضل المتاجر للمنتجات المميزة',
-    coverImage: rawStore.coverImage ?? '/images/default-banner.png', 
+    coverImage: rawStore.coverImage ?? '/images/default-banner.png',
     logo: rawStore.logo ?? null,
     phone: rawStore.phone ?? null,
     email: rawStore.email ?? null,
@@ -90,7 +87,7 @@ async function fetchStoreInfo(storeSlug: string): Promise<Store | null> {
     address: rawStore.address ?? '123 Cairo St',
     currency: rawStore.currency,
     paymentGateway: rawStore.paymentGateway,
-    
+
     verifiedBy: rawStore.verifiedBy ?? null,
     verifiedAt: rawStore.verifiedAt ?? null,
     deletedBy: rawStore.deletedBy ?? null,
@@ -139,7 +136,6 @@ async function fetchStoreProducts(
     .all();
 
   const formattedProducts: Product[] = dbProducts.map((p) => {
-    // 🎨 تفكيك مصفوفة الصور بشكل سليم ونظيف 100% وبدون any
     let imageUrls: string[] = [];
     if (p.images) {
       try {
@@ -151,11 +147,10 @@ async function fetchStoreProducts(
         imageUrls = [];
       }
     }
-    
+
     const mainImage = p.imageSrc || (imageUrls.length > 0 ? imageUrls[0] : '/images/default-product.png');
 
     return {
-      // تمرير كافة حقول الداتابيز الموروثة في الـ Frontend Product
       id: p.id,
       storeId: p.storeId,
       categoryId: p.categoryId ?? null,
@@ -167,7 +162,7 @@ async function fetchStoreProducts(
       barcode: p.barcode ?? null,
       stock: p.stock,
       lowStockThreshold: p.lowStockThreshold,
-      
+
       mediaIds: p.mediaIds,
       videoUrl: p.videoUrl ?? null,
       imageSrc: p.imageSrc ?? null,
@@ -177,8 +172,7 @@ async function fetchStoreProducts(
 
       isPublished: p.isPublished,
       isFeatured: p.isFeatured,
-      
-      // تحويل الأسعار
+
       price: Number(p.price) || 0,
       originalPrice: p.compareAtPrice ? Number(p.compareAtPrice) : undefined,
       cost: p.cost ? Number(p.cost) : undefined,

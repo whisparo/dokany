@@ -1,5 +1,6 @@
 // src/lib/db/schema/telegram-messages.ts
 
+import type { D1Database } from '@cloudflare/workers-types'; // ✅ تمت الإضافة
 import { sqliteTable, text, integer, index, uniqueIndex, check, foreignKey } from 'drizzle-orm/sqlite-core';
 import { sql, eq, and, isNull, desc, count, between } from 'drizzle-orm';
 import { type InferSelectModel, type InferInsertModel } from 'drizzle-orm';

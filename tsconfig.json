@@ -31,11 +31,12 @@
   },
   "include": [
     "next-env.d.ts",
-    "bun-env.d.ts",     // ✅ ضفنا دي عشان Bun يتعرف على الـ Globals بتاعته
+    "bun-env.d.ts", // ✅ ضفنا دي عشان Bun يتعرف على الـ Globals بتاعته
     "**/*.ts",
     "**/*.tsx",
-    "src/**/*",         // ✅ للتأكيد على قراءة كل ملفات الـ src بما فيها الـ CSS
-    ".next/types/**/*.ts"
+    "src/**/*", // ✅ للتأكيد على قراءة كل ملفات الـ src بما فيها الـ CSS
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

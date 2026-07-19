@@ -4,14 +4,10 @@ import { unstable_cache } from 'next/cache';
 import { cookies } from 'next/headers';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, and } from 'drizzle-orm';
-import { getRequestContext } from '@cloudflare/next-on-pages';
+import type { D1Database } from '@cloudflare/workers-types';
 
 // 📂 استيراد جداول الـ Database الحقيقية لمشروعك
 import { stores } from '@/lib/db/schema';
-// ⚠️ ملاحظة: تأكد من أن أسماء الجداول مطابقة لما لديك في الـ Schema
-// سنفترض وجود جداول: cartItems, shippingOptions, paymentMethods, customers إن وجدت،
-// أو سنقرأ من الجداول المخصصة لها. إليك التطبيق الهندسي الصارم:
-
 import type { CartItem } from '@/stores/cart-store';
 
 // ============================================================
@@ -58,28 +54,24 @@ export interface CheckoutRawData {
   currency: string;
 }
 
-interface CustomCloudflareEnv {
-  DB: D1Database;
-}
+// ============================================================
+// 🔌 الحصول على اتصال قاعدة البيانات
+// ============================================================
 
 /**
- * 🗄️ الحصول على اتصال قاعدة البيانات من Cloudflare Context
+ * الحصول على اتصال D1 من البيئة
+ * - في Cloudflare Pages: `process.env.DB` متاح كـ Binding
+ * - في التطوير المحلي: يمكن استخدام `process.env.DB` أو Mock
  */
 function getDb() {
-  try {
-    const context = getRequestContext();
-    const env = context.env as unknown as CustomCloudflareEnv;
-    const d1DB = env.DB;
-    
-    if (!d1DB) {
-      throw new Error("D1 Database Binding (DB) is missing from Cloudflare environment.");
-    }
-    
-    return drizzle(d1DB);
-  } catch (error) {
-    console.error("❌ [getDb] Failed to initialize D1 database context:", error);
-    throw new Error("Database connection could not be established.");
+  const dbBinding = process.env.DB as unknown as D1Database;
+
+  if (!dbBinding) {
+    console.error('❌ [getDb] D1 Database binding (DB) is missing from process.env');
+    throw new Error('D1 Database binding not available');
   }
+
+  return drizzle(dbBinding);
 }
 
 // ============================================================

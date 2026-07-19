@@ -1,24 +1,20 @@
 // src/lib/errors/background-processor.ts
+// src/lib/errors/background-processor.ts
 
-// في أعلى src/lib/errors/background-processor.ts
-
-import { 
-  S3Client, 
-  ListObjectsV2Command, 
-  ListObjectsV2CommandOutput,
-  CopyObjectCommand, 
-  DeleteObjectCommand,
-  GetObjectCommand,
-  PutObjectCommand
-} from '@aws-sdk/client-s3';
 import { type StoredError } from './types';
 import { Redis } from '@upstash/redis/cloudflare';
 import { type Env } from '@/lib/env';
-import { checkRateLimit, buildRateLimitKey } from '@/lib/rate-limit'; // ✅ جديد
+import { checkRateLimit, buildRateLimitKey } from '@/lib/rate-limit';
+import {
+  uploadToB2,
+  downloadFromB2,
+  deleteFromB2,
+  listB2Objects,
+} from '@/lib/storage';
+
 // ============================================
 // 📦 الأنواع والـ Interfaces
 // ============================================
-
 
 export interface ProcessorConfig {
   maxFilesPerRun?: number;
@@ -51,7 +47,7 @@ export interface AggregatedIncident {
   severity: 'critical' | 'warning' | 'info';
   storeId: string;
   count: number;
-  actualCount?: number; // ✅ العدد الفعلي (بعد الـ capping)
+  actualCount?: number;
   firstSeen: number;
   lastSeen: number;
   sampleError: StoredError;
@@ -66,48 +62,6 @@ export interface ProcessingResult {
   aggregated: number;
   sentToTelegram: number;
   duration: number;
-}
-// ============================================
-// 3️⃣ دوال التحقق (Type Guards) ← هنا 🔥
-// ============================================
-
-/**
- * Type Guard للتحقق من أن الاستجابة هي من نوع ListObjectsV2CommandOutput
- */
-function isListObjectsV2Response(
-  response: unknown
-): response is ListObjectsV2CommandOutput {
-  if (!response || typeof response !== 'object') return false;
-  const obj = response as Record<string, unknown>;
-  return (
-    'Contents' in obj &&
-    'IsTruncated' in obj &&
-    'NextContinuationToken' in obj
-  );
-}
-
-
-// ============================================
-// 🔧 B2 Client (WeakMap Pattern)
-// ============================================
-
-const b2Clients = new WeakMap<Env, S3Client>();
-
-function getB2Client(env: Env): S3Client {
-  let client = b2Clients.get(env);
-  if (!client) {
-    client = new S3Client({
-      region: 'auto',
-      endpoint: env.B2_ENDPOINT,
-      credentials: {
-        accessKeyId: env.B2_ACCESS_KEY_ID,
-        secretAccessKey: env.B2_SECRET_ACCESS_KEY,
-      },
-      forcePathStyle: true,
-    });
-    b2Clients.set(env, client);
-  }
-  return client;
 }
 
 // ============================================
@@ -131,21 +85,21 @@ async function withRetry<T>(
   operationName: string = 'operation'
 ): Promise<T> {
   let lastError: Error | null = null;
-  
+
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await fn();
     } catch (error) {
       lastError = error as Error;
       console.warn(`[BackgroundProcessor] ${operationName} failed (attempt ${i + 1}/${maxRetries}):`, error);
-      
+
       if (i < maxRetries - 1) {
         const delay = 1000 * Math.pow(2, i);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }
-  
+
   throw lastError;
 }
 
@@ -154,19 +108,15 @@ async function withRetry<T>(
 // ============================================
 
 function validateStoredError(data: unknown): data is StoredError {
-  // 1. التحقق من أن البيانات كائن غير فارغ
   if (!data || typeof data !== 'object') return false;
 
-  // 2. تحويل آمن إلى Record للوصول إلى الخصائص
   const obj = data as Record<string, unknown>;
 
-  // 3. التحقق من وجود الخصائص الأساسية
   if (!('id' in obj) || typeof obj.id !== 'string') return false;
   if (!('error' in obj) || typeof obj.error !== 'object' || obj.error === null) return false;
   if (!('context' in obj) || typeof obj.context !== 'object' || obj.context === null) return false;
   if (!('timestamp' in obj) || typeof obj.timestamp !== 'number') return false;
 
-  // 4. التحقق من خصائص nested
   const errorObj = obj.error as Record<string, unknown>;
   if (!('code' in errorObj) || typeof errorObj.code !== 'string') return false;
   if (!('severity' in errorObj) || typeof errorObj.severity !== 'string') return false;
@@ -174,7 +124,6 @@ function validateStoredError(data: unknown): data is StoredError {
   const contextObj = obj.context as Record<string, unknown>;
   if (!('storeId' in contextObj) || typeof contextObj.storeId !== 'string') return false;
 
-  // 5. جميع التحققات اجتازت → البيانات صالحة
   return true;
 }
 
@@ -188,7 +137,7 @@ export async function processErrorQueue(
 ): Promise<ProcessingResult> {
   const startTime = Date.now();
   const mergedConfig = { ...DEFAULT_CONFIG, ...config };
-  
+
   const result: ProcessingResult = {
     processed: 0,
     succeeded: 0,
@@ -198,28 +147,26 @@ export async function processErrorQueue(
     sentToTelegram: 0,
     duration: 0,
   };
-  
+
   try {
     console.log('[BackgroundProcessor] Starting error queue processing...');
-    
-    // 1. جلب الملفات
+
     const rawFiles = await withRetry(
       () => fetchRawFilesFromB2(env, mergedConfig),
       3,
       'fetchRawFilesFromB2'
     );
-    
+
     console.log(`[BackgroundProcessor] Found ${rawFiles.length} raw files`);
-    
+
     if (rawFiles.length === 0) {
       result.duration = Date.now() - startTime;
       return result;
     }
-    
-    // 2. تقسيم إلى Batches
+
     const batches = chunkArray(rawFiles, mergedConfig.maxBatchSize);
     const incidents: AggregatedIncident[] = [];
-    
+
     for (const batch of batches) {
       const batchResult = await processBatch(batch, env, mergedConfig, incidents);
       result.processed += batchResult.processed;
@@ -227,27 +174,22 @@ export async function processErrorQueue(
       result.failed += batchResult.failed;
       result.skipped += batchResult.skipped;
     }
-    
-    // 3. Aggregation
+
     const aggregatedIncidents = aggregateIncidents(incidents, mergedConfig);
     result.aggregated = aggregatedIncidents.length;
-    
-    // 4. تحديث Redis
+
     if (aggregatedIncidents.length > 0) {
       await updateRedisCounters(env, aggregatedIncidents);
     }
-    
-    // 5. إرسال التقارير
+
     result.sentToTelegram = await sendAggregatedReports(env, aggregatedIncidents, mergedConfig);
-    
-    // 6. نقل الملفات
+
     await moveToProcessed(rawFiles, env, mergedConfig);
-    
+
     result.duration = Date.now() - startTime;
     console.log('[BackgroundProcessor] Processing completed:', result);
-    
+
     return result;
-    
   } catch (error) {
     console.error('[BackgroundProcessor] Fatal error:', error);
     await sendFatalErrorAlert(env, error);
@@ -258,70 +200,30 @@ export async function processErrorQueue(
 }
 
 // ============================================
-// 🛡️ Type Guards & Helpers
+// 📂 B2 Operations (باستخدام storage.ts)
 // ============================================
 
-/**
- * Type Guard للتحقق من أن الخطأ هو NoSuchKey من AWS SDK
- */
-function isNoSuchKeyError(error: unknown): error is Error & { name: 'NoSuchKey' } {
-  return (
-    error instanceof Error &&
-    error.name === 'NoSuchKey'
-  );
-}
-
-// ============================================
-// 📂 B2 Operations
-// ============================================
-
-/**
- * جلب قائمة الملفات الخام من B2
- */
 async function fetchRawFilesFromB2(
   env: Env,
   config: Required<ProcessorConfig>
 ): Promise<string[]> {
-  const client = getB2Client(env);
   const files: string[] = [];
-  let continuationToken: string | undefined = undefined;
+  const prefix = config.rawPath;
 
-  do {
-    const remaining = Math.max(0, config.maxFilesPerRun - files.length);
-    if (remaining === 0) break;
-
-    const command: ListObjectsV2Command = new ListObjectsV2Command({
-      Bucket: env.B2_BUCKET_NAME,
-      Prefix: config.rawPath,
-      MaxKeys: Math.min(1000, remaining),
-      ContinuationToken: continuationToken,
-    });
-
-    const response = await client.send(command);
-
-    if (!isListObjectsV2Response(response)) {
-      console.warn('[BackgroundProcessor] Unexpected response type from S3');
-      break;
-    }
-
-    if (response.Contents) {
-      for (const obj of response.Contents) {
-        if (obj.Key && obj.Key.endsWith('.json')) {
-          files.push(obj.Key);
-          if (files.length >= config.maxFilesPerRun) break;
-        }
+  try {
+    const keys = await listB2Objects(prefix, env);
+    for (const key of keys) {
+      if (key.endsWith('.json') && files.length < config.maxFilesPerRun) {
+        files.push(key);
       }
     }
-
-    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
-  } while (continuationToken && files.length < config.maxFilesPerRun);
+  } catch (error) {
+    console.error('[BackgroundProcessor] Failed to list B2 objects:', error);
+  }
 
   return files;
 }
 
-/**
- * معالجة دفعة من الملفات
- */
 async function processBatch(
   files: string[],
   env: Env,
@@ -329,29 +231,17 @@ async function processBatch(
   incidents: AggregatedIncident[]
 ): Promise<{ processed: number; succeeded: number; failed: number; skipped: number }> {
   const result = { processed: 0, succeeded: 0, failed: 0, skipped: 0 };
-  const client = getB2Client(env);
 
   for (const fileKey of files) {
     try {
       result.processed++;
 
-      const response = await withRetry(
-        () => client.send(
-          new GetObjectCommand({
-            Bucket: env.B2_BUCKET_NAME,
-            Key: fileKey,
-          })
-        ),
-        2,
-        `GetObject ${fileKey}`
-      );
-
-      if (!response.Body) {
+      const content = await downloadFromB2(fileKey, env);
+      if (!content) {
         result.skipped++;
         continue;
       }
 
-      const content = await response.Body.transformToString();
       const parsed = JSON.parse(content);
 
       if (!validateStoredError(parsed)) {
@@ -360,7 +250,6 @@ async function processBatch(
         continue;
       }
 
-      // بعد التحقق، نعرف أن `parsed` هو من النوع `StoredError`
       const storedError = parsed;
 
       if (storedError.processed) {
@@ -374,7 +263,6 @@ async function processBatch(
         continue;
       }
 
-      // تجميع الحادثة
       incidents.push({
         code: storedError.error.code || 'UNKNOWN_CODE',
         severity: storedError.error.severity || 'info',
@@ -389,19 +277,16 @@ async function processBatch(
 
       result.succeeded++;
     } catch (error) {
-      // ✅ استخدام Type Guard بدلاً من as any
-      if (isNoSuchKeyError(error)) {
-        result.skipped++;
-      } else {
-        console.error(`[BackgroundProcessor] Failed to process ${fileKey}:`, error);
-        result.failed++;
-      }
+      console.error(`[BackgroundProcessor] Failed to process ${fileKey}:`, error);
+      result.failed++;
     }
   }
 
   return result;
 }
 
+// ... باقي الكود (aggregateIncidents, updateRedisCounters, sendAggregatedReports, moveToProcessed, moveToDLQ, إلخ)
+// ✅ ملاحظة: يجب أيضاً تحديث دوال moveToProcessed و moveToDLQ لاستخدام uploadToB2 و deleteFromB2
 // ============================================
 // 🎯 Aggregation
 // ============================================
@@ -654,92 +539,79 @@ async function sendTelegramMessage(env: Env, text: string): Promise<void> {
   }
 }
 // ============================================
-// 🗂️ File Operations
+// 🗂️ File Operations (باستخدام storage.ts)
 // ============================================
-
+/**
+ * نقل الملفات المعالجة إلى مجلد processed/
+ * ✅ نسخة معدلة باستخدام storage.ts (بدون AWS SDK)
+ */
 async function moveToProcessed(
   files: string[],
   env: Env,
   config: Required<ProcessorConfig>
 ): Promise<void> {
-  const client = getB2Client(env);
-  
   for (const fileKey of files) {
     try {
       const destKey = fileKey.replace(config.rawPath, config.processedPath);
-      
-      // ✅ Copy مع URL encoding
-      const copyResult = await withRetry(
-        () => client.send(new CopyObjectCommand({
-          Bucket: env.B2_BUCKET_NAME,
-          CopySource: `/${env.B2_BUCKET_NAME}/${encodeURIComponent(fileKey)}`,
-          Key: destKey,
-        })),
-        2,
-        `CopyObject ${fileKey}`
-      );
-      
-      // ✅ التحقق من نجاح الـ Copy قبل الـ Delete
-      if (copyResult.CopyObjectResult?.ETag) {
-        await withRetry(
-          () => client.send(new DeleteObjectCommand({
-            Bucket: env.B2_BUCKET_NAME,
-            Key: fileKey,
-          })),
-          2,
-          `DeleteObject ${fileKey}`
-        );
-      } else {
-        console.error(`[BackgroundProcessor] Copy failed for ${fileKey}: No ETag`);
+
+      // ✅ 1. تحميل المحتوى من الملف الأصلي
+      const content = await downloadFromB2(fileKey, env);
+      if (!content) {
+        console.warn(`[BackgroundProcessor] File not found: ${fileKey}`);
+        continue;
       }
+
+      // ✅ 2. رفع المحتوى إلى المسار الجديد
+      await uploadToB2(destKey, content, env);
+
+      // ✅ 3. حذف الملف الأصلي بعد النقل
+      await deleteFromB2(fileKey, env);
+
+      console.log(`[BackgroundProcessor] Moved ${fileKey} -> ${destKey}`);
     } catch (error) {
       console.error(`[BackgroundProcessor] Failed to move ${fileKey}:`, error);
-      // ❌ لا تحذف الملف الأصلي!
+      // ❌ لا تحذف الملف الأصلي في حالة الفشل
     }
   }
 }
 
+/**
+ * نقل الملفات الفاشلة نهائياً إلى DLQ (Dead Letter Queue)
+ * ✅ نسخة معدلة باستخدام storage.ts
+ */
 async function moveToDLQ(
   fileKey: string,
   storedError: StoredError,
   env: Env,
   config: Required<ProcessorConfig>
 ): Promise<void> {
-  const client = getB2Client(env);
-  const dlqKey = fileKey.replace(config.rawPath, config.dlqPath);
-  
-  const dlqData = {
-    ...storedError,
-    failedAt: Date.now(),
-    reason: 'Max retries exceeded inside Background Processor',
-  };
-  
-  await withRetry(
-    () => client.send(new PutObjectCommand({
-      Bucket: env.B2_BUCKET_NAME,
-      Key: dlqKey,
-      Body: JSON.stringify(dlqData, null, 2),
-      ContentType: 'application/json',
-    })),
-    2,
-    `PutObject DLQ ${fileKey}`
-  );
-  
-  await withRetry(
-    () => client.send(new DeleteObjectCommand({
-      Bucket: env.B2_BUCKET_NAME,
-      Key: fileKey,
-    })),
-    2,
-    `DeleteObject DLQ ${fileKey}`
-  );
-  
-  await sendTelegramMessage(
-    env,
-    `💀 *[DLQ ALERT]*\nCode: \`${storedError.error.code}\`\nStore: \`${storedError.context?.storeId || 'global'}\`\nStatus: Shifted to Emergency DLQ Storage.`
-  );
-}
+  try {
+    const dlqKey = fileKey.replace(config.rawPath, config.dlqPath);
 
+    const dlqData = {
+      ...storedError,
+      failedAt: Date.now(),
+      reason: 'Max retries exceeded inside Background Processor',
+    };
+
+    // ✅ 1. رفع الملف إلى DLQ
+    await uploadToB2(dlqKey, JSON.stringify(dlqData, null, 2), env);
+
+    // ✅ 2. حذف الملف الأصلي
+    await deleteFromB2(fileKey, env);
+
+    // ✅ 3. إرسال تنبيه إلى Telegram
+    await sendTelegramMessage(
+      env,
+      `💀 *[DLQ ALERT]*\nCode: \`${storedError.error.code}\`\nStore: \`${storedError.context?.storeId || 'global'}\`\nStatus: Shifted to Emergency DLQ Storage.`
+    );
+
+    console.log(`[BackgroundProcessor] Moved ${fileKey} -> DLQ: ${dlqKey}`);
+  } catch (error) {
+    console.error(`[BackgroundProcessor] Failed to move ${fileKey} to DLQ:`, error);
+    // ❌ لا تحذف الملف الأصلي في حالة الفشل
+  }
+}
 // ============================================
 // 🔧 Helpers
 // ============================================

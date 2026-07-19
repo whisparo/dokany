@@ -1,5 +1,6 @@
 // src/lib/db/schema/shipments.ts
 
+import type { D1Database } from '@cloudflare/workers-types'; // ✅ تمت الإضافة
 import {
   sqliteTable,
   text,
@@ -13,6 +14,7 @@ import { type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { classifyError } from '@/lib/errors/classifier';
 
+// ... باقي الكود (الأنواع، الجدول، الدوال المساعدة) بدون أي تغيير ...
 // ============================================
 // 📦 أنواع TypeScript
 // ============================================

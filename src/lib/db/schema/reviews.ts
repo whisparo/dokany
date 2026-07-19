@@ -12,6 +12,7 @@ import { sql, eq, and, isNull, desc, asc, avg, count } from 'drizzle-orm';
 import { type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { classifyError } from '@/lib/errors/classifier';
+import type { D1Database } from '@cloudflare/workers-types';
 
 // ============================================
 // 📦 أنواع TypeScript
