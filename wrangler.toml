@@ -3,7 +3,7 @@ compatibility_date = "2026-07-08"
 compatibility_flags = ["nodejs_compat"]
 
 # 🚀 التصحيح الجوهري: التوجيه للمجلد الشامل الذي أعدته السكريبتات
-pages_build_output_dir = ".open-next/assets"
+pages_build_output_dir = ".open-next"
 
 [[d1_databases]]
 binding = "DB"
