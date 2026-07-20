@@ -4457,7 +4457,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/auth/[...all]/route.js": {
-      "bytes": 10993,
+      "bytes": 10967,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/router/utils/app-paths.js",
@@ -4594,7 +4594,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/auth/session/route.js": {
-      "bytes": 10903,
+      "bytes": 10877,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/router/utils/app-paths.js",
@@ -7820,13 +7820,13 @@
           "bytesInOutput": 46497
         },
         ".open-next/server-functions/default/.next/server/app/api/auth/[...all]/route.js": {
-          "bytesInOutput": 11272
+          "bytesInOutput": 11246
         },
         ".open-next/server-functions/default/.next/server/app/api/errors/report/route.js": {
           "bytesInOutput": 8144
         },
         ".open-next/server-functions/default/.next/server/app/api/auth/session/route.js": {
-          "bytesInOutput": 11183
+          "bytesInOutput": 11157
         },
         ".open-next/server-functions/default/.next/server/app/api/test-error/route.js": {
           "bytesInOutput": 7966
@@ -8006,7 +8006,7 @@
           "bytesInOutput": 58279
         }
       },
-      "bytes": 4267571
+      "bytes": 4267519
     }
   }
 }

@@ -1,17 +1,17 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
-  "/api/cart/sync/route": "app/api/cart/sync/route.js",
   "/api/auth/[...all]/route": "app/api/auth/[...all]/route.js",
+  "/api/cart/sync/route": "app/api/cart/sync/route.js",
   "/api/errors/report/route": "app/api/errors/report/route.js",
   "/api/ping/route": "app/api/ping/route.js",
   "/api/telegram/mini-app/route": "app/api/telegram/mini-app/route.js",
   "/api/telegram/webhook/route": "app/api/telegram/webhook/route.js",
-  "/api/test-error/route": "app/api/test-error/route.js",
   "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/api/test-error/route": "app/api/test-error/route.js",
   "/api/auth/session/route": "app/api/auth/session/route.js",
   "/api/cron/process-errors/route": "app/api/cron/process-errors/route.js",
   "/page": "app/page.js",
-  "/(storefront)/[storeSlug]/products/[slug]/page": "app/(storefront)/[storeSlug]/products/[slug]/page.js",
   "/(storefront)/[storeSlug]/checkout/page": "app/(storefront)/[storeSlug]/checkout/page.js",
+  "/(storefront)/[storeSlug]/products/[slug]/page": "app/(storefront)/[storeSlug]/products/[slug]/page.js",
   "/(storefront)/[storeSlug]/page": "app/(storefront)/[storeSlug]/page.js"
 }
