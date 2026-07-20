@@ -1,5 +1,9 @@
-// open-next.config.ts
-export default {
+import type { OpenNextConfig } from "@opennextjs/aws/types/open-next.js";
+
+const config: OpenNextConfig = {
+  // 🔥 السطر ده هو اللي هيحل الـ Infinite Loop
+  buildCommand: "bun run build:next",
+
   default: {
     override: {
       wrapper: "cloudflare-node",
@@ -23,3 +27,5 @@ export default {
     },
   },
 };
+
+export default config;
