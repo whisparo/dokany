@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:cloudflare": "bunx wrangler pages dev .open-next",
-    "build": "next build && npx @opennextjs/cloudflare build --skip-build",
+    "build": "npx @opennextjs/cloudflare build",
     "deploy": "bun run build && bunx wrangler pages deploy .open-next --project-name=dokany --commit-dirty=true",
     "lint": "next lint",
     "db:push": "bunx drizzle-kit push",
