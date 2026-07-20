@@ -2,10 +2,9 @@ name = "dokany"
 compatibility_date = "2026-07-08"
 compatibility_flags = ["nodejs_compat"]
 
-# ✅ هذا هو المطلوب لـ Pages:
-pages_build_output_dir = ".open-next"
+# 🚀 التصحيح الجوهري: التوجيه للمجلد الشامل الذي أعدته السكريبتات
+pages_build_output_dir = ".open-next/assets"
 
-# ✅ باقي الإعدادات (D1, vars) كما هي
 [[d1_databases]]
 binding = "DB"
 database_name = "dokany-db"
@@ -13,6 +12,5 @@ database_id = "64114e17-bff6-4c40-9340-095165e06421"
 migrations_dir = "drizzle"
 
 [vars]
-# متغيرات البيئة (إن وجدت)
 B2_ENDPOINT = "https://s3.eu-central-003.backblazeb2.com"
 B2_BUCKET_NAME = "dokany-logs-bucket"

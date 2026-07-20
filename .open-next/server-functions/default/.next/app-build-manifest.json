@@ -44,12 +44,12 @@
       "static/chunks/main-app-4a0ac456191027e6.js",
       "static/chunks/app/api/ping/route-5acf9b81b952ca79.js"
     ],
-    "/api/telegram/mini-app/route": [
+    "/api/test-error/route": [
       "static/chunks/webpack-6b9f72e119f1e7bf.js",
       "static/chunks/4bd1b696-c023c6e3521b1417.js",
       "static/chunks/255-4f84124391a7dac4.js",
       "static/chunks/main-app-4a0ac456191027e6.js",
-      "static/chunks/app/api/telegram/mini-app/route-5acf9b81b952ca79.js"
+      "static/chunks/app/api/test-error/route-5acf9b81b952ca79.js"
     ],
     "/api/telegram/webhook/route": [
       "static/chunks/webpack-6b9f72e119f1e7bf.js",
@@ -58,12 +58,12 @@
       "static/chunks/main-app-4a0ac456191027e6.js",
       "static/chunks/app/api/telegram/webhook/route-5acf9b81b952ca79.js"
     ],
-    "/api/test-error/route": [
+    "/api/telegram/mini-app/route": [
       "static/chunks/webpack-6b9f72e119f1e7bf.js",
       "static/chunks/4bd1b696-c023c6e3521b1417.js",
       "static/chunks/255-4f84124391a7dac4.js",
       "static/chunks/main-app-4a0ac456191027e6.js",
-      "static/chunks/app/api/test-error/route-5acf9b81b952ca79.js"
+      "static/chunks/app/api/telegram/mini-app/route-5acf9b81b952ca79.js"
     ],
     "/api/auth/session/route": [
       "static/chunks/webpack-6b9f72e119f1e7bf.js",

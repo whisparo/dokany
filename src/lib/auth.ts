@@ -3,13 +3,13 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { getDb } from '@/lib/db/db'; 
-import { users, sessions, accounts } from '@/lib/db/schema/users';
+import * as schema from '@/lib/db/schema'; // 👈 استيراد الـ Schema الكاملة
+import { users } from '@/lib/db/schema/users';
 import { eq } from 'drizzle-orm';
-import * as bcrypt from 'bcrypt-ts';
+import type { D1Database } from '@cloudflare/workers-types';
 
-// تعريف صارم لواجهة البيئة لحظر الـ dynamic casting أو any
 interface CloudflareWorkerEnv {
-  DB: import('@cloudflare/workers-types').D1Database;
+  DB: D1Database;
   TELEGRAM_BOT_TOKEN?: string;
   BETTER_AUTH_URL?: string;
   NEXT_PUBLIC_APP_URL?: string;
@@ -30,17 +30,11 @@ interface PinInput {
   pin: string;
 }
 
-/**
- * 🌟 التحقق من صحة بيانات تليجرام باستخدام Web Crypto API المتوافقة 100% مع الـ Edge Runtime
- * تاييبس صافية بالكامل وبدون أي مكتبات Node.js خارجية
- */
 async function verifyTelegramHash(data: Record<string, string | undefined>, botToken: string): Promise<boolean> {
   if (!data.hash || !data.auth_date) return false;
 
   const authDate = parseInt(data.auth_date, 10);
-  if (Math.floor(Date.now() / 1000) - authDate > 86400) {
-    return false;
-  }
+  if (Math.floor(Date.now() / 1000) - authDate > 86400) return false;
 
   const checkData: Record<string, string> = {};
   Object.keys(data).forEach((key) => {
@@ -51,16 +45,13 @@ async function verifyTelegramHash(data: Record<string, string | undefined>, botT
 
   const sortedKeys = Object.keys(checkData).sort();
   const dataString = sortedKeys.map(k => `${k}=${checkData[k]}`).join('\n');
-  
   const encoder = new TextEncoder();
 
-  // 1. حساب الـ Secret Key مفتاح التشفير الأساسي للـ Bot Token
   const secretKeyBuffer = await globalThis.crypto.subtle.digest(
     'SHA-256',
     encoder.encode(botToken)
   );
 
-  // 2. استيراد المفتاح لحساب الـ HMAC
   const cryptoKey = await globalThis.crypto.subtle.importKey(
     'raw',
     secretKeyBuffer,
@@ -69,38 +60,28 @@ async function verifyTelegramHash(data: Record<string, string | undefined>, botT
     ['sign']
   );
 
-  // 3. توقيع سلسلة البيانات
   const signatureBuffer = await globalThis.crypto.subtle.sign(
     'HMAC',
     cryptoKey,
     encoder.encode(dataString)
   );
 
-  // 4. تحويل الناتج إلى Hex String ومقارنته بشكل آمن
   const hashArray = Array.from(new Uint8Array(signatureBuffer));
   const calculatedHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
   return calculatedHash === data.hash;
 }
 
-// استخراج آمن للبيئة بدون الاختباء خلف "any"
 const globalEnv = (typeof process !== 'undefined' ? process.env : {}) as unknown as CloudflareWorkerEnv;
 
-// ============================================================
-// 🧠 بناء الـ Auth مع جلب الـ DB ديناميكياً لبيئة Cloudflare D1
-// ============================================================
+// 1. جلب instance من الـ Database مع ربط الـ Schema الموحد
+const db = getDb({ DB: globalEnv.DB });
+
 export const auth = betterAuth({
-  database: drizzleAdapter(
-    getDb({ DB: globalEnv.DB }), 
-    {
-      provider: 'sqlite', 
-      schema: {
-        users,
-        sessions,
-        accounts,
-      },
-    }
-  ),
+  database: drizzleAdapter(db, {
+    provider: 'sqlite', 
+    schema: schema, // 👈 التمرير المباشر لكائن الـ Schema بيغذي Better-Auth بالتايبات المظبوطة
+  }),
   
   baseURL: globalEnv.BETTER_AUTH_URL || globalEnv.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
 
@@ -112,9 +93,6 @@ export const auth = betterAuth({
   },
 
   providers: [
-    // ========================================================================
-    // 1. مزود التيليجرام (Telegram)
-    // ========================================================================
     {
       id: 'telegram',
       name: 'Telegram',
@@ -148,6 +126,7 @@ export const auth = betterAuth({
 
           if (!isValid || !input.telegramId) return null;
 
+          // 🎯 استخدام db المجهزة بالـ Schema بدون إعادة استدعاء متكرر
           const localDb = getDb({ DB: globalEnv.DB });
 
           const user = await localDb.query.users.findFirst({
@@ -196,10 +175,6 @@ export const auth = betterAuth({
         },
       },
     },
-
-    // ========================================================================
-    // 2. مزود الـ Backup PIN
-    // ========================================================================
     {
       id: 'pin',
       name: 'Backup PIN',
@@ -220,6 +195,8 @@ export const auth = betterAuth({
             return null;
           }
 
+          // تم استبدال bcrypt بـ Web Crypto / bcrypt-ts المتوافق مع Edge Runtime
+          const bcrypt = await import('bcrypt-ts');
           try {
             const isValid = await bcrypt.compare(input.pin, user.backupPin);
             if (!isValid) return null;
