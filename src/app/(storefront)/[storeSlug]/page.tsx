@@ -9,6 +9,16 @@ interface StorePageProps {
   searchParams: Promise<{ page?: string; sort?: string; currency?: string }>;
 }
 
+// 🎯 السماح للمتجر الديناميكي بالعمل وقت الطلب
+export const dynamicParams = true;
+
+/**
+ * 🛠️ دالة الـ SSG لإرضاء شروط Static Export وقت الـ Build
+ */
+export async function generateStaticParams() {
+  return [];
+}
+
 export default async function StorePage({ params, searchParams }: StorePageProps) {
   const { storeSlug } = await params;
   const sParams = await searchParams;
@@ -22,7 +32,7 @@ export default async function StorePage({ params, searchParams }: StorePageProps
       <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-12 pb-16">
         <ProductGrid 
           data={payload.productGrid} 
-          storeSlug={storeSlug} // 👈 مررنا الـ storeSlug هنا بمنتهى النظافة
+          storeSlug={storeSlug} 
           title="منتجات المتجر"
           description="تصفح أحدث المنتجات المضافة"
         />
