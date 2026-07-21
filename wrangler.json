@@ -1,6 +1,6 @@
 {
-  "name": "dokany",
-  "pages_build_output_dir": ".open-next/assets",
+  "name": "dokany-web",
+  "pages_build_output_dir": ".open-next",
   "compatibility_date": "2026-07-08",
   "compatibility_flags": ["nodejs_compat"]
 }
