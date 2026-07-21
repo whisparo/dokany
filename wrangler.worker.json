@@ -1,0 +1,17 @@
+{
+  "name": "dokany-api",
+  "main": "src/workers/index.ts",
+  "compatibility_date": "2026-07-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dokany-db",
+      "database_id": "64114e17-bff6-4c40-9340-095165e06421"
+    }
+  ],
+  "vars": {
+    "B2_ENDPOINT": "https://s3.eu-central-003.backblazeb2.com",
+    "B2_BUCKET_NAME": "dokany-errors"
+  }
+}

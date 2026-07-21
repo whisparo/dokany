@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "dev:worker": "npx wrangler dev src/worker/index.ts",
-    "build": "next build",
-    "deploy:frontend": "npm run build && npx wrangler pages deploy out --project-name=dokany-web",
+    "build": "open-next-cloudflare build",
+    "deploy:frontend": "npm run build && open-next-cloudflare deploy",
     "deploy:worker": "npx wrangler deploy src/worker/index.ts",
     "deploy": "npm run deploy:frontend && npm run deploy:worker",
     "lint": "next lint",
@@ -35,6 +35,8 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260714.1",
     "@eslint/eslintrc": "^3.3.6",
+    "@opennextjs/aws": "^4.0.2",
+    "@opennextjs/cloudflare": "^1.20.2",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19.2.17",

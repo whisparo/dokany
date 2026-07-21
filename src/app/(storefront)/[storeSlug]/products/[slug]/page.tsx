@@ -1,43 +1,36 @@
-'use client';
+// app/(storefront)/[storeSlug]/products/[slug]/page.tsx
 
-import { useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { notFound } from 'next/navigation';
+import { ProductDetailsOrchestrator } from '@/lib/orchestrators/product-details-orchestrator';
 import { ProductDetails } from '@/components/storefront/ProductDetails';
 
-// ✅ مطلوب للـ static export
-export const dynamicParams = false;
-
-export function generateStaticParams() {
-  return [];
+interface ProductPageProps {
+  params: Promise<{ storeSlug: string; slug: string }>;
+  searchParams: Promise<{ currency?: string }>;
 }
 
-export default function ProductPage() {
-  const params = useParams();
-  const searchParams = useSearchParams();
-  const storeSlug = params.storeSlug as string;
-  const slug = params.slug as string;
-  const currency = searchParams.get('currency') || 'EGP';
+// ✅ مع OpenNext، نستخدم SSR (Dynamic) بدون generateStaticParams
+export const dynamic = 'force-dynamic';
 
-  const [product, setProduct] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+export default async function ProductPage({ params, searchParams }: ProductPageProps) {
+  const { storeSlug, slug } = await params;
+  const { currency } = await searchParams;
 
-  useEffect(() => {
-    fetch(`/api/store/${storeSlug}/products/${slug}?currency=${currency}`)
-      .then(res => res.json())
-      .then(data => {
-        setProduct(data.data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [storeSlug, slug, currency]);
+  const userCurrency = currency || 'EGP';
+  const payload = await ProductDetailsOrchestrator.fetchDetailPagePayload(
+    storeSlug,
+    slug,
+    userCurrency
+  );
 
-  if (loading) return <div>جاري التحميل...</div>;
-  if (!product) return <div>المنتج غير موجود</div>;
+  if (!payload) {
+    return notFound();
+  }
 
   return (
     <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950/20 pb-16" dir="rtl">
       <div className="max-w-7xl mx-auto px-4 mt-8">
-        <ProductDetails data={product} />
+        <ProductDetails data={payload.productDetails} />
       </div>
     </div>
   );
