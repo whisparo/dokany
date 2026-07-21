@@ -4,8 +4,19 @@ import { notFound } from 'next/navigation';
 import { Checkout } from '@/components/storefront/Checkout';
 import { getCheckoutRawData, getSessionId } from '@/lib/data/checkout-data-fetcher';
 import { getStoreRawData } from '@/lib/data/store-data-fetcher';
-import { handleCheckoutSubmit } from './checkout.actions'; // 👈 الـ Import النظيف من الملف الجديد
+import { handleCheckoutSubmit } from './checkout.actions';
 import type { Metadata } from 'next';
+
+// 🎯 السماح بتوليد المسارات غير المجهزة وقت الـ Build ديناميكياً
+export const dynamicParams = true;
+
+/**
+ * 🛠️ دالة الـ SSG المضافة لحل خطأ "output: export"
+ * ترجع مصفوفة فارغة لتخطي التوليد المسبق الثابت
+ */
+export async function generateStaticParams() {
+  return [];
+}
 
 export async function generateMetadata({
   params,
@@ -36,7 +47,7 @@ export default async function CheckoutPage({
   const rawData = await getCheckoutRawData(storeRaw.store.id, undefined, sessionId);
 
   if (!rawData || !rawData.cartItems || rawData.cartItems.length === 0) {
-    notFound(); // أو redirect للرئيسية حسب منطق عملك
+    notFound();
   }
 
   const boundSubmitAction = handleCheckoutSubmit.bind(null, storeSlug);
