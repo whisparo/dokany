@@ -7,12 +7,12 @@ import { getStoreRawData } from '@/lib/data/store-data-fetcher';
 import { handleCheckoutSubmit } from './checkout.actions';
 import type { Metadata } from 'next';
 
-// 🎯 السماح بتوليد المسارات غير المجهزة وقت الـ Build ديناميكياً
-export const dynamicParams = true;
+// ✅ إعدادات static export
+export const dynamic = 'force-static';
+export const dynamicParams = false;
 
 /**
- * 🛠️ دالة الـ SSG المضافة لحل خطأ "output: export"
- * ترجع مصفوفة فارغة لتخطي التوليد المسبق الثابت
+ * 🛠️ دالة الـ SSG - ترجع مصفوفة فارغة لتخطي التوليد المسبق
  */
 export async function generateStaticParams() {
   return [];

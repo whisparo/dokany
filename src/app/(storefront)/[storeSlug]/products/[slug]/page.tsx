@@ -14,12 +14,12 @@ interface ProductPageProps {
   }>;
 }
 
-// 🎯 السماح للمسارات الديناميكية بالعمل وقت الطلب (On-demand)
-export const dynamicParams = true;
+// ✅ إعدادات static export
+export const dynamic = 'force-static';
+export const dynamicParams = false;
 
 /**
- * 🛠️ دالة الـ SSG المضافة لحل خطأ "output: export"
- * ترجع مصفوفة فارغة لتخطي التوليد المسبق الثابت وترك جلب البيانات ديناميكياً
+ * 🛠️ دالة الـ SSG - ترجع مصفوفة فارغة لتخطي التوليد المسبق
  */
 export async function generateStaticParams() {
   return [];

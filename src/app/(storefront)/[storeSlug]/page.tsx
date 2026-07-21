@@ -9,11 +9,12 @@ interface StorePageProps {
   searchParams: Promise<{ page?: string; sort?: string; currency?: string }>;
 }
 
-// 🎯 السماح للمتجر الديناميكي بالعمل وقت الطلب
-export const dynamicParams = true;
+// ✅ إعدادات static export
+export const dynamic = 'force-static';
+export const dynamicParams = false;
 
 /**
- * 🛠️ دالة الـ SSG لإرضاء شروط Static Export وقت الـ Build
+ * 🛠️ دالة الـ SSG - ترجع مصفوفة فارغة لتخطي التوليد المسبق
  */
 export async function generateStaticParams() {
   return [];
