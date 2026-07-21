@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // output: 'export', // ❌ تم إيقافه ليعمل المتجر بصورة ديناميكية على الـ Edge
+  output: 'export', // ✅ أمر أساسي عشان يطلع مجلد out
   images: {
     unoptimized: true,
     remotePatterns: [
@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: '**' },
     ],
   },
+  trailingSlash: true,
 };
 
 export default nextConfig;
