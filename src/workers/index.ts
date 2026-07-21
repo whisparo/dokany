@@ -1,183 +1,94 @@
-// src/worker/index.ts
+// src/workers/index.ts
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { getDb } from '@/lib/db/db';
-import { eq, sql, and } from 'drizzle-orm'; // ✅ أضفنا and لدمج الشروط المزدوجة
-import * as schema from '@/lib/db/schema';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import { Env } from '../lib/env';
 
-// ============================================================
-// 🏗️ تعريف البيئة (Bindings)
-// ============================================================
-export type Env = {
-  DB: D1Database;
-  R2_BUCKET: R2Bucket; // ✅ أساسي لمحرك الصور الهجين
-  TELEGRAM_BOT_TOKEN?: string;
-  BETTER_AUTH_SECRET?: string;
-  NEXT_PUBLIC_APP_URL?: string;
-  UPSTASH_REDIS_REST_URL?: string;
-  UPSTASH_REDIS_REST_TOKEN?: string;
-  QSTASH_URL?: string;
-  QSTASH_TOKEN?: string;
-  // ملاحظة: في المراحل المتقدمة، سنضيف DB_1, DB_2, ... للتوسع العضوي
-};
+// Routes
+import { healthRouter } from './routes/health';
+import { storeRouter } from './routes/store';
+import { categoriesRouter } from './routes/categories';
+import { productsRouter } from './routes/products';
+import { ordersRouter } from './routes/orders';
+import { authRouter } from './routes/auth';
+import { telegramRouter } from './routes/telegram';
 
-// ============================================================
-// 🚀 إنشاء الـ Worker
-// ============================================================
+// 🏛️ الاستيرادات المعتمدة والدقيقة للمشروع
+import { classifyError } from '@/lib/errors/classifier';
+import { sendErrorToTelegram } from '@/lib/errors/notifier';
+import { ErrorCategory } from '@/lib/errors/types';
+
 const app = new Hono<{ Bindings: Env }>();
 
-// ============================================================
-// 📦 Middleware
-// ============================================================
-
-// ✅ تسجيل الطلبات (مفيد جداً للـ Debugging في Cloudflare)
+// Middlewares
 app.use('*', logger());
-
-// ✅ CORS (مضبط بدقة للفرونت إند الخاص بنا فقط)
 app.use('*', cors({
-  origin: ['https://dokany.pages.dev', 'http://localhost:3000'],
+  origin: ['https://dokany.pages.dev', 'https://dokany-web.pages.dev', 'http://localhost:3000'],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'X-Idempotency-Key'], // ✅ أضفنا الهيدر الخاص بالـ Idempotency
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Idempotency-Key'],
   exposeHeaders: ['Content-Length'],
   maxAge: 86400,
 }));
 
-// ============================================================
-// ❤️ Health Check
-// ============================================================
-app.get('/api/health', (c) => {
-  return c.json({
-    success: true,
-    data: {
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      worker: 'dokany-api',
-      environment: c.env.NEXT_PUBLIC_APP_URL?.includes('localhost') ? 'development' : 'production'
-    }
-  });
-});
+// 🏛️ مسار المراقبة الخارجية (Uptime Robot Check)
+app.get('/ping', (c) => c.text('OK', 200));
 
-// ============================================================
-// 🏪 Store API (Read Operations)
-// ============================================================
-
-// ✅ جلب بيانات متجر معين
-app.get('/api/store/:slug', async (c) => {
-  try {
-    const db = getDb({ DB: c.env.DB });
-    const slug = c.req.param('slug');
-
-    const store = await db
-      .select()
-      .from(schema.stores)
-      .where(eq(schema.stores.slug, slug))
-      .get();
-
-    if (!store) {
-      return c.json({ success: false, error: 'Store not found' }, 404);
-    }
-
-    return c.json({ success: true, data: store });
-  } catch (error) {
-    console.error('❌ [Worker] Error fetching store:', error);
-    return c.json({ success: false, error: 'Internal server error' }, 500);
+/**
+ * 🎯 تحديد الـ Status Code الدقيق وفق أنواع Hono بدون الحاجة لـ Casting
+ */
+function mapCategoryToStatusCode(category: ErrorCategory): ContentfulStatusCode {
+  switch (category) {
+    case 'validation':
+      return 400;
+    case 'security':
+      return 401;
+    case 'business':
+      return 422;
+    case 'network':
+      return 503;
+    case 'database':
+    case 'performance':
+    case 'system':
+    default:
+      return 500;
   }
+}
+
+// 🏛️ Global Error Handler التنفيذي المنسق مع notifier.ts
+app.onError((err, c) => {
+  // 1. تصنيف الخطأ وتحويله إلى SystemError الموحد
+  const systemError = classifyError(err);
+
+  // 2. استدعاء المبلّغ المركزي (يتولى الحفظ في B2 + الفحص + تليجرام في الخلفية)
+  c.executionCtx.waitUntil(
+    sendErrorToTelegram(systemError, c.env).catch((sendErr: unknown) => {
+      console.error('❌ Failed to process error notification pipeline:', sendErr);
+    })
+  );
+
+  // 3. تحديد HTTP Status Code بحسب نوع الخطأ
+  const statusCode = mapCategoryToStatusCode(systemError.category);
+
+  // 4. إرجاع الرد الموحد والنظيف للمستخدم (Strict Type-Safe)
+  return c.json(
+    {
+      success: false,
+      code: systemError.code,
+      message: systemError.userMessage || 'حدث خطأ غير متوقع، يسعدنا مساعدتك.',
+    },
+    statusCode
+  );
 });
 
-// ✅ جلب منتجات متجر معين (مع Pagination صحيح)
-app.get('/api/store/:slug/products', async (c) => {
-  try {
-    const db = getDb({ DB: c.env.DB });
-    const slug = c.req.param('slug');
-    const limit = Math.min(Number(c.req.query('limit')) || 20, 100); // ✅ حماية من طلبات ضخمة (Max 100)
-    const offset = Number(c.req.query('offset')) || 0;
+// Routes Mount
+app.route('/api', healthRouter);
+app.route('/api', storeRouter);
+app.route('/api', categoriesRouter);
+app.route('/api', productsRouter);
+app.route('/api', ordersRouter);
+app.route('/api', authRouter);
+app.route('/api', telegramRouter);
 
-    // 1. جلب بيانات المتجر للتحقق من الوجود
-    const store = await db
-      .select()
-      .from(schema.stores)
-      .where(eq(schema.stores.slug, slug))
-      .get();
-
-    if (!store) {
-      return c.json({ success: false, error: 'Store not found' }, 404);
-    }
-
-    // 2. جلب العدد الإجمالي للمنتجات (Pagination Correctness)
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(schema.products)
-      .where(eq(schema.products.storeId, store.id));
-
-    // 3. جلب المنتجات للصفحة الحالية
-    const products = await db
-      .select()
-      .from(schema.products)
-      .where(eq(schema.products.storeId, store.id))
-      .limit(limit)
-      .offset(offset);
-
-    return c.json({
-      success: true,
-      data: {
-        products,
-        pagination: { 
-          limit, 
-          offset, 
-          total: count, // ✅ العدد الحقيقي الكلي
-          hasMore: offset + limit < count 
-        },
-      }
-    });
-  } catch (error) {
-    console.error('❌ [Worker] Error fetching products:', error);
-    return c.json({ success: false, error: 'Internal server error' }, 500);
-  }
-});
-
-// ✅ جلب منتج مفرد (بـ slug)
-app.get('/api/store/:slug/products/:productSlug', async (c) => {
-  try {
-    const db = getDb({ DB: c.env.DB });
-    const slug = c.req.param('slug');
-    const productSlug = c.req.param('productSlug');
-
-    const store = await db
-      .select()
-      .from(schema.stores)
-      .where(eq(schema.stores.slug, slug))
-      .get();
-
-    if (!store) {
-      return c.json({ success: false, error: 'Store not found' }, 404);
-    }
-
-    // ✅ التصحيح الهندسي: استبدال .where() المكررة بـ and(...)
-    const product = await db
-      .select()
-      .from(schema.products)
-      .where(
-        and(
-          eq(schema.products.slug, productSlug),
-          eq(schema.products.storeId, store.id) // ✅ ضمان أن المنتج يخص هذا المتجر فقط
-        )
-      )
-      .get();
-
-    if (!product) {
-      return c.json({ success: false, error: 'Product not found' }, 404);
-    }
-
-    return c.json({ success: true, data: product });
-  } catch (error) {
-    console.error('❌ [Worker] Error fetching product:', error);
-    return c.json({ success: false, error: 'Internal server error' }, 500);
-  }
-});
-
-// ============================================================
-// 📦 تصدير الـ Worker
-// ============================================================
 export default app;

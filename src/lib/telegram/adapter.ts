@@ -1,14 +1,51 @@
 // src/lib/telegram/adapter.ts
 
-const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
+// 1. استيراد ButtonItem فقط من types المعتمد لمنع التكرار والتعارض
+import type { ButtonItem } from './types';
 
-export function telegramToContext(update: any) {
+// 2. تعريف الأنواع المعتمدة على ButtonItem داخل هذا الملف
+export type ButtonRows = ButtonItem[] | ButtonItem[][];
+
+export interface TelegramUpdate {
+  update_id: number;
+  message?: {
+    chat: { id: number | string };
+    from?: { id: number | string };
+    text?: string;
+    contact?: { phone_number: string };
+  };
+  callback_query?: {
+    data?: string;
+    message?: {
+      chat: { id: number | string };
+      from?: { id: number | string };
+    };
+    from?: { id: number | string };
+  };
+}
+
+export interface TelegramContext {
+  platform: 'telegram';
+  externalId: string;
+  message: string;
+  contact?: { phone_number: string };
+  telegramUserId?: string;
+}
+
+// ============================================================
+// 🚀 الدوال المجهزة (Functions)
+// ============================================================
+
+/**
+ * تحويل أوبجيكت Telegram Update إلى Context موحد داخل التطبيق
+ */
+export function telegramToContext(update: TelegramUpdate): TelegramContext | null {
   const msg = update.message || update.callback_query?.message;
   if (!msg) return null;
 
   const chat = msg.chat;
-  const contact = msg.contact;
-  const text = update.callback_query?.data || msg.text || '';
+  const contact = update.message?.contact;
+  const text = update.callback_query?.data || update.message?.text || '';
 
   return {
     platform: 'telegram' as const,
@@ -19,16 +56,44 @@ export function telegramToContext(update: any) {
   };
 }
 
+/**
+ * معالجة الـ Update القادم من تليجرام
+ */
+export async function handleTelegramUpdate(
+  db: unknown,
+  update: TelegramUpdate,
+  botToken: string
+): Promise<void> {
+  const ctx = telegramToContext(update);
+  if (!ctx) return;
+
+  console.log('🤖 Processing Telegram Context for Chat ID:', ctx.externalId);
+
+  // استجابة أولية لتجربة العمل
+  if (ctx.message === '/start') {
+    await sendTelegramMessage(
+      botToken,
+      ctx.externalId,
+      'أهلاً بك! مرحباً بك في الخدمة 🚀'
+    );
+  }
+}
+
+/**
+ * إرسال رسالة إلى تليجرام مع دعم إعداد الأزرار
+ */
 export async function sendTelegramMessage(
+  botToken: string,
   chatId: string,
   text: string,
-  buttons?: any,
-  persistentButtons?: any,
+  buttons?: ButtonRows,
+  persistentButtons?: ButtonRows
 ): Promise<boolean> {
   try {
+    const telegramApi = `https://api.telegram.org/bot${botToken}`;
     const replyMarkup = buildReplyMarkup(buttons, persistentButtons);
 
-    const response = await fetch(`${TELEGRAM_API}/sendMessage`, {
+    const response = await fetch(`${telegramApi}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -39,9 +104,8 @@ export async function sendTelegramMessage(
       }),
     });
 
-    const responseText = await response.text();
-
     if (!response.ok) {
+      const responseText = await response.text();
       console.error('❌ Telegram API Error:', response.status, responseText);
       return false;
     }
@@ -54,11 +118,14 @@ export async function sendTelegramMessage(
   }
 }
 
-function buildReplyMarkup(buttons?: any, persistentButtons?: any) {
+/**
+ * بناء هيكل الأزرار المخصص لـ Telegram API
+ */
+function buildReplyMarkup(buttons?: ButtonRows, persistentButtons?: ButtonRows) {
   if (persistentButtons && Array.isArray(persistentButtons) && persistentButtons.length > 0) {
     return {
-      keyboard: persistentButtons.map((row: any[]) =>
-        row.map((btn: any) => ({ text: btn.text }))
+      keyboard: (persistentButtons as ButtonItem[][]).map((row) =>
+        row.map((btn) => ({ text: btn.text }))
       ),
       resize_keyboard: true,
       one_time_keyboard: false,
@@ -70,20 +137,21 @@ function buildReplyMarkup(buttons?: any, persistentButtons?: any) {
   }
 
   if (Array.isArray(buttons)) {
-    // مصفوفة 2D (صفوف وأعمدة)
+    // مصفوفة ثنائية الأبعاد (صفوف وأعمدة)
     if (buttons.length > 0 && Array.isArray(buttons[0])) {
-      if (buttons.length === 1 && buttons[0].length === 1 && buttons[0][0]?.callback_data === 'share_contact') {
+      const grid = buttons as ButtonItem[][];
+      
+      if (grid.length === 1 && grid[0].length === 1 && grid[0][0]?.callback_data === 'share_contact') {
         return {
-          keyboard: [[{ text: buttons[0][0].text, request_contact: true }]],
+          keyboard: [[{ text: grid[0][0].text, request_contact: true }]],
           resize_keyboard: true,
           one_time_keyboard: true,
         };
       }
 
       return {
-        inline_keyboard: buttons.map((row: any[]) =>
-          row.map((btn: any) => {
-            // تقديم شرط الـ Web App عشان ما يتداخلش مع الرابط العادي
+        inline_keyboard: grid.map((row) =>
+          row.map((btn) => {
             if (btn.type === 'web_app' && btn.url) {
               return { text: btn.text, web_app: { url: btn.url } };
             }
@@ -95,11 +163,13 @@ function buildReplyMarkup(buttons?: any, persistentButtons?: any) {
     }
 
     // مصفوفة مسطحة (Flat Array)
-    const hasContact = buttons.some((b: any) => b.type === 'contact');
+    const flatList = buttons as ButtonItem[];
+    const hasContact = flatList.some((b) => b.type === 'contact');
+    
     if (hasContact) {
       return {
         keyboard: [
-          buttons.map((b: any) => ({
+          flatList.map((b) => ({
             text: b.text,
             request_contact: b.type === 'contact' ? true : undefined,
           })),
@@ -111,7 +181,7 @@ function buildReplyMarkup(buttons?: any, persistentButtons?: any) {
 
     return {
       inline_keyboard: [
-        buttons.map((b: any) => {
+        flatList.map((b) => {
           if (b.type === 'web_app' && b.url) {
             return { text: b.text, web_app: { url: b.url } };
           }

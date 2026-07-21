@@ -215,24 +215,53 @@ export type NewOrderItem = InferInsertModel<typeof orderItems>;
 // 🛠️ الدوال المساعدة (تُنفذ الحسابات بدقة في الـ Application Layer)
 // ============================================
 
-export function calculateLineTotal(price: string, quantity: number): string {
-  return (parseFloat(price) * quantity).toFixed(2);
+/**
+ * دالة مساعدة لتحويل السعر النصفي إلى سنتات/قروش تجنباً لأخطاء Floating Point
+ */
+function toCents(amount: string | number): number {
+  return Math.round(parseFloat(amount.toString() || '0') * 100);
 }
 
-export function calculateNetAmount(lineTotal: string, commission: string, tax: string): string {
-  return (parseFloat(lineTotal) - parseFloat(commission) - parseFloat(tax)).toFixed(2);
+/**
+ * دالة مساعدة لإعادة السنتات إلى صيغة نصية محددة بفرعين عشريين
+ */
+function toFormattedString(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
+export function calculateLineTotal(price: string, quantity: number): string {
+  const priceInCents = toCents(price);
+  const totalInCents = priceInCents * quantity;
+  return toFormattedString(totalInCents);
 }
 
 export function calculateCommission(lineTotal: string, rate: number): string {
-  return ((parseFloat(lineTotal) * rate) / 100).toFixed(2);
+  const lineTotalInCents = toCents(lineTotal);
+  const commissionInCents = Math.round((lineTotalInCents * rate) / 100);
+  return toFormattedString(commissionInCents);
 }
 
 export function calculateTax(lineTotal: string, rate: number): string {
-  return ((parseFloat(lineTotal) * rate) / 100).toFixed(2);
+  const lineTotalInCents = toCents(lineTotal);
+  const taxInCents = Math.round((lineTotalInCents * rate) / 100);
+  return toFormattedString(taxInCents);
+}
+
+export function calculateNetAmount(lineTotal: string, commission: string, tax: string): string {
+  const lineTotalInCents = toCents(lineTotal);
+  const commissionInCents = toCents(commission);
+  const taxInCents = toCents(tax);
+  
+  const netInCents = lineTotalInCents - commissionInCents - taxInCents;
+  return toFormattedString(netInCents);
 }
 
 export function canReturnItem(item: OrderItem): boolean {
-  return item.status === 'delivered' && item.returnedQty < item.shippedQty && (!item.returnStatus || item.returnStatus === 'rejected');
+  return (
+    item.status === 'delivered' &&
+    item.returnedQty < item.shippedQty &&
+    (!item.returnStatus || item.returnStatus === 'rejected')
+  );
 }
 
 export function getReturnableQuantity(item: OrderItem): number {
@@ -240,7 +269,10 @@ export function getReturnableQuantity(item: OrderItem): number {
 }
 
 export function canShipItem(item: OrderItem): boolean {
-  return (item.status === 'pending' || item.status === 'processing') && item.shippedQty < item.orderedQty - item.cancelledQty;
+  return (
+    (item.status === 'pending' || item.status === 'processing') &&
+    item.shippedQty < item.orderedQty - item.cancelledQty
+  );
 }
 
 export function getShippableQuantity(item: OrderItem): number {

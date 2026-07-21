@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  output: 'export',
+  // output: 'export', // ❌ تم إيقافه ليعمل المتجر بصورة ديناميكية على الـ Edge
   images: {
     unoptimized: true,
     remotePatterns: [

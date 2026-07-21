@@ -121,17 +121,20 @@ export function ProductMedia({ data, theme }: ProductMediaProps) {
         >
           <button 
             type="button"
-            className="absolute top-6 right-6 text-white hover:text-slate-300 bg-white/10 hover:bg-white/20 p-3 rounded-full transition-all focus:outline-none"
+            className="absolute top-6 right-6 text-white hover:text-slate-300 bg-white/10 hover:bg-white/20 p-3 rounded-full transition-all focus:outline-none z-10"
             onClick={() => setIsZoomed(false)}
           >
             <X className="h-6 w-6" />
           </button>
 
-          <div className="relative max-w-[90vw] max-h-[90vh] aspect-auto flex items-center justify-center">
-            <img 
+          <div className="relative w-[90vw] h-[85vh] flex items-center justify-center">
+            <Image 
               src={activeMedia.url} 
               alt={data.name}
-              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl scale-95 animate-in zoom-in-95 duration-200"
+              fill
+              className="object-contain rounded-2xl shadow-2xl scale-95 animate-in zoom-in-95 duration-200"
+              sizes="90vw"
+              priority
             />
           </div>
         </div>
