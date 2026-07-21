@@ -10,12 +10,12 @@ import { classifyError } from '@/lib/errors/classifier';
 interface CreateStoreInput {
   phone: string;
   name: string;
-  storeName: string; // الاسم اللي كتبه التاجر (مثلاً: "متجر الفرسان" أو "الفرسان")
+  storeName: string; 
   telegramUserId?: string | number;
 }
 
 async function generateLoginLink(userId: string, storeId: string): Promise<string> {
-  return `https://dokanyy.vercel.app/dashboard?user=${userId}&store=${storeId}`;
+  return `https://dokany.pages.dev/dashboard?user=${userId}&store=${storeId}`;
 }
 
 /**
