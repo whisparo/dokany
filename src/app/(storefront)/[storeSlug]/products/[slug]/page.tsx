@@ -1,55 +1,38 @@
 // src/app/(storefront)/[storeSlug]/products/[slug]/page.tsx
 
-import { notFound } from 'next/navigation';
-import { ProductDetailsOrchestrator } from '@/lib/orchestrators/product-details-orchestrator';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import { ProductDetails } from '@/components/storefront/ProductDetails';
 
-interface ProductPageProps {
-  params: Promise<{
-    storeSlug: string;
-    slug: string;
-  }>;
-  searchParams: Promise<{
-    currency?: string;
-  }>;
-}
+export default function ProductPage() {
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const storeSlug = params.storeSlug as string;
+  const slug = params.slug as string;
+  const currency = searchParams.get('currency') || 'EGP';
 
-// ✅ إعدادات static export
-export const dynamic = 'force-static';
-export const dynamicParams = false;
+  const [product, setProduct] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-/**
- * 🛠️ دالة الـ SSG - ترجع مصفوفة فارغة لتخطي التوليد المسبق
- */
-export async function generateStaticParams() {
-  return [];
-}
+  useEffect(() => {
+    fetch(`/api/store/${storeSlug}/products/${slug}?currency=${currency}`)
+      .then(res => res.json())
+      .then(data => {
+        setProduct(data.data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [storeSlug, slug, currency]);
 
-export default async function ProductPage({ params, searchParams }: ProductPageProps) {
-  // 1. فك الـ Promises الخاصة بالـ params والـ searchParams (Next.js 15+)
-  const { storeSlug, slug } = await params;
-  const { currency } = await searchParams;
-
-  // 💡 تحديد العملة المفضلة بشكل مرن (Query param -> أو الافتراضية EGP)
-  const userCurrency = currency || 'EGP';
-
-  // 2. طلب الـ Payload المجهز بالكامل من الأوركسترا
-  const payload = await ProductDetailsOrchestrator.fetchDetailPagePayload(
-    storeSlug,
-    slug,
-    userCurrency
-  );
-
-  // 3. حارس البوابة: لو البيانات غير موجودة ارمي 404 نظيفة
-  if (!payload) {
-    return notFound();
-  }
+  if (loading) return <div>جاري التحميل...</div>;
+  if (!product) return <div>المنتج غير موجود</div>;
 
   return (
     <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950/20 pb-16" dir="rtl">
-      {/* 4. الهيكل الخارجي وتمرير البيانات للـ UI Component */}
       <div className="max-w-7xl mx-auto px-4 mt-8">
-        <ProductDetails data={payload.productDetails} />
+        <ProductDetails data={product} />
       </div>
     </div>
   );

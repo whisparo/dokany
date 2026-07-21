@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  output: 'export', // ✅ أمر أساسي عشان يطلع مجلد out
+  output: 'export',
   images: {
     unoptimized: true,
     remotePatterns: [
