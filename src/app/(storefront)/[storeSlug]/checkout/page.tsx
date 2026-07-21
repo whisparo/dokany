@@ -1,10 +1,15 @@
-// app/(storefront)/[storeSlug]/checkout/page.tsx
-
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Checkout } from '@/components/storefront/Checkout';
+
+// ✅ مطلوب للـ static export
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return [];
+}
 
 export default function CheckoutPage() {
   const params = useParams();

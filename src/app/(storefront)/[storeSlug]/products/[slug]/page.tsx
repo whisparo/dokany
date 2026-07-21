@@ -1,10 +1,15 @@
-// src/app/(storefront)/[storeSlug]/products/[slug]/page.tsx
-
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { ProductDetails } from '@/components/storefront/ProductDetails';
+
+// ✅ مطلوب للـ static export
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return [];
+}
 
 export default function ProductPage() {
   const params = useParams();
