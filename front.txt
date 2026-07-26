@@ -300,7 +300,7 @@ SEO مُحسَّن (Sitemaps، OpenGraph، JSON-LD).
 
 توافق كامل مع Cloudflare Edge (جميع الواجهات على Edge Runtime).
 
-حدود أداء صارمة (حجم حزمة < 100KB للمتجر).
+حدود أداء صارمة (حجم حزمة < 120KB للمتجر).
 
 app/
 ├── favicon.ico

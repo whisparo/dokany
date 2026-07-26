@@ -88,7 +88,7 @@ export async function handleNicheStep(ctx: SecureHandlerContext): Promise<Handle
   try {
     const merchantName = ctx.session?.name || 'تاجرنا العزيز';
 
-    // ✅ نمرر ctx.env.DB مباشرةً إلى createStore (كما كان يعمل سابقاً)
+    // ✅ نمرر ctx.env.DB مباشرةً إلى createStore
     const result = await createStore(ctx.env.DB, {
       phone: ctx.session?.phone || '',
       name: ctx.session?.name || '',
@@ -100,7 +100,8 @@ export async function handleNicheStep(ctx: SecureHandlerContext): Promise<Handle
     const geoInfo = CODE_TO_GEO[countryCode] || { country: 'غير محدد', currency: 'العملة المحلية' };
 
     return {
-      reply: `🎉 مبروك يا ${merchantName}! تم إنشاء متجرك بنجاح وتخصيصه على نشاط [${selectedNiche}].\n\n🔗 رابط المتجر: ${result.url}\n🏪 اسم المتجر: ${realStoreName}\n🌍 الدولة: ${geoInfo.country}\n🪙 العملة: ${geoInfo.currency}\n\nاضغط على الزر بالأسفل لفتح لوحة التحكم فوراً والبدء في رفع منتجاتك.`,
+      // 🎯 تم إزالة سطر رابط المتجر النصي لتنظيف شكل الرسالة وإلغاء المعاينة نهائياً
+      reply: `🎉 مبروك يا ${merchantName}! تم إنشاء متجرك بنجاح وتخصيصه على نشاط [${selectedNiche}].\n\n🏪 اسم المتجر: ${realStoreName}\n🌍 الدولة: ${geoInfo.country}\n🪙 العملة: ${geoInfo.currency}\n\nاضغط على الزر بالأسفل لفتح لوحة التحكم فوراً والبدء في رفع منتجاتك.`,
       buttons: [
         [{ text: '🌍 زيارة المتجر', url: result.url }],
         [{ text: '🚀 افتح لوحة التحكم', url: result.dashboardLink }]

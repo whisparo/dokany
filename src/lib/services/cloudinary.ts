@@ -1,6 +1,6 @@
 // src/lib/services/cloudinary-allocator.ts
-import "server-only"; // 🔒 حماية تامة من التسريب للـ Client
-import { sql, isNull, and } from 'drizzle-orm';
+
+import { sql, isNull } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import type { D1Database } from '@cloudflare/workers-types';
 import { stores } from '@/lib/db/schema';
@@ -57,7 +57,7 @@ export async function allocateCloudinaryAccount(d1Database: D1Database): Promise
 
   const db = drizzle(d1Database);
 
-  // 1. استعلام الإحصائية - فرضنا الـ Type الراجع مباشرة داخل الـ select بـ sql<number> صريحة ونظيفة
+  // 1. استعلام الإحصائية
   const stats = await db
     .select({
       accountIndex: stores.cloudinaryAccountIndex,
@@ -67,7 +67,7 @@ export async function allocateCloudinaryAccount(d1Database: D1Database): Promise
     .where(isNull(stores.deletedAt))
     .groupBy(stores.cloudinaryAccountIndex);
 
-  // 2. تحويل المخرجات لـ Map - الـ Compiler الحين عارف الـ Types تلقائياً (accountIndex هو number أو null)
+  // 2. تحويل المخرجات لـ Map
   const statsMap = new Map<string, number>(
     stats.map((row) => [
       row.accountIndex !== null ? String(row.accountIndex) : "1", 

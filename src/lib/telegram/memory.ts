@@ -3,7 +3,7 @@
 import { eq, and, desc, isNull } from 'drizzle-orm';
 import type { DbInstance } from '@/lib/db';
 import { chatSessions } from '@/lib/db/schema/chat-sessions';
-import type { OnboardingSession } from './types';
+import type { SessionData, OnboardingSession } from './types';
 
 type ChatSessionState = typeof chatSessions.$inferSelect['state'];
 type ChatSessionTimestamps = typeof chatSessions.$inferSelect['timestamps'];
@@ -16,11 +16,14 @@ export interface SessionResult {
   };
 }
 
-export async function loadSession(
+/**
+ * جلب الجلسة الحالية وإرجاع بيانات الجلسة مباشرة لتتوافق مع الـ Adapter والـ Handlers
+ */
+export async function getSession(
   db: DbInstance,
   platform: 'telegram' | 'web',
   externalId: string
-): Promise<SessionResult> {
+): Promise<OnboardingSession | null> {
   try {
     const record = await db
       .select()
@@ -36,38 +39,48 @@ export async function loadSession(
       .limit(1)
       .get();
 
-    if (!record) {
-      return {
-        session: { step: 'phone' },
-        timestamps: { lastActivity: new Date() },
-      };
+    if (!record || !record.state) {
+      return null;
     }
 
-    const rawState = record.state as Record<string, unknown> | null;
+    const rawState = record.state as Record<string, unknown>;
+
+    // 🎯 استخراج جميع الحقول بما فيها البريد الإلكتروني (email)
     const sessionState: OnboardingSession = {
-      step: (rawState?.step as OnboardingSession['step']) || 'phone',
-      phone: rawState?.phone as string | undefined,
-      name: rawState?.name as string | undefined,
-      storeName: rawState?.storeName as string | undefined,
-      nicheAttempts: rawState?.nicheAttempts as number | undefined,
+      step: (rawState.step as OnboardingSession['step']) || 'phone',
+      phone: rawState.phone as string | undefined,
+      name: rawState.name as string | undefined,
+      email: rawState.email as string | undefined,
+      storeName: rawState.storeName as string | undefined,
+      nicheAttempts: rawState.nicheAttempts as number | undefined,
     };
 
-    return {
-      session: sessionState,
-      timestamps: {
-        lastActivity: record.lastActivityAt || new Date(),
-        createdAt: record.createdAt,
-      },
-    };
+    return sessionState;
   } catch (error) {
-    console.error('❌ [Memory Service] Error loading session:', error);
-    return {
-      session: { step: 'phone' },
-      timestamps: { lastActivity: new Date() },
-    };
+    console.error('❌ [Memory Service] Error fetching session:', error);
+    return null;
   }
 }
 
+/**
+ * دالة loadSession مع الاحتفاظ بالـ Timestamps لضمان التوافق إن تم استخدامها مستقبلاً
+ */
+export async function loadSession(
+  db: DbInstance,
+  platform: 'telegram' | 'web',
+  externalId: string
+): Promise<SessionResult> {
+  const session = await getSession(db, platform, externalId);
+
+  return {
+    session: session || { step: 'phone' },
+    timestamps: { lastActivity: new Date() },
+  };
+}
+
+/**
+ * حفظ أو تحديث الجلسة (Upsert)
+ */
 export async function saveSession(
   db: DbInstance,
   platform: 'telegram' | 'web',
@@ -79,8 +92,7 @@ export async function saveSession(
     const now = new Date();
     const sessionId = crypto.randomUUID();
     const dbState = sessionData as ChatSessionState;
-    
-    // 🛡️ [الحل السحري لـ D1]: نمرر أوبجكت timestamps صريح ومتوافق مع الـ JSON Check Constraint
+
     const dbTimestamps: ChatSessionTimestamps = {
       firstMessageAt: timestamps?.createdAt ? timestamps.createdAt.getTime() : now.getTime(),
       lastMessageAt: timestamps?.lastActivity ? timestamps.lastActivity.getTime() : now.getTime(),
@@ -93,7 +105,7 @@ export async function saveSession(
         platform,
         externalId,
         state: dbState,
-        timestamps: dbTimestamps, // مبعوت صراحة كـ Object عشان الـ Drizzle يحوله لـ JSON سليم
+        timestamps: dbTimestamps,
         lastActivityAt: timestamps?.lastActivity || now,
         createdAt: timestamps?.createdAt || now,
         updatedAt: now,
@@ -102,20 +114,23 @@ export async function saveSession(
         target: [chatSessions.platform, chatSessions.externalId],
         set: {
           state: dbState,
-          timestamps: dbTimestamps, // تحديث صريح أيضاً
+          timestamps: dbTimestamps,
           lastActivityAt: timestamps?.lastActivity || now,
           updatedAt: now,
-          deletedAt: null, // تأمين الجلسات المحذوفة
+          deletedAt: null,
         },
       });
 
-    console.log(`💾 [Memory Service] Session upserted successfully for ${externalId}`);
+    console.log(`💾 [Memory Service] Session saved successfully for ${externalId}`);
   } catch (error) {
     console.error('❌ [Memory Service] Error saving session:', error);
     throw error;
   }
 }
 
+/**
+ * تحديث الجلسة الحالية
+ */
 export async function updateSession(
   db: DbInstance,
   platform: 'telegram' | 'web',
@@ -125,6 +140,9 @@ export async function updateSession(
   await saveSession(db, platform, externalId, sessionData);
 }
 
+/**
+ * حذف الجلسة (Soft-Delete)
+ */
 export async function deleteSession(
   db: DbInstance,
   platform: 'telegram' | 'web',

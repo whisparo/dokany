@@ -41,15 +41,20 @@ export function ProductGrid({
   if (!products || products.length === 0) {
     return (
       <div className={theme.emptyState.container} data-testid="product-grid-empty" dir="rtl">
-        <div className="mb-4 text-slate-300 dark:text-slate-700" aria-hidden="true">
-          <PackageX className={theme.emptyState.icon} size={48} strokeWidth={1.5} />
+        {/* أيقونة ثابتة وبسيطة بدون تحريك */}
+        <div aria-hidden="true">
+          <PackageX className={theme.emptyState.icon} strokeWidth={1.5} />
         </div>
-        <Typography variant="h3" className={theme.emptyState.title}>
+        
+        {/* ⚡ تحويله إلى p يمنع كسر ترتيب العناوين (Heading Hierarchy) نهائياً */}
+        <p className={theme.emptyState.title}>
           لا توجد منتجات حالياً
-        </Typography>
-        <Typography variant="body1" className={theme.emptyState.description}>
+        </p>
+        
+        <p className={theme.emptyState.description}>
           لم نجد أي منتجات تطابق خياراتك، أو ربما لم يتم إضافة منتجات بعد.
-        </Typography>
+        </p>
+        
         <div className={theme.emptyState.actions}>
           {viewAllHref && (
             <Button variant="outline" className="rounded-xl h-9 text-xs" asChild>
@@ -58,12 +63,11 @@ export function ProductGrid({
               </Link>
             </Button>
           )}
-          <LocalReloadButton /> {/* ✅ استخدم المكون المستخرج */}
+          <LocalReloadButton />
         </div>
       </div>
     );
   }
-
   return (
     <section aria-label={title || 'قائمة المنتجات'} data-testid="product-grid" className="w-full" dir="rtl">
       {(title || description || viewAllHref) && (

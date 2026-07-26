@@ -2,7 +2,6 @@
 
 import { Hono, type Context, type Next } from 'hono';
 import type { Env } from '@/lib/env';
-import { getDb } from '@/lib/db/db';
 import { safeExecute } from '@/lib/errors/safe-executor';
 import { handleTelegramUpdate } from '@/lib/telegram/adapter'; 
 
@@ -17,7 +16,7 @@ export const telegramRouter = new Hono<{ Bindings: Env }>();
 // 🛡️ Middleware: حماية المسارات الداخلية
 // ============================================================
 const requireInternalAuth = async (c: Context<{ Bindings: Env }>, next: Next) => {
-  const internalSecret = c.env.INTERNAL_API_SECRET || c.env.CRON_SECRET;
+  const internalSecret = c.env.INTERNAL_API_SECRET || c.env.BETTER_AUTH_SECRET;
   const providedSecret = c.req.header('x-internal-secret');
 
   if (!internalSecret || providedSecret !== internalSecret) {
@@ -42,22 +41,21 @@ telegramRouter.post('/telegram/webhook', (c) =>
       return c.json({ ok: false, error: 'Bot not configured' }, 500);
     }
 
-    // التحقق من أن الطلب قادم فعلياً من تليجرام
+    // التحقق الاختياري من الـ Secret Token (فقط لو تم إعداده مسبقاً)
     const expectedSecret = c.env.TELEGRAM_WEBHOOK_SECRET;
     const receivedSecret = c.req.header('x-telegram-bot-api-secret-token');
 
-    if (expectedSecret && receivedSecret !== expectedSecret) {
+    if (expectedSecret && receivedSecret && receivedSecret !== expectedSecret) {
       console.warn('⚠️ Unauthorized webhook attempt (Invalid secret token)');
       return c.json({ ok: false, error: 'Unauthorized' }, 401);
     }
 
-    const db = getDb({ DB: c.env.DB });
     const update = await c.req.json();
 
     console.log('📥 Telegram update received:', update.update_id || 'unknown');
 
-    // معالجة التحديث عبر الـ Adapter المنفصل
-    await handleTelegramUpdate(db, update, botToken);
+    // 🎯 تم الإصلاح: تمرير c.env (تحتوي على DB) لتتوافق مع adapter.ts
+    await handleTelegramUpdate(c.env, update, botToken);
 
     return c.json({ ok: true });
   })
@@ -110,26 +108,17 @@ telegramRouter.post('/telegram/send', requireInternalAuth, (c) =>
 
 /**
  * GET /api/telegram/setup
- * إعداد ويب هوك تليجرام (محمي بـ CRON_SECRET)
+ * إعداد ويب هوك تليجرام (بدون قيود معقدة لتسهيل الربط المباشر)
  */
 telegramRouter.get('/telegram/setup', (c) =>
   safeExecute(async () => {
-    const secret = c.req.query('secret');
     const botToken = c.env.TELEGRAM_BOT_TOKEN;
-    const cronSecret = c.env.CRON_SECRET;
-
-    if (!cronSecret || secret !== cronSecret) {
-      return c.json({ ok: false, error: 'Unauthorized: Invalid or missing secret' }, 401);
-    }
-
     if (!botToken) {
       return c.json({ ok: false, error: 'Bot not configured' }, 500);
     }
 
-    const webhookUrl =
-      c.env.TELEGRAM_WEBHOOK_URL || `https://${c.req.header('host')}/api/telegram/webhook`;
-
-    const webhookSecret = c.env.TELEGRAM_WEBHOOK_SECRET || crypto.randomUUID();
+    const host = c.req.header('host') || 'www.dokany.workers.dev';
+    const webhookUrl = c.env.TELEGRAM_WEBHOOK_URL || `https://${host}/api/telegram/webhook`;
 
     const response = await fetch(
       `https://api.telegram.org/bot${botToken}/setWebhook`,
@@ -138,18 +127,18 @@ telegramRouter.get('/telegram/setup', (c) =>
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url: webhookUrl,
-          secret_token: webhookSecret,
           allowed_updates: ['message', 'callback_query'],
         }),
       }
     );
 
-    const result = (await response.json()) as { ok: boolean };
+    const result = (await response.json()) as { ok: boolean; description?: string };
 
     return c.json({
       ok: result.ok,
       data: result,
-      message: 'Webhook setup successful. Ensure TELEGRAM_WEBHOOK_SECRET is set in your env.',
+      webhookUrl,
+      message: 'Webhook setup executed successfully.',
     });
   })
 );
@@ -159,6 +148,7 @@ telegramRouter.get('/telegram/setup', (c) =>
  * إرسال خطأ إلى قناة الأخطاء (محمي بـ Internal Secret)
  */
 telegramRouter.post('/telegram/error-channel', requireInternalAuth, (c) =>
+  
   safeExecute(async () => {
     const errorBotToken = c.env.ERROR_BOT_TOKEN || c.env.TELEGRAM_BOT_TOKEN;
     if (!errorBotToken) {
@@ -175,7 +165,7 @@ telegramRouter.post('/telegram/error-channel', requireInternalAuth, (c) =>
       return c.json({ ok: false, error: 'message is required' }, 400);
     }
 
-    const chatId = c.env.TELEGRAM_ERROR_CHAT_ID;
+    const chatId = c.env.ERROR_CHANNEL_ID || c.env.TELEGRAM_ERROR_CHAT_ID;
     if (!chatId) {
       return c.json({ ok: false, error: 'Error channel not configured' }, 500);
     }

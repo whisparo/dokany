@@ -51,7 +51,7 @@ export function ProductMedia({ data, theme }: ProductMediaProps) {
                   fill
                   className={cn(theme.media, 'object-cover md:object-contain')}
                   priority
-                  sizes="(max-width: 768px) 100vw, 50vw"
+                  sizes="(max-width: 640px) 92vw, (max-width: 1024px) 50vw, 600px"
                 />
                 <div className={theme.videoOverlay}>
                   <button type="button" className={theme.playButton} aria-label="تشغيل الفيديو">
@@ -69,7 +69,7 @@ export function ProductMedia({ data, theme }: ProductMediaProps) {
             className={cn(theme.media, 'object-cover md:object-contain')}
             style={{ objectPosition: 'top center' }}
             priority
-            sizes="(max-width: 768px) 100vw, 50vw"
+            sizes="(max-width: 640px) 92vw, (max-width: 1024px) 50vw, 600px"
           />
         )}
 
@@ -134,7 +134,6 @@ export function ProductMedia({ data, theme }: ProductMediaProps) {
               fill
               className="object-contain rounded-2xl shadow-2xl scale-95 animate-in zoom-in-95 duration-200"
               sizes="90vw"
-              priority
             />
           </div>
         </div>

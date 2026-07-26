@@ -8,36 +8,30 @@ import type { ProductImage, ProductMetadata } from '@/lib/db/schema/products';
 import type { Store, Product } from '@/types';
 import type { RawStorePageData } from '@/lib/adapters/product-page.adapter';
 import type { D1Database } from '@cloudflare/workers-types';
+import type { Env } from '@/lib/env'; // ✅ استيراد النوع
 
 // ============================================================
-// 🔌 الحصول على اتصال قاعدة البيانات
+// 🔌 الحصول على اتصال قاعدة البيانات (مع env)
 // ============================================================
 
 /**
- * الحصول على اتصال D1 من البيئة
- * - في Cloudflare Pages: `process.env.DB` متاح كـ Binding
- * - في التطوير المحلي: يمكن استخدام `process.env.DB` أو Mock
+ * الحصول على اتصال D1 من البيئة الممررة
  */
-function getDb() {
-  const dbBinding = process.env.DB as unknown as D1Database;
-
-  if (!dbBinding) {
-    console.error('❌ [getDb] D1 Database binding (DB) is missing from process.env');
-    // في بيئة التطوير المحلي، قد لا يكون DB متاحاً، نستخدم كائن وهمي
-    // لكن في الإنتاج، هذا لن يحدث لأن Pages توفر الـ Binding
+function getDb(env: Env) {
+  if (!env.DB) {
+    console.error('❌ [getDb] D1 Database binding (DB) is missing from env');
     throw new Error('D1 Database binding not available');
   }
-
-  return drizzle(dbBinding);
+  return drizzle(env.DB);
 }
 
 // ============================================================
-// 🗄️ دوال جلب البيانات الفعلية
+// 🗄️ دوال جلب البيانات الفعلية (تستقبل env)
 // ============================================================
 
-async function fetchStoreInfo(storeSlug: string): Promise<Store | null> {
+async function fetchStoreInfo(storeSlug: string, env: Env): Promise<Store | null> {
   const decodedSlug = decodeURIComponent(storeSlug);
-  const db = getDb();
+  const db = getDb(env);
 
   const rawStore = await db
     .select()
@@ -114,9 +108,10 @@ async function fetchStoreInfo(storeSlug: string): Promise<Store | null> {
 
 async function fetchStoreProducts(
   storeId: string,
+  env: Env,
   options?: { page?: number; limit?: number }
 ): Promise<{ products: Product[]; total: number }> {
-  const db = getDb();
+  const db = getDb(env);
   const page = options?.page || 1;
   const limit = options?.limit || 20;
   const offset = (page - 1) * limit;
@@ -202,9 +197,10 @@ async function fetchStoreProducts(
 
 async function fetchProductBySlug(
   storeId: string,
-  productSlug: string
+  productSlug: string,
+  env: Env
 ): Promise<Product | null> {
-  const db = getDb();
+  const db = getDb(env);
   const decodedProductSlug = decodeURIComponent(productSlug);
 
   const p = await db
@@ -280,22 +276,23 @@ async function fetchProductBySlug(
 }
 
 // ============================================================
-// 🧠 Data Fetchers مع الـ Cache
+// 🧠 Data Fetchers مع الـ Cache (تستقبل env)
 // ============================================================
 
 export const getStoreRawData = unstable_cache(
   async (
     storeSlug: string,
+    env: Env,
     options?: { page?: number; limit?: number }
   ): Promise<RawStorePageData | null> => {
     if (!storeSlug || typeof storeSlug !== 'string') {
       throw new Error('Invalid storeSlug');
     }
 
-    const store = await fetchStoreInfo(storeSlug);
+    const store = await fetchStoreInfo(storeSlug, env);
     if (!store) return null;
 
-    const { products: storeProducts, total } = await fetchStoreProducts(store.id, options);
+    const { products: storeProducts, total } = await fetchStoreProducts(store.id, env, options);
 
     return {
       store,
@@ -311,11 +308,11 @@ export const getStoreRawData = unstable_cache(
 );
 
 export const getProductData = unstable_cache(
-  async (storeId: string, slug: string): Promise<Product | null> => {
+  async (storeId: string, slug: string, env: Env): Promise<Product | null> => {
     if (!storeId || !slug) {
       throw new Error('[getProductData] storeId and slug are required');
     }
-    return await fetchProductBySlug(storeId, slug);
+    return await fetchProductBySlug(storeId, slug, env);
   },
   [],
   {
@@ -325,11 +322,11 @@ export const getProductData = unstable_cache(
 );
 
 export const getStoreInfoData = unstable_cache(
-  async (storeSlug: string): Promise<Store | null> => {
+  async (storeSlug: string, env: Env): Promise<Store | null> => {
     if (!storeSlug || typeof storeSlug !== 'string') {
       throw new Error('Invalid storeSlug');
     }
-    return await fetchStoreInfo(storeSlug);
+    return await fetchStoreInfo(storeSlug, env);
   },
   ['store-info-data'],
   {

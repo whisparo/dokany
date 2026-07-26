@@ -16,14 +16,17 @@ import type { Env } from '@/lib/env';
 
 /**
  * 1. جلب بيانات صفحة الدفع (Query - Safe)
+ * ✅ إضافة env كمعامل
  */
 export async function getCheckoutData(
   storeId: string,
+  env: Env, // ✅ إضافة env
   customerId?: string,
   selectedShippingId?: string,
   userCurrency: string = 'EGP'
 ): Promise<CheckoutPayload | null> {
-  const rawData = await getCheckoutRawData(storeId, customerId);
+  // ✅ تمرير env إلى getCheckoutRawData
+  const rawData = await getCheckoutRawData(storeId, env, customerId);
   if (!rawData) return null;
 
   return adaptCheckoutPage(rawData, selectedShippingId, userCurrency);

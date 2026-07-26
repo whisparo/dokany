@@ -148,6 +148,19 @@ export async function processErrorQueue(
     duration: 0,
   };
 
+  // 🔒 1. الحصول على Redis وتجهيز المفتاح
+  const redis = await getRedis(env);
+  const lockKey = 'lock:background-processor';
+
+  // 🔒 2. محاولة الحصىول على القفل (Set if Not Exists مع TTL لمدة 120 ثانية)
+  const acquired = await redis.set(lockKey, '1', { nx: true, ex: 120 });
+
+  if (!acquired) {
+    console.warn('[BackgroundProcessor] Another instance is already running. Skipping execution.');
+    result.duration = Date.now() - startTime;
+    return result; // يخرج فوراً
+  }
+
   try {
     console.log('[BackgroundProcessor] Starting error queue processing...');
 
@@ -196,9 +209,15 @@ export async function processErrorQueue(
     result.duration = Date.now() - startTime;
     result.failed++;
     return result;
+  } finally {
+    // 🔓 3. تحرير القفل فور الانتهاء بغض النظر عن النجاح أو الفشل
+    try {
+      await redis.del(lockKey);
+    } catch (unlockError) {
+      console.error('[BackgroundProcessor] Failed to release lock:', unlockError);
+    }
   }
 }
-
 // ============================================
 // 📂 B2 Operations (باستخدام storage.ts)
 // ============================================
@@ -231,55 +250,63 @@ async function processBatch(
   incidents: AggregatedIncident[]
 ): Promise<{ processed: number; succeeded: number; failed: number; skipped: number }> {
   const result = { processed: 0, succeeded: 0, failed: 0, skipped: 0 };
+  const CONCURRENCY_LIMIT = 5;
 
-  for (const fileKey of files) {
-    try {
-      result.processed++;
+  for (let i = 0; i < files.length; i += CONCURRENCY_LIMIT) {
+    const chunk = files.slice(i, i + CONCURRENCY_LIMIT);
 
-      const content = await downloadFromB2(fileKey, env);
-      if (!content) {
-        result.skipped++;
-        continue;
-      }
+    await Promise.all(
+      chunk.map(async (fileKey) => {
+        try {
+          result.processed++;
 
-      const parsed = JSON.parse(content);
+          const content = await downloadFromB2(fileKey, env);
+          if (!content) {
+            result.skipped++;
+            return;
+          }
 
-      if (!validateStoredError(parsed)) {
-        console.error(`[BackgroundProcessor] Invalid stored error: ${fileKey}`);
-        result.skipped++;
-        continue;
-      }
+          const parsed = JSON.parse(content);
 
-      const storedError = parsed;
+          if (!validateStoredError(parsed)) {
+            console.error(`[BackgroundProcessor] Invalid stored error: ${fileKey}`);
+            result.skipped++;
+            return;
+          }
 
-      if (storedError.processed) {
-        result.skipped++;
-        continue;
-      }
+          const storedError = parsed;
 
-      if ((storedError.retryCount || 0) >= config.maxRetries) {
-        await moveToDLQ(fileKey, storedError, env, config);
-        result.failed++;
-        continue;
-      }
+          if (storedError.processed) {
+            result.skipped++;
+            return;
+          }
 
-      incidents.push({
-        code: storedError.error.code || 'UNKNOWN_CODE',
-        severity: storedError.error.severity || 'info',
-        storeId: storedError.context?.storeId || 'global',
-        count: 1,
-        actualCount: 1,
-        firstSeen: storedError.timestamp,
-        lastSeen: storedError.timestamp,
-        sampleError: storedError,
-        correlationIds: [storedError.context?.correlationId || 'unknown'],
-      });
+          if ((storedError.retryCount || 0) >= config.maxRetries) {
+            await moveToDLQ(fileKey, storedError, env, config);
+            result.failed++;
+            return;
+          }
 
-      result.succeeded++;
-    } catch (error) {
-      console.error(`[BackgroundProcessor] Failed to process ${fileKey}:`, error);
-      result.failed++;
-    }
+          // Push آمن داخل الـ Event Loop لـ V8
+          incidents.push({
+            code: storedError.error.code || 'UNKNOWN_CODE',
+            severity: storedError.error.severity || 'info',
+            storeId: storedError.context?.storeId || 'global',
+            count: 1,
+            actualCount: 1,
+            firstSeen: storedError.timestamp,
+            lastSeen: storedError.timestamp,
+            sampleError: storedError,
+            correlationIds: [storedError.context?.correlationId || 'unknown'],
+          });
+
+          result.succeeded++;
+        } catch (error) {
+          console.error(`[BackgroundProcessor] Failed to process ${fileKey}:`, error);
+          result.failed++;
+        }
+      })
+    );
   }
 
   return result;
@@ -306,15 +333,15 @@ function aggregateIncidents(
       const existing = aggregated.get(key)!;
       existing.count++;
       existing.actualCount = (existing.actualCount || existing.count) + incident.count;
-      existing.lastSeen = Math.max(existing.lastSeen, incident.lastSeen);
       
-      // ✅ حد أقصى للـ correlationIds
-      if (existing.correlationIds.length < config.maxCorrelationIds) {
-        existing.correlationIds.push(...incident.correlationIds);
+      // ✅ التحديث الصحيح: تحقق قبل تعديل lastSeen
+      if (incident.lastSeen > existing.lastSeen) {
+        existing.lastSeen = incident.lastSeen;
+        existing.sampleError = incident.sampleError;
       }
       
-      if (incident.lastSeen > existing.lastSeen) {
-        existing.sampleError = incident.sampleError;
+      if (existing.correlationIds.length < config.maxCorrelationIds) {
+        existing.correlationIds.push(...incident.correlationIds);
       }
     } else {
       aggregated.set(key, { 
@@ -327,7 +354,6 @@ function aggregateIncidents(
   
   return Array.from(aggregated.values());
 }
-
 // ============================================
 // 📊 Redis Updates
 // ============================================
@@ -550,28 +576,27 @@ async function moveToProcessed(
   env: Env,
   config: Required<ProcessorConfig>
 ): Promise<void> {
-  for (const fileKey of files) {
-    try {
-      const destKey = fileKey.replace(config.rawPath, config.processedPath);
+  const CONCURRENCY_LIMIT = 5;
 
-      // ✅ 1. تحميل المحتوى من الملف الأصلي
-      const content = await downloadFromB2(fileKey, env);
-      if (!content) {
-        console.warn(`[BackgroundProcessor] File not found: ${fileKey}`);
-        continue;
-      }
+  for (let i = 0; i < files.length; i += CONCURRENCY_LIMIT) {
+    const chunk = files.slice(i, i + CONCURRENCY_LIMIT);
+    
+    await Promise.all(
+      chunk.map(async (fileKey) => {
+        try {
+          const destKey = fileKey.replace(config.rawPath, config.processedPath);
+          const content = await downloadFromB2(fileKey, env);
+          if (!content) return;
 
-      // ✅ 2. رفع المحتوى إلى المسار الجديد
-      await uploadToB2(destKey, content, env);
+          await uploadToB2(destKey, content, env);
+          await deleteFromB2(fileKey, env);
 
-      // ✅ 3. حذف الملف الأصلي بعد النقل
-      await deleteFromB2(fileKey, env);
-
-      console.log(`[BackgroundProcessor] Moved ${fileKey} -> ${destKey}`);
-    } catch (error) {
-      console.error(`[BackgroundProcessor] Failed to move ${fileKey}:`, error);
-      // ❌ لا تحذف الملف الأصلي في حالة الفشل
-    }
+          console.log(`[BackgroundProcessor] Moved ${fileKey} -> ${destKey}`);
+        } catch (error) {
+          console.error(`[BackgroundProcessor] Failed to move ${fileKey}:`, error);
+        }
+      })
+    );
   }
 }
 

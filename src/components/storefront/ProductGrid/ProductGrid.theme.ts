@@ -47,19 +47,20 @@ export function getProductGridTheme({
       className
     ),
     
-    // ✅ الـ Empty State (لو مفيش داتا - متظبط عشان يجذب عين العميل)
+    // ✅ الـ Empty State (سايح ونظيف مع الصفحة بدون حدود أو مربع أو أنيميشن مزعج)
     emptyState: {
       container: cn(
-        'flex flex-col items-center justify-center',
-        'py-20 px-6 text-center rounded-2xl bg-slate-50/50 dark:bg-slate-900/30 border border-dashed border-slate-200 dark:border-slate-800'
+        'w-full flex flex-col items-center justify-center',
+        'py-16 md:py-24 px-6 text-center'
       ),
-      icon: 'mb-4 text-5xl text-slate-300 dark:text-slate-700 animate-bounce duration-1000',
-      title: 'text-lg sm:text-xl font-bold text-slate-800 dark:text-slate-200 tracking-tight',
+      icon: 'mb-3 text-4xl sm:text-5xl text-slate-300 dark:text-slate-700',
+      // ⚡ تنسيق ممتاز للـ paragraph ليظهر كعنوان بارز
+      title: 'm-0 text-lg sm:text-xl font-bold text-slate-800 dark:text-slate-200 tracking-tight',
       description: cn(
         'mt-2 mb-6 text-slate-400 dark:text-slate-500',
         'max-w-sm mx-auto text-xs sm:text-sm leading-relaxed'
       ),
-      actions: 'flex flex-wrap gap-3 justify-center',
+      actions: 'flex flex-wrap gap-3 justify-center items-center',
     },
     
     // ✅ الـ Footer (تم تطهيره وحذف الخطوط القاطعة ليصبح سايح تماماً)

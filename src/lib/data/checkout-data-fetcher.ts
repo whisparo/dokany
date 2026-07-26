@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, and } from 'drizzle-orm';
 import type { D1Database } from '@cloudflare/workers-types';
+import type { Env } from '@/lib/env'; // ✅ استيراد النوع
 
 // 📂 استيراد جداول الـ Database الحقيقية لمشروعك
 import { stores } from '@/lib/db/schema';
@@ -55,23 +56,18 @@ export interface CheckoutRawData {
 }
 
 // ============================================================
-// 🔌 الحصول على اتصال قاعدة البيانات
+// 🔌 الحصول على اتصال قاعدة البيانات (مع env)
 // ============================================================
 
 /**
- * الحصول على اتصال D1 من البيئة
- * - في Cloudflare Pages: `process.env.DB` متاح كـ Binding
- * - في التطوير المحلي: يمكن استخدام `process.env.DB` أو Mock
+ * الحصول على اتصال D1 من البيئة الممررة
  */
-function getDb() {
-  const dbBinding = process.env.DB as unknown as D1Database;
-
-  if (!dbBinding) {
-    console.error('❌ [getDb] D1 Database binding (DB) is missing from process.env');
+function getDb(env: Env) {
+  if (!env.DB) {
+    console.error('❌ [getDb] D1 Database binding (DB) is missing from env');
     throw new Error('D1 Database binding not available');
   }
-
-  return drizzle(dbBinding);
+  return drizzle(env.DB);
 }
 
 // ============================================================
@@ -81,10 +77,10 @@ function getDb() {
 /**
  * جلب عناصر السلة الحقيقية لمتجر محدد وجلسة محددة من الـ DB
  */
-async function fetchCartItems(uniqueKey: string, storeId: string): Promise<CartItem[]> {
+async function fetchCartItems(uniqueKey: string, storeId: string, env: Env): Promise<CartItem[]> {
   if (!uniqueKey || uniqueKey === 'unknown-session') return [];
   
-  const db = getDb();
+  const db = getDb(env);
   
   try {
     // ⚠️ استعلام حقيقي من جدول السلة الفعلي في قاعدة بياناتك
@@ -106,10 +102,10 @@ async function fetchCartItems(uniqueKey: string, storeId: string): Promise<CartI
 /**
  * جلب بيانات العميل الشخصية الحقيقية من قاعدة البيانات
  */
-async function fetchCustomerData(customerId?: string): Promise<CustomerData | null> {
+async function fetchCustomerData(customerId: string | undefined, env: Env): Promise<CustomerData | null> {
   if (!customerId) return null;
   
-  const db = getDb();
+  const db = getDb(env);
   
   try {
     // ⚠️ استعلام حقيقي من جدول المستخدمين/العملاء بـ Drizzle
@@ -131,8 +127,8 @@ async function fetchCustomerData(customerId?: string): Promise<CustomerData | nu
  * جلب خيارات الشحن الحقيقية للمتجر (مكشّرة ومفصولة بالـ storeId)
  */
 const getCachedShippingOptions = unstable_cache(
-  async (storeId: string): Promise<ShippingOption[]> => {
-    const db = getDb();
+  async (storeId: string, env: Env): Promise<ShippingOption[]> => {
+    const db = getDb(env);
     
     try {
       // ⚠️ استعلام حقيقي يعتمد على الـ storeId لجلب خيارات شحن هذا المتجر بالذات
@@ -156,8 +152,8 @@ const getCachedShippingOptions = unstable_cache(
  * جلب طرق الدفع المفعلة للمتجر (مكشّرة ومفصولة بالـ storeId)
  */
 const getCachedPaymentMethods = unstable_cache(
-  async (storeId: string): Promise<PaymentMethod[]> => {
-    const db = getDb();
+  async (storeId: string, env: Env): Promise<PaymentMethod[]> => {
+    const db = getDb(env);
     
     try {
       // ⚠️ استعلام حقيقي يعتمد على الـ storeId لجلب طرق دفع المتجر المحددة
@@ -183,6 +179,7 @@ const getCachedPaymentMethods = unstable_cache(
 
 export async function getCheckoutRawData(
   storeId: string,
+  env: Env, // ✅ إضافة env
   customerId?: string,
   sessionId?: string
 ): Promise<CheckoutRawData> {
@@ -195,10 +192,10 @@ export async function getCheckoutRawData(
   try {
     // 🚀 جلب كافة البيانات الحقيقية بالتوازي لسرعة خارقة
     const [cartItems, customer, shippingOptions, paymentMethods] = await Promise.all([
-      fetchCartItems(uniqueUserKey, storeId),
-      fetchCustomerData(customerId),
-      getCachedShippingOptions(storeId), // الـ Cache معزول ومحمي
-      getCachedPaymentMethods(storeId),
+      fetchCartItems(uniqueUserKey, storeId, env),
+      fetchCustomerData(customerId, env),
+      getCachedShippingOptions(storeId, env), // ✅ تمرير env
+      getCachedPaymentMethods(storeId, env),
     ]);
 
     return {

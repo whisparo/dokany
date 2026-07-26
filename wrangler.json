@@ -1,6 +1,21 @@
 {
-  "name": "dokany-web",
-  "pages_build_output_dir": ".open-next",
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "www",
+  "main": "src/workers/index.ts",
   "compatibility_date": "2026-07-08",
-  "compatibility_flags": ["nodejs_compat"]
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dokany-db",
+      "database_id": "64114e17-bff6-4c40-9340-095165e06421"
+    }
+  ],
+  "vars": {
+    "NEXT_PUBLIC_APP_URL": "https://www.dokany.workers.dev"
+  }
 }

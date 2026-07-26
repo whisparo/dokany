@@ -2,13 +2,14 @@
 
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { getDb } from '@/lib/db/db'; 
-import * as schema from '@/lib/db/schema'; // 👈 استيراد الـ Schema الكاملة
+import { getDb } from '@/lib/db/db';
+import * as schema from '@/lib/db/schema';
 import { users } from '@/lib/db/schema/users';
 import { eq } from 'drizzle-orm';
 import type { D1Database } from '@cloudflare/workers-types';
 
-interface CloudflareWorkerEnv {
+// ✅ تعريف البيئة بشكل صريح
+export interface AuthEnv {
   DB: D1Database;
   TELEGRAM_BOT_TOKEN?: string;
   BETTER_AUTH_URL?: string;
@@ -29,6 +30,10 @@ interface PinInput {
   phone: string;
   pin: string;
 }
+
+// ============================================================
+// 🔐 دوال التحقق من تليجرام
+// ============================================================
 
 async function verifyTelegramHash(data: Record<string, string | undefined>, botToken: string): Promise<boolean> {
   if (!data.hash || !data.auth_date) return false;
@@ -72,165 +77,179 @@ async function verifyTelegramHash(data: Record<string, string | undefined>, botT
   return calculatedHash === data.hash;
 }
 
-const globalEnv = (typeof process !== 'undefined' ? process.env : {}) as unknown as CloudflareWorkerEnv;
+// ============================================================
+// 🧠 مُنشئ الـ Auth (يُستدعى داخل الطلب مع env)
+// ============================================================
 
-// 1. جلب instance من الـ Database مع ربط الـ Schema الموحد
-const db = getDb({ DB: globalEnv.DB });
+export function createAuth(env: AuthEnv) {
+  // ✅ إنشاء db من env الممرر، وليس من process.env
+  const db = getDb({ DB: env.DB });
 
-export const auth = betterAuth({
-  database: drizzleAdapter(db, {
-    provider: 'sqlite', 
-    schema: schema, // 👈 التمرير المباشر لكائن الـ Schema بيغذي Better-Auth بالتايبات المظبوطة
-  }),
-  
-  baseURL: globalEnv.BETTER_AUTH_URL || globalEnv.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+  return betterAuth({
+    database: drizzleAdapter(db, {
+      provider: 'sqlite',
+      schema: schema,
+    }),
 
-  session: {
-    cookieCache: {
-      enabled: true,
-      maxAge: 5 * 60,
+    baseURL: env.BETTER_AUTH_URL || env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+
+    session: {
+      cookieCache: {
+        enabled: true,
+        maxAge: 5 * 60,
+      },
     },
-  },
 
-  providers: [
-    {
-      id: 'telegram',
-      name: 'Telegram',
-      type: 'credentials',
-      options: {
-        fields: {
-          telegramId: { type: 'string', required: true },
-          username: { type: 'string', required: false },
-          hash: { type: 'string', required: true },
-          auth_date: { type: 'string', required: true },
-          first_name: { type: 'string', required: false },
-          last_name: { type: 'string', required: false },
-          photo_url: { type: 'string', required: false },
-        },
-        async verify({ input }: { input: TelegramInput }) {
-          const botToken = globalEnv.TELEGRAM_BOT_TOKEN;
-          if (!botToken) return null;
+    providers: [
+      // ============================================================
+      // 1. مزود تليجرام
+      // ============================================================
+      {
+        id: 'telegram',
+        name: 'Telegram',
+        type: 'credentials',
+        options: {
+          fields: {
+            telegramId: { type: 'string', required: true },
+            username: { type: 'string', required: false },
+            hash: { type: 'string', required: true },
+            auth_date: { type: 'string', required: true },
+            first_name: { type: 'string', required: false },
+            last_name: { type: 'string', required: false },
+            photo_url: { type: 'string', required: false },
+          },
+          async verify({ input }: { input: TelegramInput }) {
+            const botToken = env.TELEGRAM_BOT_TOKEN;
+            if (!botToken) return null;
 
-          const isValid = await verifyTelegramHash(
-            {
-              hash: input.hash,
-              auth_date: input.auth_date,
-              username: input.username,
-              first_name: input.first_name,
-              last_name: input.last_name,
-              photo_url: input.photo_url,
-              id: input.telegramId,
-            },
-            botToken
-          );
+            const isValid = await verifyTelegramHash(
+              {
+                hash: input.hash,
+                auth_date: input.auth_date,
+                username: input.username,
+                first_name: input.first_name,
+                last_name: input.last_name,
+                photo_url: input.photo_url,
+                id: input.telegramId,
+              },
+              botToken
+            );
 
-          if (!isValid || !input.telegramId) return null;
+            if (!isValid || !input.telegramId) return null;
 
-          // 🎯 استخدام db المجهزة بالـ Schema بدون إعادة استدعاء متكرر
-          const localDb = getDb({ DB: globalEnv.DB });
+            // ✅ استخدام env الممرر، وليس globalEnv
+            const localDb = getDb({ DB: env.DB });
 
-          const user = await localDb.query.users.findFirst({
-            where: eq(users.telegramId, input.telegramId),
-          });
+            const user = await localDb.query.users.findFirst({
+              where: eq(users.telegramId, input.telegramId),
+            });
 
-          let finalUser = user;
+            let finalUser = user;
 
-          if (!finalUser) {
-            const fullName = `${input.first_name || ''} ${input.last_name || ''}`.trim() || input.username || 'مستخدم تليجرام';
-            
-            const newUser = await localDb.insert(users).values({
-              id: crypto.randomUUID(), 
-              name: fullName,
-              image: input.photo_url || null,
-              telegramId: input.telegramId,
-              telegramUsername: input.username || null,
-              telegramChatId: input.telegramId, 
-              authMethod: 'telegram',
-              status: 'active', 
-              isVerified: true,
-              emailVerified: false,
-              role: 'merchant', 
-            }).returning();
+            if (!finalUser) {
+              const fullName = `${input.first_name || ''} ${input.last_name || ''}`.trim() || input.username || 'مستخدم تليجرام';
 
-            finalUser = newUser[0];
-          } else {
-            await localDb
-              .update(users)
-              .set({ 
+              const newUser = await localDb.insert(users).values({
+                id: crypto.randomUUID(),
+                name: fullName,
+                image: input.photo_url || null,
+                telegramId: input.telegramId,
+                telegramUsername: input.username || null,
                 telegramChatId: input.telegramId,
-                telegramUsername: input.username || finalUser.telegramUsername,
-                image: input.photo_url || finalUser.image,
-              })
-              .where(eq(users.id, finalUser.id));
-          }
+                authMethod: 'telegram',
+                status: 'active',
+                isVerified: true,
+                emailVerified: false,
+                role: 'merchant',
+              }).returning();
 
-          if (!finalUser || finalUser.status !== 'active') return null;
+              finalUser = newUser[0];
+            } else {
+              await localDb
+                .update(users)
+                .set({
+                  telegramChatId: input.telegramId,
+                  telegramUsername: input.username || finalUser.telegramUsername,
+                  image: input.photo_url || finalUser.image,
+                })
+                .where(eq(users.id, finalUser.id));
+            }
 
-          return {
-            id: finalUser.id,
-            name: finalUser.name,
-            email: finalUser.email || undefined, 
-            image: finalUser.image || undefined,
-          };
+            if (!finalUser || finalUser.status !== 'active') return null;
+
+            return {
+              id: finalUser.id,
+              name: finalUser.name,
+              email: finalUser.email || undefined,
+              image: finalUser.image || undefined,
+            };
+          },
         },
       },
-    },
-    {
-      id: 'pin',
-      name: 'Backup PIN',
-      type: 'credentials',
-      options: {
-        fields: {
-          phone: { type: 'string', required: true },
-          pin: { type: 'string', required: true },
-        },
-        async verify({ input }: { input: PinInput }) {
-          const localDb = getDb({ DB: globalEnv.DB });
 
-          const user = await localDb.query.users.findFirst({
-            where: eq(users.phoneNumber, input.phone),
-          });
+      // ============================================================
+      // 2. مزود Backup PIN
+      // ============================================================
+      {
+        id: 'pin',
+        name: 'Backup PIN',
+        type: 'credentials',
+        options: {
+          fields: {
+            phone: { type: 'string', required: true },
+            pin: { type: 'string', required: true },
+          },
+          async verify({ input }: { input: PinInput }) {
+            // ✅ استخدام env الممرر
+            const localDb = getDb({ DB: env.DB });
 
-          if (!user || !user.backupPin || user.status !== 'active') {
-            return null;
-          }
+            const user = await localDb.query.users.findFirst({
+              where: eq(users.phoneNumber, input.phone),
+            });
 
-          // تم استبدال bcrypt بـ Web Crypto / bcrypt-ts المتوافق مع Edge Runtime
-          const bcrypt = await import('bcrypt-ts');
-          try {
-            const isValid = await bcrypt.compare(input.pin, user.backupPin);
-            if (!isValid) return null;
-          } catch {
-            return null;
-          }
+            if (!user || !user.backupPin || user.status !== 'active') {
+              return null;
+            }
 
-          return {
-            id: user.id,
-            name: user.name,
-            email: user.email || undefined, 
-            image: user.image || undefined,
-          };
+            // ✅ استيراد bcrypt ديناميكياً (متوافق مع Edge)
+            const bcrypt = await import('bcrypt-ts');
+            try {
+              const isValid = await bcrypt.compare(input.pin, user.backupPin);
+              if (!isValid) return null;
+            } catch {
+              return null;
+            }
+
+            return {
+              id: user.id,
+              name: user.name,
+              email: user.email || undefined,
+              image: user.image || undefined,
+            };
+          },
         },
       },
-    },
-  ],
+    ],
 
-  rateLimit: {
-    enabled: true,
-    window: 60, 
-    max: 10,
-  },
-
-  user: {
-    additionalFields: {
-      phoneNumber: { type: 'string', required: false },
-      telegramId: { type: 'string', required: false },
-      telegramUsername: { type: 'string', required: false },
-      telegramChatId: { type: 'string', required: false },
-      backupPin: { type: 'string', required: false },
-      merchantId: { type: 'string', required: false },
-      status: { type: 'string', required: false, defaultValue: 'active' }, 
-      role: { type: 'string', required: false, defaultValue: 'merchant' },
+    rateLimit: {
+      enabled: true,
+      window: 60,
+      max: 10,
     },
-  }, 
-});
+
+    user: {
+      additionalFields: {
+        phoneNumber: { type: 'string', required: false },
+        telegramId: { type: 'string', required: false },
+        telegramUsername: { type: 'string', required: false },
+        telegramChatId: { type: 'string', required: false },
+        backupPin: { type: 'string', required: false },
+        merchantId: { type: 'string', required: false },
+        status: { type: 'string', required: false, defaultValue: 'active' },
+        role: { type: 'string', required: false, defaultValue: 'merchant' },
+      },
+    },
+  });
+}
+
+// ❌ لم نعد نصدّر `auth` مباشرة، بل نصدّر `createAuth` فقط

@@ -2,17 +2,25 @@
 'use client'; 
 
 import { useState } from 'react';
-import Image from 'next/image';
+import Image, { type ImageProps } from 'next/image';
 import { cn } from '@/lib/utils';
 
-interface HeroImageProps {
+export interface HeroImageProps extends Omit<ImageProps, 'alt'> {
   src: string;
   alt: string;
   priority?: boolean;
+  sizes?: string;
   className?: string;
 }
 
-export function HeroImage({ src, alt, priority = false, className }: HeroImageProps) {
+export function HeroImage({
+  src,
+  alt,
+  priority = false,
+  sizes = '100vw',
+  className,
+  ...props
+}: HeroImageProps) {
   const [imageError, setImageError] = useState(false);
   
   return (
@@ -22,11 +30,11 @@ export function HeroImage({ src, alt, priority = false, className }: HeroImagePr
         alt={alt}
         fill
         priority={priority}
-        sizes="100vw"
-        // 🌟 الحلال هنا: object-cover بتخلي الصورة تقص الزيادات تلقائياً بدل ما تمط
-        // و object-center (أو object-bottom لو عاوز الصورة تنزل لتحت) بتضبط نقطة الارتكاز
+        sizes={sizes}
+        // 🌟 object-cover لمنع التمدد + تقليص الحجم الذكي بناءً على خاصية sizes
         className={cn("object-cover object-center transition-transform duration-500", className)}
         onError={() => setImageError(true)}
+        {...props}
       />
     </div>
   );

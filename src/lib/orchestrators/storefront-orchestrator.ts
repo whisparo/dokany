@@ -4,9 +4,12 @@ import { getStoreRawData } from '@/lib/data/store-data-fetcher';
 import { adaptProductPage } from '@/lib/adapters/product-page.adapter';
 import { adaptHeader, type HeaderAdapterResult } from '@/components/storefront/Header/Header.adapter';
 import { adaptFooter, type FooterAdapterResult } from '@/components/storefront/Footer/Footer.adapter';
+import type { HeroAdapterResult } from '@/components/storefront/Hero/Hero.adapter';
+import type { ProductGridAdapterResult } from '@/components/storefront/ProductGrid/ProductGrid.adapter';
 import { notFound } from 'next/navigation';
+import type { Env } from '@/lib/env';
 
-// 🛑 قائمة الكلمات المحجوزة التي لا يجب اعتبارها أسماء متاجر (لحماية الـ DB والـ Logs)
+// 🛑 قائمة الكلمات المحجوزة التي لا يجب اعتبارها أسماء متاجر
 const RESERVED_SLUGS = new Set([
   'terms',
   'privacy',
@@ -22,16 +25,16 @@ const RESERVED_SLUGS = new Set([
   'sitemap.xml',
 ]);
 
-// 🔥 العقد الموحد والوحيد لبيانات الواجهة كاملة (Strongly Typed Portfolio)
+// 🔥 العقد الموحد والوحيد لبيانات الواجهة كاملة (Strongly Typed Portfolio - Zero Any)
 export interface StorefrontPayload {
   storeInfo: {
     name: string;
     slug: string;
   };
-  header: HeaderAdapterResult; // 👈 إضافة نوع الهيدر المصفى صراحة
-  hero: any;                   // داتا الهيرو النظيفة الخارجة من الـ Hero.adapter
-  productGrid: any;            // داتا الجريد النظيفة الخارجة من الـ ProductGrid.adapter
-  footer: FooterAdapterResult; // 👈 إضافة نوع الفوتر المصفى صراحة
+  header: HeaderAdapterResult;
+  hero: HeroAdapterResult;
+  productGrid: ProductGridAdapterResult;
+  footer: FooterAdapterResult;
 }
 
 interface OrchestratorOptions {
@@ -45,45 +48,40 @@ export const StorefrontOrchestrator = {
    * 🧠 المايسترو: يقود عملية جلب البيانات الخام وتحويلها بالملي عبر الأدابترز السيادية
    */
   async fetchPagePayload(
-    storeSlug: string, 
+    storeSlug: string,
+    env: Env,
     options: OrchestratorOptions = {}
   ): Promise<StorefrontPayload> {
     
-    // 1. حارس البوابة الفوري لمنع استهلاك باقة الـ D1/Redis في طلبات الصفحات الثابتة
+    // 1. حارس البوابة الفوري لمنع استهلاك الباقة في طلبات الصفحات الثابتة
     if (RESERVED_SLUGS.has(storeSlug.toLowerCase())) {
       notFound();
     }
 
-    // 2. فك وتأمين البارامترات وضبط الافتراضيات هندسياً لمنع انهيار الـ DB
+    // 2. فك وتأمين البارامترات وضبط الافتراضيات (تم تنظيف الترتيب المتروك مؤقتاً)
     const currentPage = Math.max(1, parseInt(options.page || '1', 10));
     const userCurrency = options.currency || 'EGP';
-    
-    const validSorts = ['price_asc', 'price_desc', 'rating', 'newest', 'name'];
-    const currentSort = validSorts.includes(options.sort || '') 
-      ? options.sort! 
-      : 'newest';
 
     const gridOptions = {
       page: currentPage,
       limit: 20,
-      sortBy: currentSort,
     };
 
     try {
-      // 3. سحب البيانات الخام مركزياً عبر الكاش الديناميكي لـ D1
-      const rawData = await getStoreRawData(storeSlug, gridOptions);
+      // 3. سحب البيانات الخام مركزياً عبر D1
+      const rawData = await getStoreRawData(storeSlug, env, gridOptions);
       
       // حماية السيستم في حال عدم وجود المتجر
       if (!rawData || !rawData.store) {
         notFound();
       }
 
-      // 4. نداء الأدابترز السيادية لتوزيع وتوجيه البيانات بالملي (تم تنظيف الـ Arguments)
+      // 4. نداء الأدابترز السيادية
       const adaptedPage = adaptProductPage(rawData, userCurrency); 
       const adaptedHeader = adaptHeader(rawData.store);
       const adaptedFooter = adaptFooter(rawData.store);
 
-      // 5. تجميع وترجيع الـ Payload النهائي النقي المستقر المتكامل مع الـ Layout
+      // 5. تجميع وترجيع الـ Payload النهائي
       return {
         storeInfo: {
           name: rawData.store.name,
@@ -96,9 +94,6 @@ export const StorefrontOrchestrator = {
       };
 
     } catch (error: any) {
-      // 🛡️ حارس الـ Next.js Not Found: 
-      // دالة notFound() تقوم داخلياً برمي خطأ يحمل رسالة NEXT_NOT_FOUND أو digest معين.
-      // يجب تمرير هذا الخطأ كما هو دون طباعة Log كأنه فشل كارثي في النظام.
       if (
         error?.message === 'NEXT_NOT_FOUND' || 
         error?.digest === 'NEXT_NOT_FOUND'

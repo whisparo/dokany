@@ -18,37 +18,32 @@ export interface HeroProps {
 export function Hero({ payload, className }: HeroProps) {
   const { title, description, ctaText, ctaLink } = payload;
 
-  const defaultDesktopImages = [
-    "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=1200&auto=format&fit=crop",
-    "https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1200&auto=format&fit=crop",
-    "https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1200&auto=format&fit=crop"
-  ];
+  // ⚡ تنظيف وتصفية الصور المرفوعة من التاجر
+  const validDesktop = payload.desktopImages?.filter((img) => img && !img.includes('default-banner.png')) || [];
+  const validMobile = payload.mobileImages?.filter((img) => img && !img.includes('default-banner.png')) || [];
 
-  const desktopImages = payload.desktopImages && payload.desktopImages.length > 0 
-    ? payload.desktopImages 
-    : defaultDesktopImages;
-
-  const mobileImages = payload.mobileImages && payload.mobileImages.length > 0
-    ? payload.mobileImages
-    : desktopImages;
+  const desktopImages = validDesktop;
+  const mobileImages = validMobile.length > 0 ? validMobile : desktopImages;
 
   const hasImage = desktopImages.length > 0 || mobileImages.length > 0;
-
   const [currentSlide, setCurrentSlide] = useState(0);
 
+  // ⚡ السلايدر ذكي: بيشتغل تلقائياً فقط لو التاجر ضايف أكتر من صورة
   useEffect(() => {
-    if (desktopImages.length <= 1) return;
+    const maxSlides = Math.max(desktopImages.length, mobileImages.length);
+    if (maxSlides <= 1) return;
+
     const interval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % desktopImages.length);
-    }, 4000);
+      setCurrentSlide((prev) => (prev + 1) % maxSlides);
+    }, 5000);
+
     return () => clearInterval(interval);
-  }, [desktopImages]);
+  }, [desktopImages.length, mobileImages.length]);
 
   return (
     <section 
       className={cn(
         "relative w-full overflow-hidden flex items-center justify-center bg-transparent",
-        // 🌟 تثبيت الارتفاع: في الموبايل مرن، وفي الشاشات الكبيرة يقف عند h-[550px] كحد أقصى مريح للعين
         hasImage ? "h-[40vh] min-h-[320px] md:h-[550px] lg:h-[600px]" : "bg-gradient-to-b from-slate-50 to-white py-20 md:py-32",
         className
       )}
@@ -59,31 +54,37 @@ export function Hero({ payload, className }: HeroProps) {
         <div 
           className="absolute inset-0 z-0"
           style={{
-            // تلاشي ناعم يبدأ مبكراً ليحافظ على دمج أطراف الصورة مهما كبرت الشاشة
-            WebkitMaskImage: 'linear-gradient(to bottom, black 50%, rgba(0,0,0,0.3) 80%, transparent 100%)',
-            maskImage: 'linear-gradient(to bottom, black 50%, rgba(0,0,0,0.3) 80%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
+            maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
           }}
         >
           {/* 📱 سلايدر الموبايل */}
           <div className="block md:hidden absolute inset-0">
             {mobileImages.map((src, index) => (
               <div
-                key={`mobile-${src}`}
+                key={`mobile-${src}-${index}`}
                 className={cn(
                   "absolute inset-0 transition-opacity duration-1000 ease-in-out",
                   index === currentSlide ? "opacity-100 z-10" : "opacity-0 z-0"
                 )}
               >
-                <HeroImage src={src} alt={title || "Hero Mobile Image"} priority={index === 0} className="w-full h-full object-cover object-top" />
+                <HeroImage 
+                  src={src} 
+                  alt={title || "Hero Mobile Image"} 
+                  // ⚡ priority فقط لأول صورة (LCP Optimization)
+                  priority={index === 0} 
+                  sizes="(max-width: 768px) 100vw, 1px"
+                  className="w-full h-full object-cover object-top" 
+                />
               </div>
             ))}
           </div>
 
-          {/* 💻 سلايدر الكمبيوتر الثابت ذو الارتفاع المحكوم */}
+          {/* 💻 سلايدر الكمبيوتر */}
           <div className="hidden md:block absolute inset-0">
             {desktopImages.map((src, index) => (
               <div
-                key={`desktop-${src}`}
+                key={`desktop-${src}-${index}`}
                 className={cn(
                   "absolute inset-0 transition-opacity duration-1000 ease-in-out",
                   index === currentSlide ? "opacity-100 z-10" : "opacity-0 z-0"
@@ -92,23 +93,25 @@ export function Hero({ payload, className }: HeroProps) {
                 <HeroImage 
                   src={src} 
                   alt={`${title || "Hero Desktop Image"} - Slide ${index + 1}`} 
+                  // ⚡ priority فقط لأول صورة (LCP Optimization)
                   priority={index === 0} 
+                  sizes="(min-width: 769px) 100vw, 1px"
                   className="w-full h-full object-cover object-top" 
                 />
               </div>
             ))}
           </div>
           
-          <div className="absolute inset-0 bg-black/5 z-15" />
+          <div className="absolute inset-0 bg-black/10 z-15" />
         </div>
       )}
 
-      {/* 👑 طبقة الضباب العلوي الثابتة (البريمو) */}
+      {/* 👑 طبقة الضباب العلوي */}
       {hasImage && (
-        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white via-white/80 to-transparent z-25 pointer-events-none" />
+        <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white via-white/70 to-transparent z-25 pointer-events-none" />
       )}
 
-      {/* 2. كتلة المحتوى: تم تقليل الـ Padding والاعتماد على ارتفاع الحاوية الأب لإعطاء مظهر متناسق ومتوازن دائماً */}
+      {/* 2. كتلة المحتوى */}
       <div className="relative z-30 w-full max-w-7xl mx-auto px-6 flex flex-col items-center justify-center text-center pt-24 pb-12 md:pt-32 md:pb-16">
         <div className="max-w-2xl flex flex-col items-center select-none">
           
@@ -133,6 +136,7 @@ export function Hero({ payload, className }: HeroProps) {
             <div className="drop-shadow-[0_6px_15px_rgba(0,0,0,0.3)]">
               <Link 
                 href={ctaLink}
+                prefetch={false}
                 className="inline-flex items-center justify-center px-8 py-3 md:px-10 md:py-3.5 rounded-full text-xs md:text-sm font-bold bg-[#D4AF37] text-black hover:bg-[#bfa032] hover:scale-105 transition-all duration-300 transform active:scale-95 shadow-lg shadow-[#D4AF37]/10"
               >
                 {ctaText}

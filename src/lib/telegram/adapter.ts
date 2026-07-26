@@ -1,16 +1,17 @@
 // src/lib/telegram/adapter.ts
 
-// 1. استيراد ButtonItem فقط من types المعتمد لمنع التكرار والتعارض
-import type { ButtonItem } from './types';
+import type { ButtonItem, OnboardingSession, HandlerContext } from './types';
+import { getSession, saveSession } from './memory';
+import { handleOnboarding, type SecureHandlerContext } from './handlers/onboarding-flow';
+import { getDb } from '@/lib/db';
 
-// 2. تعريف الأنواع المعتمدة على ButtonItem داخل هذا الملف
 export type ButtonRows = ButtonItem[] | ButtonItem[][];
 
 export interface TelegramUpdate {
   update_id: number;
   message?: {
     chat: { id: number | string };
-    from?: { id: number | string };
+    from?: { id: number };
     text?: string;
     contact?: { phone_number: string };
   };
@@ -18,9 +19,9 @@ export interface TelegramUpdate {
     data?: string;
     message?: {
       chat: { id: number | string };
-      from?: { id: number | string };
+      from?: { id: number };
     };
-    from?: { id: number | string };
+    from?: { id: number };
   };
 }
 
@@ -29,7 +30,7 @@ export interface TelegramContext {
   externalId: string;
   message: string;
   contact?: { phone_number: string };
-  telegramUserId?: string;
+  telegramUserId?: number; // 🎯 تعديل النوع إلى number ليتوافق تماماً مع HandlerContext
 }
 
 // ============================================================
@@ -46,13 +47,15 @@ export function telegramToContext(update: TelegramUpdate): TelegramContext | nul
   const chat = msg.chat;
   const contact = update.message?.contact;
   const text = update.callback_query?.data || update.message?.text || '';
+  
+  const fromUser = update.message?.from || update.callback_query?.from;
 
   return {
     platform: 'telegram' as const,
     externalId: String(chat.id),
     message: text,
     contact: contact ? { phone_number: contact.phone_number } : undefined,
-    telegramUserId: msg.from ? String(msg.from.id) : undefined,
+    telegramUserId: fromUser?.id, // 🎯 الحفاظ عليه كـ number كما هو متوقع في Types
   };
 }
 
@@ -60,27 +63,64 @@ export function telegramToContext(update: TelegramUpdate): TelegramContext | nul
  * معالجة الـ Update القادم من تليجرام
  */
 export async function handleTelegramUpdate(
-  db: unknown,
+  env: { DB: any },
   update: TelegramUpdate,
   botToken: string
 ): Promise<void> {
   const ctx = telegramToContext(update);
   if (!ctx) return;
 
-  console.log('🤖 Processing Telegram Context for Chat ID:', ctx.externalId);
+  const db = getDb(env);
 
-  // استجابة أولية لتجربة العمل
-  if (ctx.message === '/start') {
+  // 1️⃣ جلب الجلسة الحالية من قاعدة البيانات أو استخدام افتراضية
+  const existingSession = await getSession(db, ctx.platform, ctx.externalId);
+  const currentSession: OnboardingSession = existingSession || { step: 'phone' };
+
+  // 2️⃣ بناء الـ SecureHandlerContext بدون أي تعارض في الأنواع
+  const secureCtx: SecureHandlerContext = {
+    ...ctx,
+    session: currentSession,
+    env,
+  };
+
+  console.log(
+    `🤖 [Telegram Router] Processing update for Chat ID: ${ctx.externalId}, Step: ${secureCtx.session.step}`
+  );
+
+  try {
+    // 3️⃣ استدعاء المحرك الرئيسي
+    const result = await handleOnboarding(secureCtx);
+
+    // 4️⃣ دمج التحديث الجزئي مع الجلسة الحالية لضمان إرسال OnboardingSession مكتمل لـ saveSession
+    if (result.session) {
+      const updatedSession: OnboardingSession = {
+        ...secureCtx.session,
+        ...result.session,
+      };
+      await saveSession(db, ctx.platform, ctx.externalId, updatedSession);
+    }
+
+    // 5️⃣ إرسال الرسالة والأزرار للمستخدم
+    if (result.reply) {
+      await sendTelegramMessage(
+        botToken,
+        ctx.externalId,
+        result.reply,
+        result.buttons as ButtonRows
+      );
+    }
+  } catch (error) {
+    console.error('❌ [Telegram Router Error]:', error);
     await sendTelegramMessage(
       botToken,
       ctx.externalId,
-      'أهلاً بك! مرحباً بك في الخدمة 🚀'
+      '❌ حدث خطأ أثناء معالجة طلبك. أرسل /start للبدء من جديد.'
     );
   }
 }
 
 /**
- * إرسال رسالة إلى تليجرام مع دعم إعداد الأزرار
+ * إرسال رسالة إلى تليجرام مع دعم إعداد الأزرار التفاعلية
  */
 export async function sendTelegramMessage(
   botToken: string,
@@ -137,10 +177,9 @@ function buildReplyMarkup(buttons?: ButtonRows, persistentButtons?: ButtonRows) 
   }
 
   if (Array.isArray(buttons)) {
-    // مصفوفة ثنائية الأبعاد (صفوف وأعمدة)
     if (buttons.length > 0 && Array.isArray(buttons[0])) {
       const grid = buttons as ButtonItem[][];
-      
+
       if (grid.length === 1 && grid[0].length === 1 && grid[0][0]?.callback_data === 'share_contact') {
         return {
           keyboard: [[{ text: grid[0][0].text, request_contact: true }]],
@@ -162,10 +201,9 @@ function buildReplyMarkup(buttons?: ButtonRows, persistentButtons?: ButtonRows) 
       };
     }
 
-    // مصفوفة مسطحة (Flat Array)
     const flatList = buttons as ButtonItem[];
     const hasContact = flatList.some((b) => b.type === 'contact');
-    
+
     if (hasContact) {
       return {
         keyboard: [

@@ -4,28 +4,40 @@ import { cn } from '@/lib/utils';
 import type { ThemeTokens } from '@/types/store';
 
 interface FooterThemeProps {
-  theme: ThemeTokens;
+  theme?: ThemeTokens;
   className?: string;
 }
 
-export function getFooterTheme({ theme, className }: FooterThemeProps) {
+export function getFooterTheme({ theme, className }: FooterThemeProps = {}) {
   return {
-    // 🌟 التعديل الساحر: حذفنا الـ border-t وحدود الألوان تماماً وزودنا المسافات (py-16) عشان يسيح بنعومة
+    // 🌟 السحر والنعومة: بدون حدود قاطعة، متجاوب، وسايح مع نهاية الصفحة
     container: cn(
-      // 🌟 أضفنا -mt-[1px] عشان نضمن لو الخط جاي من السكشن اللي فوقه يختفي وراه تماماً
-      'w-full py-16 px-4 md:px-8 mt-auto -mt-[1px] select-none bg-transparent', 
+      'w-full py-12 md:py-16 px-4 md:px-8 mt-auto -mt-[1px] select-none bg-transparent',
       className
     ),
     
-    // ✅ الـ Wrapper: سنترة المحتوى في مساحة الـ 7xl ودعم الـ RTL العربي صراحة
+    // ✅ الحاوية الداخلية: توزيع احترافي على الديسكتوب والموبايل مع دعم RTL الموزون
     innerWrapper: cn(
-      'max-w-7xl mx-auto w-full flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-start',
-      'flex-row-reverse' // 👈 قلب ترتيب الفليكس ليتناسب مع الاتجاه العربي
+      'max-w-7xl mx-auto w-full flex flex-col md:flex-row items-center justify-between gap-6 md:gap-8',
+      'text-center md:text-right'
     ),
-    
-    // النصوص والروابط
-    brandName: 'text-sm font-bold tracking-wide transition-all duration-300',
-    copyright: 'text-xs font-medium text-slate-400 dark:text-slate-500 tracking-normal',
-    linksContainer: 'flex items-center gap-6 text-xs font-medium text-slate-400 dark:text-slate-500'
+
+    // ✅ قسم العلامة التجارية والحقوق
+    brandSection: 'flex flex-col md:flex-row items-center gap-2 md:gap-4',
+    brandName: 'text-sm md:text-base font-bold tracking-wide transition-all duration-300',
+    copyright: 'text-xs font-medium text-slate-500 dark:text-slate-400 tracking-normal leading-relaxed',
+
+    // ✅ روابط السياسات (مظبوطة لتخطي اختبارات الـ Accessibility بالكامل)
+    linksContainer: cn(
+      'flex items-center justify-center gap-4 md:gap-6 text-xs font-medium',
+      'text-slate-500 dark:text-slate-400'
+    ),
+    link: cn(
+      'hover:text-slate-900 dark:hover:text-slate-100 transition-colors duration-200',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded px-1 py-0.5'
+    ),
+
+    // ✅ توقيع منصة دكاني الـ Premium
+    poweredBy: 'text-xs text-slate-400 dark:text-slate-500 font-medium flex items-center justify-center md:justify-end gap-1.5 mt-1 md:mt-0',
   };
 }

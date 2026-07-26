@@ -1,7 +1,8 @@
 // src/lib/telegram/handlers/onboarding-flow.ts
+
 import type { D1Database } from '@cloudflare/workers-types'; 
 import { users, stores } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { deleteSession, saveSession } from '../memory'; 
 import type { HandlerContext, HandlerResult, SessionData } from '@/lib/telegram/types';
 import { getDb } from '@/lib/db'; 
@@ -19,16 +20,76 @@ export interface SecureHandlerContext extends HandlerContext {
   env: { DB: D1Database }; 
 }
 
+// 🎯 دالة مساعدة موحدة للبحث عن المستخدم بأي معرف تليجرام
+async function findUserByTelegram(db: ReturnType<typeof getDb>, telegramUserId: string | number) {
+  const strId = String(telegramUserId);
+  return await db.query.users.findFirst({
+    where: or(
+      eq(users.id, strId),
+      eq(users.telegramId, strId),
+      eq(users.telegramChatId, strId)
+    ),
+  });
+}
+
 export async function handleOnboarding(ctx: SecureHandlerContext): Promise<HandlerResult> {
   const db = getDb(ctx.env);
 
-  // 1️⃣ لو الحساب مكتمل، ارميه على لوحة التحكم فوراً
+  // 🎯 جلب فوري للمستخدم من قاعدة البيانات لتأمين القرارات
+  const dbUser = ctx.telegramUserId 
+    ? await findUserByTelegram(db, ctx.telegramUserId)
+    : null;
+
+  // 1️⃣ لو الحساب مكتمل، تأكد أولاً إنه موجود في الداتابيز فعلياً
   if (ctx.session?.step === 'completed') {
-    return handleGetDashboard(ctx);
+    if (dbUser) {
+      return handleGetDashboard(ctx, dbUser);
+    } else {
+      // لو الجلسة بتقول completed بس المستخدم مش موجود في الداتابيز، امسح الجلسة ووجّه للبدء
+      await deleteSession(db, ctx.platform, ctx.externalId);
+      ctx.session = { step: 'phone' };
+    }
   }
 
-  // 2️⃣ البداية الصريحة والمستقلة لإعادة التعيين
+  // 2️⃣ البداية الذكية المحصنة مع /start
   if (ctx.message === '/start') {
+    if (dbUser) {
+      // أ) فحص وجود متجر قائم
+      const existingStore = await db.query.stores.findFirst({ where: eq(stores.ownerId, dbUser.id) });
+      if (existingStore) {
+        ctx.session = { step: 'completed' };
+        await saveSession(db, ctx.platform, ctx.externalId, ctx.session);
+        return handleGetDashboard(ctx, dbUser, existingStore);
+      }
+
+      // ب) فحص الخطوات المتبقية في عملية التسجيل
+      if (!dbUser.name || dbUser.name.trim() === '') {
+        ctx.session = { step: 'name', phone: dbUser.phoneNumber || undefined };
+        await saveSession(db, ctx.platform, ctx.externalId, ctx.session);
+        return handleNameStep(ctx);
+      }
+
+      if (!dbUser.email || dbUser.email.trim() === '') {
+        ctx.session = { 
+          step: 'email', 
+          phone: dbUser.phoneNumber || undefined, 
+          name: dbUser.name,
+          storeName: `متجر ${dbUser.name || 'دكاني'}`
+        };
+        await saveSession(db, ctx.platform, ctx.externalId, ctx.session);
+        return handleEmailStep(ctx);
+      }
+
+      ctx.session = { 
+        step: 'store', 
+        phone: dbUser.phoneNumber || undefined, 
+        name: dbUser.name 
+      };
+      await saveSession(db, ctx.platform, ctx.externalId, ctx.session);
+      return handleStoreStep(ctx);
+    }
+
+    // جـ) مستخدم جديد تماماً 🚀
     await deleteSession(db, ctx.platform, ctx.externalId);
     return {
       reply:
@@ -38,14 +99,8 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     };
   }
 
-  // 🎯 جلب فوري للمستخدم من قاعدة البيانات لتأمين القرارات ومنع التداخل
-  const dbUser = ctx.telegramUserId 
-    ? await db.query.users.findFirst({ where: eq(users.id, String(ctx.telegramUserId)) })
-    : null;
-
   // 3️⃣ تأمين الـ Contact المباشر القادم من زر التليجرام
   if (ctx.contact) {
-    // حماية قصوى: لو مسجل تليفونه بالفعل في الـ DB، تخطى خطوة الهاتف وتوجه للاسم فوراً
     if (dbUser && dbUser.phoneNumber) {
       console.log('⚡ [Onboarding Contact Bypass] Phone already exists in DB. Redirecting to name.');
       ctx.session = { ...ctx.session, step: 'name', phone: dbUser.phoneNumber };
@@ -55,7 +110,7 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     return handlePhoneStep(ctx);
   }
 
-  // 4️⃣ 🎯 كبسولة الـ Self-Healing الأسطورية المعدلة والمحصنة ضد التداخل
+  // 4️⃣ كبسولة الـ Self-Healing
   if (!ctx.session || !ctx.session.step || Object.keys(ctx.session).length === 0) {
     console.log(`⚠️ [Onboarding] Session lost for ${ctx.externalId}, reconstructing from DB...`);
     
@@ -104,10 +159,8 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
       }
     }
     
-    // حفظ الجلسة المكتشفة في الذاكرة فوراً لقفل الثغرة
     await saveSession(db, ctx.platform, ctx.externalId, { ...ctx.session });
 
-    // 🚀 [الـ Short-Circuit السحري]
     const healedStep = ctx.session.step as OnboardingStep;
     console.log(`⚡ [Self-Healing] Forwarding message immediately to handling step: ${healedStep}`);
     switch (healedStep) {
@@ -119,12 +172,9 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     }
   }
 
-  // ==========================================
-  // 🎯 حماية صريحة ومباشرة ضد الـ Race Condition الخاص بالتليجرام
-  // ==========================================
+  // 5️⃣ حماية ضد الـ Race Condition
   let currentStep = ctx.session.step as OnboardingStep;
 
-  // قوة الداتابيز: لو الرقم متسجل والاسم لسه فاضي، إنت حتماً في خطوة الاسم name مهما قالت الذاكرة المؤقتة
   if (dbUser && dbUser.phoneNumber && (!dbUser.name || dbUser.name.trim() === '')) {
     currentStep = 'name';
     ctx.session.step = 'name';
@@ -133,7 +183,6 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
   const step = currentStep;
   const msg = ctx.message ? ctx.message.trim() : '';
 
-  // 5️⃣ الأوامر والعمليات العامة
   if (msg === 'رجوع') return handleBack(ctx, step);
   if (msg === 'إلغاء') {
     await deleteSession(db, ctx.platform, ctx.externalId);
@@ -148,21 +197,53 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     };
   }
 
-  // 6️⃣ التوجيه الافتراضي والآمن للجلسات القائمة والمستقرة
+  // 6️⃣ التوجيه الافتراضي
   switch (step) {
-    case 'phone':
-      return handlePhoneStep(ctx);
-    case 'name':
-      return handleNameStep(ctx);
-    case 'store':
-      return handleStoreStep(ctx);
-    case 'email':
-      return handleEmailStep(ctx); 
-    case 'niche':
-      return handleNicheStep(ctx);
+    case 'phone': return handlePhoneStep(ctx);
+    case 'name': return handleNameStep(ctx);
+    case 'store': return handleStoreStep(ctx);
+    case 'email': return handleEmailStep(ctx); 
+    case 'niche': return handleNicheStep(ctx);
     default:
       return { reply: '❌ حدث خطأ في حالة التسجيل. أرسل /start للبدء من جديد.' };
   }
+}
+
+// 🎯 تحسين دالة الدخول وتمرير الـ User والـ Store المجلوبين مسبقاً لتوفير استعلامات قاعدة البيانات
+export async function handleGetDashboard(
+  ctx: SecureHandlerContext, 
+  passedUser?: any, 
+  passedStore?: any
+): Promise<HandlerResult> {
+  const db = getDb(ctx.env);
+  
+  const user = passedUser || (ctx.telegramUserId ? await findUserByTelegram(db, ctx.telegramUserId) : null);
+
+  if (!user) {
+    // 🎯 الحل الذهبي: لو مش موجود في الداتابيز، حوله لطلب الهاتف بدل إظهار رسالة خطأ صلبة
+    ctx.session = { step: 'phone' };
+    return {
+      reply: '🚀 أهلاً بك في دكاني! يبدو أنك لم تُكمل إنشاء متجرك بعد.\n\nمن فضلك شاركنا رقم هاتفك للبدء:',
+      buttons: [[{ text: '📱 مشاركة رقم الهاتف', callback_data: 'share_contact' }]],
+    };
+  }
+
+  const store = passedStore || await db.query.stores.findFirst({
+    where: eq(stores.ownerId, user.id),
+  });
+
+  if (!store) {
+    // لو سجل بياناته بس لسه ما كملش المتجر
+    ctx.session = { step: 'store', phone: user.phoneNumber || undefined, name: user.name };
+    return handleStoreStep(ctx);
+  }
+
+  const loginLink = `https://www.dokany.workers.dev/dashboard?user=${user.id}&store=${store.id}`;
+
+  return {
+    reply: `🔗 أهلاً بك مجدداً! تم تجهيز رابط الدخول الخاص بك لمتجر "${store.name}":`,
+    buttons: [[{ text: '🚀 افتح لوحة التحكم', url: loginLink }]],
+  };
 }
 
 async function handleBack(ctx: SecureHandlerContext, currentStep: string): Promise<HandlerResult> {
@@ -222,35 +303,4 @@ async function handleBack(ctx: SecureHandlerContext, currentStep: string): Promi
   }
 
   return { reply: '❌ خطأ في الرجوع.' };
-}
-
-export async function handleGetDashboard(ctx: SecureHandlerContext): Promise<HandlerResult> {
-  const db = getDb(ctx.env);
-  const telegramUserId = ctx.telegramUserId;
-  if (!telegramUserId) {
-    return { reply: '❌ لم نتمكن من التحقق من هويتك. حاول مرة أخرى.' };
-  }
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, String(telegramUserId)),
-  });
-
-  if (!user) {
-    return { reply: '❌ لم نعثر على حساب مرتبط. أنشئ متجرك أولاً.' };
-  }
-
-  const store = await db.query.stores.findFirst({
-    where: eq(stores.ownerId, user.id),
-  });
-
-  if (!store) {
-    return { reply: '❌ ليس لديك متجر بعد. أرسل /start لإنشاء واحد.' };
-  }
-
-  const loginLink = `https://dokany.pages.dev/dashboard?user=${user.id}&store=${store.id}`;
-
-  return {
-    reply: `🔗 تم تجهيز رابط الدخول الخاص بك لمتجر "${store.name}":`,
-    buttons: [[{ text: '🚀 افتح لوحة التحكم', url: loginLink }]],
-  };
 }

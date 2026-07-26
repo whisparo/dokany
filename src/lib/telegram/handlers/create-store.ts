@@ -15,7 +15,7 @@ interface CreateStoreInput {
 }
 
 async function generateLoginLink(userId: string, storeId: string): Promise<string> {
-  return `https://dokany.pages.dev/dashboard?user=${userId}&store=${storeId}`;
+  return `https://www.dokany.workers.dev/dashboard?user=${userId}&store=${storeId}`;
 }
 
 /**
@@ -186,7 +186,7 @@ export async function createStore(
   const dashboardLink = await generateLoginLink(userId, newStore.id);
 
   return {
-    url: `https://dokany.pages.dev/${slug}`,
+    url: `https://www.dokany.workers.dev/${slug}`,
     dashboardLink,
   };
 }
