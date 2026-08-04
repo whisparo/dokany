@@ -7,10 +7,14 @@ import * as schema from '@/lib/db/schema';
 import { users } from '@/lib/db/schema/users';
 import { eq } from 'drizzle-orm';
 import type { D1Database } from '@cloudflare/workers-types';
+import { Redis } from '@upstash/redis';
+import { checkRateLimit, buildRateLimitKey } from '@/lib/rate-limit';
 
 // ✅ تعريف البيئة بشكل صريح
 export interface AuthEnv {
   DB: D1Database;
+  UPSTASH_REDIS_REST_URL?: string;
+  UPSTASH_REDIS_REST_TOKEN?: string;
   TELEGRAM_BOT_TOKEN?: string;
   BETTER_AUTH_URL?: string;
   NEXT_PUBLIC_APP_URL?: string;
@@ -32,19 +36,20 @@ interface PinInput {
 }
 
 // ============================================================
-// 🔐 دوال التحقق من تليجرام
+// 🔐 دوال التحقق من تليجرام (مُؤمنة ضد Timing Attacks)
 // ============================================================
 
 async function verifyTelegramHash(data: Record<string, string | undefined>, botToken: string): Promise<boolean> {
   if (!data.hash || !data.auth_date) return false;
 
   const authDate = parseInt(data.auth_date, 10);
-  if (Math.floor(Date.now() / 1000) - authDate > 86400) return false;
+  // صلاحية الـ Hash هي 24 ساعة فقط
+  if (isNaN(authDate) || Math.floor(Date.now() / 1000) - authDate > 86400) return false;
 
   const checkData: Record<string, string> = {};
   Object.keys(data).forEach((key) => {
     if (key !== 'hash' && data[key] !== undefined && data[key] !== '') {
-      checkData[key] = data[key]!;
+      checkData[key] = String(data[key]);
     }
   });
 
@@ -52,6 +57,7 @@ async function verifyTelegramHash(data: Record<string, string | undefined>, botT
   const dataString = sortedKeys.map(k => `${k}=${checkData[k]}`).join('\n');
   const encoder = new TextEncoder();
 
+  // 1. حساب Secret Key
   const secretKeyBuffer = await globalThis.crypto.subtle.digest(
     'SHA-256',
     encoder.encode(botToken)
@@ -62,27 +68,31 @@ async function verifyTelegramHash(data: Record<string, string | undefined>, botT
     secretKeyBuffer,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['verify', 'sign']
   );
 
-  const signatureBuffer = await globalThis.crypto.subtle.sign(
+  // 2. تحويل الـ Received Hash إلى ArrayBuffer لمقارنتها ذرياً
+  const hashHex = data.hash;
+  if (hashHex.length !== 64) return false;
+  
+  const receivedSignature = new Uint8Array(
+    hashHex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []
+  );
+
+  // 3. استخدام Web Crypto verify لمنع الـ Timing Attacks
+  return await globalThis.crypto.subtle.verify(
     'HMAC',
     cryptoKey,
+    receivedSignature,
     encoder.encode(dataString)
   );
-
-  const hashArray = Array.from(new Uint8Array(signatureBuffer));
-  const calculatedHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-  return calculatedHash === data.hash;
 }
 
 // ============================================================
-// 🧠 مُنشئ الـ Auth (يُستدعى داخل الطلب مع env)
+// 🧠 مُنشئ الـ Auth
 // ============================================================
 
 export function createAuth(env: AuthEnv) {
-  // ✅ إنشاء db من env الممرر، وليس من process.env
   const db = getDb({ DB: env.DB });
 
   return betterAuth({
@@ -96,7 +106,7 @@ export function createAuth(env: AuthEnv) {
     session: {
       cookieCache: {
         enabled: true,
-        maxAge: 5 * 60,
+        maxAge: 5 * 60, // 5 دقائق
       },
     },
 
@@ -137,7 +147,6 @@ export function createAuth(env: AuthEnv) {
 
             if (!isValid || !input.telegramId) return null;
 
-            // ✅ استخدام env الممرر، وليس globalEnv
             const localDb = getDb({ DB: env.DB });
 
             const user = await localDb.query.users.findFirst({
@@ -180,7 +189,7 @@ export function createAuth(env: AuthEnv) {
             return {
               id: finalUser.id,
               name: finalUser.name,
-              email: finalUser.email || undefined,
+              email: finalUser.email || `${finalUser.telegramId}@telegram.local`,
               image: finalUser.image || undefined,
             };
           },
@@ -188,7 +197,7 @@ export function createAuth(env: AuthEnv) {
       },
 
       // ============================================================
-      // 2. مزود Backup PIN
+      // 2. مزود Backup PIN (مُصنع خصيصاً مع Rate Limiting حارم)
       // ============================================================
       {
         id: 'pin',
@@ -200,7 +209,20 @@ export function createAuth(env: AuthEnv) {
             pin: { type: 'string', required: true },
           },
           async verify({ input }: { input: PinInput }) {
-            // ✅ استخدام env الممرر
+            // ✅ حماية ضد الـ Brute Force بالـ Redis إذا كان متوفراً
+            if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
+              const redis = new Redis({
+                url: env.UPSTASH_REDIS_REST_URL,
+                token: env.UPSTASH_REDIS_REST_TOKEN,
+              });
+              const limitKey = buildRateLimitKey('auth', input.phone, 'pin_attempt');
+              // أقصى حد: 5 محاولات فاشلة كل 15 دقيقة (900 ثانية)
+              const limitCheck = await checkRateLimit(redis, limitKey, 5, 900);
+              if (!limitCheck.allowed) {
+                throw new Error('TOO_MANY_ATTEMPTS: يرجى الانتظار قبل محاولة إدخال الـ PIN مجدداً');
+              }
+            }
+
             const localDb = getDb({ DB: env.DB });
 
             const user = await localDb.query.users.findFirst({
@@ -211,7 +233,6 @@ export function createAuth(env: AuthEnv) {
               return null;
             }
 
-            // ✅ استيراد bcrypt ديناميكياً (متوافق مع Edge)
             const bcrypt = await import('bcrypt-ts');
             try {
               const isValid = await bcrypt.compare(input.pin, user.backupPin);
@@ -223,7 +244,7 @@ export function createAuth(env: AuthEnv) {
             return {
               id: user.id,
               name: user.name,
-              email: user.email || undefined,
+              email: user.email || `${user.phoneNumber}@phone.local`,
               image: user.image || undefined,
             };
           },
@@ -251,5 +272,3 @@ export function createAuth(env: AuthEnv) {
     },
   });
 }
-
-// ❌ لم نعد نصدّر `auth` مباشرة، بل نصدّر `createAuth` فقط

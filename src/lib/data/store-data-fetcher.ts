@@ -6,7 +6,7 @@ import { eq, and } from 'drizzle-orm';
 import { stores, products } from '@/lib/db/schema';
 import type { ProductImage, ProductMetadata } from '@/lib/db/schema/products';
 import type { Store, Product } from '@/types';
-import type { RawStorePageData } from '@/lib/adapters/product-page.adapter';
+import type { RawStorePageData } from '@/features/storefront-home/adapters/product-page.adapter';
 import type { D1Database } from '@cloudflare/workers-types';
 import type { Env } from '@/lib/env'; // ✅ استيراد النوع
 

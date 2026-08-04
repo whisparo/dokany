@@ -26,30 +26,6 @@
         "x-next-revalidate-tag-token"
       ]
     },
-    "/": {
-      "experimentalBypassFor": [
-        {
-          "type": "header",
-          "key": "next-action"
-        },
-        {
-          "type": "header",
-          "key": "content-type",
-          "value": "multipart/form-data;.*"
-        }
-      ],
-      "initialRevalidateSeconds": false,
-      "srcRoute": "/",
-      "dataRoute": "/index.rsc",
-      "allowHeader": [
-        "host",
-        "x-matched-path",
-        "x-prerender-revalidate",
-        "x-prerender-revalidate-if-generated",
-        "x-next-revalidated-tags",
-        "x-next-revalidate-tag-token"
-      ]
-    },
     "/favicon.ico": {
       "initialHeaders": {
         "cache-control": "public, max-age=0, must-revalidate",
@@ -78,13 +54,37 @@
         "x-next-revalidated-tags",
         "x-next-revalidate-tag-token"
       ]
+    },
+    "/": {
+      "experimentalBypassFor": [
+        {
+          "type": "header",
+          "key": "next-action"
+        },
+        {
+          "type": "header",
+          "key": "content-type",
+          "value": "multipart/form-data;.*"
+        }
+      ],
+      "initialRevalidateSeconds": false,
+      "srcRoute": "/",
+      "dataRoute": "/index.rsc",
+      "allowHeader": [
+        "host",
+        "x-matched-path",
+        "x-prerender-revalidate",
+        "x-prerender-revalidate-if-generated",
+        "x-next-revalidated-tags",
+        "x-next-revalidate-tag-token"
+      ]
     }
   },
   "dynamicRoutes": {},
   "notFoundRoutes": [],
   "preview": {
-    "previewModeId": "6ad8954f2c99dcb3ac3a7f65cdae0899",
-    "previewModeSigningKey": "0de274a2f18ed2abc3a0e39c499b489cdbd320c3e257a8ff9f4ee284c6e0835a",
-    "previewModeEncryptionKey": "d93f49e057b51b4bbeb17eff3f4e83c25f8fcf5c991a7b9b91fa3952959ad710"
+    "previewModeId": "12b762c89255c017fc6104b6bcc1075f",
+    "previewModeSigningKey": "ed2dc538f9430530a0f4891cec99c5ea76f55a50171a87e4e375b81a4e1ad823",
+    "previewModeEncryptionKey": "5dcb8f98790c2b72bd29ba716c84c155f054bf35f280a48a206008d4fda27b43"
   }
 }

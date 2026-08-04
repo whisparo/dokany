@@ -11,11 +11,11 @@
       "static/chunks/646.f342b7cffc01feb0.js"
     ]
   },
-  "components\\storefront\\ClientCartDrawer.tsx -> ./CartDrawer": {
-    "id": 5242,
+  "features\\storefront-home\\components\\ClientCartDrawer.tsx -> ./CartDrawer": {
+    "id": 1146,
     "files": [
       "static/chunks/239-d33310ddfa6356f4.js",
-      "static/chunks/242.a3b4e14e1028bd2c.js"
+      "static/chunks/146.50f119d82320b024.js"
     ]
   }
 }

@@ -20,10 +20,7 @@ export interface RateLimitResult {
 }
 
 /**
- * ✅ Rate Limiter محسّن مع:
- * - Bounded Counter (منع الـ overflow)
- * - Reset Time (لـ Retry-After header)
- * - Namespace Support
+ * ✅ Rate Limiter ذري ومحسّن للعمل على Cloudflare Workers & Upstash Redis
  */
 export async function checkRateLimit(
   redis: Redis,
@@ -31,42 +28,46 @@ export async function checkRateLimit(
   limit: number,
   windowSeconds: number
 ): Promise<RateLimitResult> {
-  // ✅ Lua Script محسّن:
-  // 1. يمنع الـ INCR بعد الـ limit (Bounded Counter)
-  // 2. يرجع الـ TTL للـ key
-  // 3. ذري 100%
+  // ✅ Lua Script آمن لمنع Race Conditions وحساب الـ TTL بصرامة
   const luaScript = `
     local current = redis.call('GET', KEYS[1])
     
-    if current == false then
-      -- أول محاولة: ابدأ من 1
+    if not current then
       redis.call('SET', KEYS[1], 1, 'EX', ARGV[1])
-      return {1, ARGV[1]}
+      return {1, tonumber(ARGV[1])}
     end
     
     local count = tonumber(current)
+    local limit = tonumber(ARGV[2])
     
-    if count < tonumber(ARGV[2]) then
-      -- لسه في مساحة: زود العداد
+    if count < limit then
       local newCount = redis.call('INCR', KEYS[1])
       local ttl = redis.call('TTL', KEYS[1])
+      if ttl < 0 then
+        redis.call('EXPIRE', KEYS[1], ARGV[1])
+        ttl = tonumber(ARGV[1])
+      end
       return {newCount, ttl}
     else
-      -- وصلت للحد: ارجع القيم الحالية
       local ttl = redis.call('TTL', KEYS[1])
+      if ttl < 0 then
+        ttl = tonumber(ARGV[1])
+      end
       return {count, ttl}
     end
   `;
 
-  const result = await redis.eval(
+  const rawResult = await redis.eval(
     luaScript,
     [key],
     [windowSeconds.toString(), limit.toString()]
-  ) as [number, number];
+  ) as [number | string, number | string];
 
-  const [current, ttl] = result;
+  const current = Number(rawResult[0]);
+  const ttl = Math.max(1, Number(rawResult[1]));
+
   const remaining = Math.max(0, limit - current);
-  const resetAt = Date.now() + (ttl > 0 ? ttl * 1000 : windowSeconds * 1000);
+  const resetAt = Date.now() + (ttl * 1000);
 
   return {
     allowed: current <= limit,
@@ -79,10 +80,6 @@ export async function checkRateLimit(
 
 /**
  * ✅ Helper: بناء key مع namespace
- * 
- * @example
- * buildRateLimitKey('merchant', 'merchant_123', 'api')
- * // → "ratelimit:merchant:merchant_123:api"
  */
 export function buildRateLimitKey(
   namespace: string,
@@ -93,41 +90,7 @@ export function buildRateLimitKey(
 }
 
 /**
- * ✅ Helper: فحص Rate Limit مع auto-retry
- * مفيد للـ operations اللي ممكن تستنى
- */
-export async function checkRateLimitWithRetry(
-  redis: Redis,
-  key: string,
-  limit: number,
-  windowSeconds: number,
-  maxRetries: number = 3
-): Promise<RateLimitResult & { retries: number }> {
-  let retries = 0;
-  
-  while (retries < maxRetries) {
-    const result = await checkRateLimit(redis, key, limit, windowSeconds);
-    
-    if (result.allowed) {
-      return { ...result, retries };
-    }
-    
-    // استنى حتى الـ reset
-    const waitTime = result.resetAt - Date.now();
-    if (waitTime > 0 && waitTime < 5000) {
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-      retries++;
-    } else {
-      return { ...result, retries };
-    }
-  }
-  
-  const finalResult = await checkRateLimit(redis, key, limit, windowSeconds);
-  return { ...finalResult, retries };
-}
-
-/**
- * ✅ Helper: Reset Rate Limit يدوياً (للأدمن)
+ * ✅ Helper: Reset Rate Limit يدوياً
  */
 export async function resetRateLimit(
   redis: Redis,
@@ -138,8 +101,7 @@ export async function resetRateLimit(
 }
 
 /**
- * ✅ Helper: جلب حالة الـ Rate Limit بدون زيادة العداد
- * مفيد للـ Dashboard والـ Monitoring
+ * ✅ Helper: جلب حالة الـ Rate Limit بدون زيادة العداد (للـ Dashboard)
  */
 export async function peekRateLimit(
   redis: Redis,
@@ -149,10 +111,11 @@ export async function peekRateLimit(
 ): Promise<RateLimitResult> {
   const current = await redis.get(key);
   const count = current ? Number(current) : 0;
-  const ttl = await redis.ttl(key);
+  const ttlRaw = await redis.ttl(key);
+  const ttl = ttlRaw > 0 ? ttlRaw : windowSeconds;
   
   const remaining = Math.max(0, limit - count);
-  const resetAt = Date.now() + (ttl > 0 ? ttl * 1000 : windowSeconds * 1000);
+  const resetAt = Date.now() + (ttl * 1000);
   
   return {
     allowed: count <= limit,

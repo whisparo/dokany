@@ -1,10 +1,10 @@
 // src/app/[locale]/(storefront)/[storeSlug]/layout.tsx
 
 import React from 'react';
-import { Header } from '@/components/storefront/Header';
-import { Footer } from '@/components/storefront/Footer';
+import { Header } from '@/features/storefront-home/components/Header';
+import { Footer } from '@/features/storefront-home/components/Footer';
 import { StorefrontOrchestrator } from '@/lib/orchestrators/storefront-orchestrator';
-import { ClientCartDrawer } from '@/components/storefront/ClientCartDrawer';
+import { ClientCartDrawer } from '@/features/storefront-home/components/ClientCartDrawer';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { Env } from '@/lib/env';
 

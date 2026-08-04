@@ -351,3 +351,88 @@ app/
     ├── ping/                           # التست اللي قفلناه
     └── telegram/
         └── webhook/                    # بوت تليجرام
+
+
+
+
+
+
+
+
+        src/features/
+├── dashboard-overview/                 # 📊 ميزة النظرة العامة للداشبورد
+│   ├── adapters/
+│   │   └── dashboard-overview.adapter.ts # تحويل المبيعات والطلبات الخام لـ Payload
+│   ├── components/
+│   │   ├── MetricsGrid/
+│   │   │   ├── MetricsGrid.tsx
+│   │   │   └── MetricCard.tsx          # كارت إحصائي صغير ومستقل
+│   │   ├── RecentOrdersTable/
+│   │   │   ├── RecentOrdersTable.tsx    # الهيكل الخارجي للجدول
+│   │   │   ├── RecentOrderRow.tsx      # صف الطلب
+│   │   │   ├── RecentOrdersTable.adapter.ts
+│   │   │   └── RecentOrdersTable.theme.ts
+│   │   └── AnalyticsChart.tsx
+│   └── hooks/
+│       └── useDashboardData.ts
+│
+├── products-management/                # 📦 ميزة إدارة المنتجات (الداشبورد)
+│   ├── adapters/
+│   │   └── products-management.adapter.ts # تجهيز بيانات الجدول والفلاتر
+│   ├── components/
+│   │   ├── ProductTable/
+│   │   │   ├── ProductTable.tsx        # الهيكل الخارجي للجدول (Shell)
+│   │   │   ├── ProductTableRow.tsx     # صف المنتج الواحد
+│   │   │   ├── ProductPriceCell.tsx    # عرض السعر مع العملة
+│   │   │   ├── ProductStatusBadge.tsx  # شارة الحالة (نشط / مسودة / منتهي)
+│   │   │   ├── ProductActionsMenu.tsx  # قائمة الإجراءات السريعة (تعديل/حذف)
+│   │   │   └── ProductTableSkeleton.tsx# حالة التحميل
+│   │   ├── ProductForm/
+│   │   │   ├── ProductForm.tsx         # الحاوية الرئيسية للفورم
+│   │   │   ├── ProductMediaUpload.tsx  # رفع الصور
+│   │   │   └── ProductPricingInputs.tsx# مدخلات الأسعار والخصومات
+│   │   └── ProductFilters.tsx          # شريط البحث والفلترة
+│   └── hooks/
+│       └── useProducts.ts
+│
+├── orders-management/                  # 🛒 ميزة إدارة الطلبات (الداشبورد)
+│   ├── adapters/
+│   │   └── orders-management.adapter.ts
+│   ├── components/
+│   │   ├── OrdersTable/
+│   │   │   ├── OrdersTable.tsx         # هيكل الجدول
+│   │   │   ├── OrderTableRow.tsx       # صف الطلب
+│   │   │   ├── OrderStatusBadge.tsx    # شارة حالة الطلب (قيد الانتظار/مكتمل)
+│   │   │   ├── OrderCustomerCell.tsx   # بيانات العميل المختصرة
+│   │   │   └── OrderActionsMenu.tsx    # إجراءات تغيير الحالة
+│   │   └── OrderFilters.tsx            # فلترة الطلبات
+│   └── hooks/
+│       └── useOrders.ts
+│
+├── storefront-home/                    # 🏬 ميزة الصفحة الرئيسية للمتجر
+│   ├── adapters/
+│   │   └── storefront-home.adapter.ts  # تقسيم بيانات المتجر للاقسام
+│   └── components/
+│       ├── HeroBanner/
+│       │   ├── HeroBanner.tsx
+│       │   └── HeroBanner.theme.ts
+│       ├── CategoryList/
+│       │   ├── CategoryList.tsx
+│       │   └── CategoryCard.tsx        # كارت التصنيف الفردي
+│       └── FeaturedProducts/
+│           ├── FeaturedProducts.tsx
+│           └── ProductCard.tsx         # كارت المنتج العام في المتجر
+│
+└── storefront-product/                 # 🏷️ ميزة صفحة التفاصيل للمنتج (المتجر)
+    ├── adapters/
+    │   └── product-detail.adapter.ts   # تحويل تفاصيل المنتج لـ Page Payload
+    └── components/
+        ├── ProductGallery/
+        │   ├── ProductGallery.tsx      # المعرض الرئيسي
+        │   └── ImageThumbnail.tsx      # المصغرات
+        ├── ProductInfo/
+        │   ├── ProductInfo.tsx
+        │   ├── AddToCartButton.tsx     # جزيرة إضافة للسلة تفاعلية
+        │   └── ProductVariantPicker.tsx# خيارات الأحجام والألوان
+        └── RelatedProducts/
+            └── RelatedProducts.tsx

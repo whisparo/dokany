@@ -2,12 +2,12 @@
 
 import type { Store, Product } from '@/types';
 import { adaptProductGrid } from '@/components/storefront/ProductGrid/ProductGrid.adapter';
-import { adaptHero } from '@/components/storefront/Hero/Hero.adapter';
+import { adaptHero } from '@/features/storefront-home/components/Hero/Hero.adapter';
 import type {
   ProductGridAdapterResult,
   ProductGridAdapterOptions,
 } from '@/components/storefront/ProductGrid/ProductGrid.adapter';
-import type { HeroAdapterResult } from '@/components/storefront/Hero/Hero.adapter';
+import type { HeroAdapterResult } from '@/features/storefront-home/components/Hero/Hero.adapter';
 
 // ============================================================
 // 📦 الأنواع الموحدة والصارمة (No Any, Strongly Typed)

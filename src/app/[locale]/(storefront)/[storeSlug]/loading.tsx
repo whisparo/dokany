@@ -4,19 +4,25 @@ import { Container } from '@/components/shared/Container';
 
 export default function StoreLoading() {
   return (
-    <Container maxWidth="xl">
-      <div className="mb-8 text-center">
-        <div className="mx-auto h-10 w-64 animate-pulse rounded-lg bg-gray-200" />
-        <div className="mx-auto mt-4 h-5 w-96 animate-pulse rounded-lg bg-gray-200" />
+    <Container maxWidth="xl" className="py-8">
+      {/* Title & Subtitle Skeleton */}
+      <div className="mb-8 text-center space-y-4">
+        <div className="mx-auto h-10 w-64 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-800" />
+        <div className="mx-auto h-5 w-96 max-w-full animate-pulse rounded-lg bg-slate-200 dark:bg-slate-800" />
       </div>
+
+      {/* Products Grid Skeleton */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="animate-pulse rounded-lg border border-gray-100 bg-white p-4">
-            <div className="aspect-square rounded-lg bg-gray-200" />
-            <div className="mt-3 space-y-2">
-              <div className="h-4 w-3/4 rounded bg-gray-200" />
-              <div className="h-4 w-1/3 rounded bg-gray-200" />
-              <div className="h-10 w-full rounded bg-gray-200" />
+          <div 
+            key={i} 
+            className="animate-pulse rounded-xl border border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900 p-4 shadow-sm"
+          >
+            <div className="aspect-square w-full rounded-lg bg-slate-200 dark:bg-slate-800" />
+            <div className="mt-4 space-y-2.5">
+              <div className="h-4 w-3/4 rounded bg-slate-200 dark:bg-slate-800" />
+              <div className="h-4 w-1/3 rounded bg-slate-200 dark:bg-slate-800" />
+              <div className="mt-3 h-10 w-full rounded-lg bg-slate-200 dark:bg-slate-800" />
             </div>
           </div>
         ))}

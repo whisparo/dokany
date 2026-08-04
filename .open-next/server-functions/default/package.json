@@ -57,5 +57,11 @@
   },
   "overrides": {
     "@cloudflare/workers-types": "^5.20260714.1"
-  }
+  },
+  "browserslist": [
+    "chrome >= 105",
+    "safari >= 15",
+    "firefox >= 105",
+    "edge >= 105"
+  ]
 }

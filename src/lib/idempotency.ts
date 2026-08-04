@@ -2,10 +2,10 @@
 
 import { getDb } from '@/lib/db';
 import { idempotency as idempotencyTable } from '@/lib/db/schema/idempotency';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, lte, sql } from 'drizzle-orm';
 import type { Env } from '@/lib/env';
 
-const PENDING_TIMEOUT_SECONDS = 30;
+const PENDING_TIMEOUT_MS = 30 * 1000; // 30 ثانية بالمللي ثانية
 
 export const idempotency = {
   async execute<T>(
@@ -14,19 +14,20 @@ export const idempotency = {
     fn: () => Promise<T>
   ): Promise<T> {
     const db = getDb(env);
+    const nowMs = Date.now();
 
-    // 1. محاولة الإدراج الذرية (الخطوة دي سليمة عندك)
+    // 1. محاولة الإدراج الذرية (Atomic Insert)
     const insertResult = await db
       .insert(idempotencyTable)
       .values({
         key,
         status: 'pending',
-        createdAt: new Date(),
+        createdAt: new Date(nowMs),
       })
       .onConflictDoNothing()
       .returning({ key: idempotencyTable.key });
 
-    // 2. إذا كان المفتاح موجوداً مسبقاً
+    // 2. إذا كان المفتاح موجوداً مسبقاً (Conflict)
     if (insertResult.length === 0) {
       const existing = await db
         .select()
@@ -35,64 +36,59 @@ export const idempotency = {
         .limit(1);
 
       if (existing.length === 0) {
-        throw new Error('Idempotency key not found after conflict');
+        throw new Error('Idempotency key not found after conflict resolution');
       }
 
       const record = existing[0];
 
-      // ✅ حالة مكتملة بنجاح
+      // ✅ 2.1 العملية مكتملة بنجاح
       if (record.status === 'completed') {
-        return JSON.parse(record.result!);
+        if (!record.result) return null as unknown as T;
+        return JSON.parse(record.result) as T;
       }
 
-      // 🛑 حماية ضد الـ Race Condition في حالة إعادة المحاولة (Failed)
+      // 🛑 2.2 إعادة المحاولة بعد الفشل (Retry after Failure)
       if (record.status === 'failed') {
         const updateResult = await db
           .update(idempotencyTable)
           .set({
             status: 'pending',
-            createdAt: new Date(),
-            result: null, // تصفير رسالة الخطأ السابقة
+            createdAt: new Date(nowMs),
+            result: null,
           })
           .where(and(
             eq(idempotencyTable.key, key),
-            eq(idempotencyTable.status, 'failed') // الحماية هنا!
+            eq(idempotencyTable.status, 'failed')
           ));
 
-        // لو مفيش صفوف اتحدثت، معناه إن طلب متزامن تاني خطف الـ Lock وحولها لـ pending
         if (updateResult.meta.changes === 0) {
-          throw new Error('Operation already in progress, please retry later');
+          throw new Error('Operation already acquired by another request');
         }
-      }
+      } 
       
-      // 🛑 حماية ضد الـ Race Condition في حالة الـ Timeout
+      // 🛑 2.3 التعامل مع الـ Timeout للطلبات المعلقة (Atomic Timeout Lock)
       else if (record.status === 'pending') {
-        const now = new Date();
-        const elapsed = (now.getTime() - new Date(record.createdAt).getTime()) / 1000;
+        const expiredThreshold = new Date(nowMs - PENDING_TIMEOUT_MS);
 
-        if (elapsed > PENDING_TIMEOUT_SECONDS) {
-          const updateResult = await db
-            .update(idempotencyTable)
-            .set({
-              status: 'pending',
-              createdAt: new Date(), // تجديد الـ Lock لـ 30 ثانية جديدة
-            })
-            .where(and(
-              eq(idempotencyTable.key, key),
-              eq(idempotencyTable.status, 'pending'), // الحماية هنا!
-              eq(idempotencyTable.createdAt, record.createdAt) // التأكد إن التوقيت لم يتغير
-            ));
+        // تحديث أتمي بشرط أن تكون الحالة pending وأن تكون نبتت من وقت أقدم من الـ Timeout
+        const updateResult = await db
+          .update(idempotencyTable)
+          .set({
+            createdAt: new Date(nowMs), // تجديد الـ Lock
+          })
+          .where(and(
+            eq(idempotencyTable.key, key),
+            eq(idempotencyTable.status, 'pending'),
+            lte(idempotencyTable.createdAt, expiredThreshold) // حل مشكلة مقارنة الـ Dates بطلب D1 الذري
+          ));
 
-          if (updateResult.meta.changes === 0) {
-            throw new Error('Operation already in progress, please retry later');
-          }
-        } else {
+        if (updateResult.meta.changes === 0) {
           throw new Error('Operation already in progress, please retry later');
         }
       }
     }
 
-    // 3. تنفيذ كود البزنس الآمن
+    // 3. تنفيذ كود البزنس وتحديث النتيجة
     try {
       const result = await fn();
 
@@ -100,14 +96,14 @@ export const idempotency = {
         .update(idempotencyTable)
         .set({
           status: 'completed',
-          result: JSON.stringify(result),
+          result: result !== undefined ? JSON.stringify(result) : null,
           completedAt: new Date(),
         })
         .where(eq(idempotencyTable.key, key));
 
       return result;
     } catch (error) {
-      // 4. تسجيل الفشل بدقة لتسهيل إعادة المحاولة الآمنة
+      // 4. تسجيل الفشل للطلب مع إمكانية إعادة المحاولة
       await db
         .update(idempotencyTable)
         .set({
