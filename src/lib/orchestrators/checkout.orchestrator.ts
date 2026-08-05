@@ -1,6 +1,6 @@
 // src/lib/orchestrators/checkout.orchestrator.ts
 
-import { getCheckoutRawData } from '@/lib/data/checkout-data-fetcher';
+import { getCheckoutRawData } from '@/features/data/checkout-data-fetcher';
 import { adaptCheckoutPage } from '@/lib/adapters/checkout-page.adapter';
 import type { CheckoutPayload } from '@/lib/adapters/checkout-page.adapter';
 

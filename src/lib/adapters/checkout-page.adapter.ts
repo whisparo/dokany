@@ -1,6 +1,6 @@
 // src/lib/adapters/checkout-page.adapter.ts
 
-import type { CheckoutRawData } from '@/lib/data/checkout-data-fetcher';
+import type { CheckoutRawData } from '@/features/data/checkout-data-fetcher';
 import { adaptCheckout as adaptCheckoutUI } from '@/components/storefront/Checkout/Checkout.adapter';
 import type { CheckoutPayload } from '@/components/storefront/Checkout/Checkout.adapter';
 

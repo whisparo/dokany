@@ -1,6 +1,6 @@
 // src/lib/orchestrators/storefront-orchestrator.ts
 
-import { getStoreRawData } from '@/lib/data/store-data-fetcher';
+import { getStoreRawData } from '@/features/data/store-data-fetcher';
 import { adaptProductPage } from '@/features/storefront-home/adapters/product-page.adapter';
 import { adaptHeader, type HeaderAdapterResult } from '@/features/storefront-home/components/Header/Header.adapter';
 import { adaptFooter, type FooterAdapterResult } from '@/features/storefront-home/components/Footer/Footer.adapter';

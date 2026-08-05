@@ -1,6 +1,6 @@
 // app/(storefront)/[storeSlug]/page.tsx
 
-import { StorefrontOrchestrator } from '@/lib/orchestrators/storefront-orchestrator';
+import { StorefrontOrchestrator } from '@/features/storefront-home/orchestrators/storefront-orchestrator';
 import { Hero } from '@/features/storefront-home/components/Hero/Hero';
 import { ProductGrid } from '@/components/storefront/ProductGrid/ProductGrid';
 import { getCloudflareContext } from '@opennextjs/cloudflare';

@@ -2,8 +2,8 @@
 
 import { notFound } from 'next/navigation';
 import { Checkout } from '@/components/storefront/Checkout';
-import { getCheckoutRawData, getSessionId } from '@/lib/data/checkout-data-fetcher';
-import { getStoreRawData } from '@/lib/data/store-data-fetcher';
+import { getCheckoutRawData, getSessionId } from '@/features/data/checkout-data-fetcher';
+import { getStoreRawData } from '@/features/data/store-data-fetcher';
 import { handleCheckoutSubmit } from './checkout.actions';
 import type { Metadata } from 'next';
 import { getCloudflareContext } from '@opennextjs/cloudflare';

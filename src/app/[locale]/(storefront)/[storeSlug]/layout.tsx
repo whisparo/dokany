@@ -3,7 +3,7 @@
 import React from 'react';
 import { Header } from '@/features/storefront-home/components/Header';
 import { Footer } from '@/features/storefront-home/components/Footer';
-import { StorefrontOrchestrator } from '@/lib/orchestrators/storefront-orchestrator';
+import { StorefrontOrchestrator } from '@/features/storefront-home/orchestrators/storefront-orchestrator';
 import { ClientCartDrawer } from '@/features/storefront-home/components/ClientCartDrawer';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { Env } from '@/lib/env';

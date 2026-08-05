@@ -10,7 +10,7 @@ import { ShippingOptions } from './ShippingOptions';
 import { PaymentMethods } from './PaymentMethods';
 import { OrderSummary } from './OrderSummary';
 import { CheckoutForm } from './CheckoutForm'; 
-import type { CheckoutRawData } from '@/lib/data/checkout-data-fetcher';
+import type { CheckoutRawData } from '@/features/data/checkout-data-fetcher';
 import { cn } from '@/lib/utils';
 
 export interface CheckoutProps {

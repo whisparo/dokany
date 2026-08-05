@@ -1,6 +1,6 @@
 // src/lib/orchestrators/product-details-orchestrator.ts
 
-import { getStoreRawData, getProductData } from '@/lib/data/store-data-fetcher';
+import { getStoreRawData, getProductData } from '@/features/data/store-data-fetcher';
 import { adaptProductDetailPage } from '@/lib/adapters/product-detail-page.adapter';
 import type { ProductDetailPagePayload } from '@/lib/adapters/product-detail-page.adapter';
 import type { Env } from '@/lib/env'; // ✅ استيراد النوع
