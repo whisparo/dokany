@@ -1,5 +1,6 @@
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, and, isNull } from 'drizzle-orm';
+import { cookies } from 'next/headers';
 import type { Env } from '@/lib/env';
 
 // 📂 استيراد السكيمات الفعلية المتاحة في مشروعك
@@ -63,6 +64,23 @@ function getDb(env: Env) {
 }
 
 // ============================================================
+// 🍪 إدارة الجلسة (Session Helpers)
+// ============================================================
+
+/**
+ * جلب معرف الجلسة الحالية (Session ID) من الـ Cookies
+ */
+export async function getSessionId(): Promise<string | undefined> {
+  try {
+    const cookieStore = await cookies();
+    return cookieStore.get('session_id')?.value;
+  } catch (error) {
+    console.error('❌ [getSessionId] Failed to read cookies:', error);
+    return undefined;
+  }
+}
+
+// ============================================================
 // 🗄️ دوال جلب البيانات
 // ============================================================
 
@@ -73,12 +91,12 @@ async function fetchStoreCurrency(storeId: string, env: Env): Promise<string> {
   try {
     const db = getDb(env);
     const store = await db
-      .select({ id: stores.id })
+      .select({ id: stores.id, currency: stores.currency })
       .from(stores)
       .where(eq(stores.id, storeId))
       .get();
 
-    return store ? 'EGP' : 'EGP';
+    return store?.currency ?? 'EGP';
   } catch (error) {
     console.error('❌ [fetchStoreCurrency] Error:', error);
     return 'EGP';
@@ -176,7 +194,8 @@ async function fetchPaymentMethods(storeId: string, env: Env): Promise<PaymentMe
 export async function getCheckoutRawData(
   storeId: string,
   env: Env,
-  customerId?: string
+  customerId?: string,
+  sessionId?: string
 ): Promise<CheckoutRawData> {
   if (!storeId) {
     throw new Error('[CheckoutDataFetcher] storeId is required');

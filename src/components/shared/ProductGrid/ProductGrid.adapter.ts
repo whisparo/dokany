@@ -1,8 +1,8 @@
 // src/components/storefront/ProductGrid/ProductGrid.adapter.ts
 
 import type { Product } from '@/types';
-import { adaptProductCard } from '../ProductCard/ProductCard.adapter';
-import type { ProductCardAdapterResult } from '../ProductCard/ProductCard.adapter';
+import { adaptProductCard } from '../../shared/ProductCard/ProductCard.adapter';
+import type { ProductCardAdapterResult } from '../../shared/ProductCard/ProductCard.adapter';
 
 // ============================================================
 // 📦 الأنواع الموحدة والصارمة (No Any, Standard Contracts)

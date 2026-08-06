@@ -1,11 +1,11 @@
 // src/lib/orchestrators/storefront-orchestrator.ts
 
-import { getStoreRawData } from '@/features/data/store-data-fetcher';
+import { getStoreRawData } from '@/features/storefront-home/data/store-data-fetcher';
 import { adaptProductPage } from '@/features/storefront-home/adapters/product-page.adapter';
 import { adaptHeader, type HeaderAdapterResult } from '@/features/storefront-home/components/Header/Header.adapter';
 import { adaptFooter, type FooterAdapterResult } from '@/features/storefront-home/components/Footer/Footer.adapter';
 import type { HeroAdapterResult } from '@/features/storefront-home/components/Hero/Hero.adapter';
-import type { ProductGridAdapterResult } from '@/components/storefront/ProductGrid/ProductGrid.adapter';
+import type { ProductGridAdapterResult } from '@/components/shared/ProductGrid/ProductGrid.adapter';
 import { notFound } from 'next/navigation';
 import type { Env } from '@/lib/env';
 

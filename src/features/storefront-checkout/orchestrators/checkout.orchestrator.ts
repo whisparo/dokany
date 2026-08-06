@@ -1,8 +1,8 @@
 // src/lib/orchestrators/checkout.orchestrator.ts
 
-import { getCheckoutRawData } from '@/features/data/checkout-data-fetcher';
-import { adaptCheckoutPage } from '@/lib/adapters/checkout-page.adapter';
-import type { CheckoutPayload } from '@/lib/adapters/checkout-page.adapter';
+import { getCheckoutRawData } from '@/features/storefront-checkout/data/checkout-data-fetcher';
+import { adaptCheckoutPage } from '@/features/storefront-checkout/adapters/checkout-page.adapter';
+import type { CheckoutPayload } from '@/features/storefront-checkout/adapters/checkout-page.adapter';
 
 // 🔗 استيراد الـ Guards والجداول والأنواع من الـ Schema مباشرة
 import { idempotency } from '@/lib/idempotency';

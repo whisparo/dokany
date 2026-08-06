@@ -2,7 +2,7 @@
 
 import { StorefrontOrchestrator } from '@/features/storefront-home/orchestrators/storefront-orchestrator';
 import { Hero } from '@/features/storefront-home/components/Hero/Hero';
-import { ProductGrid } from '@/components/storefront/ProductGrid/ProductGrid';
+import { ProductGrid } from '@/components/shared/ProductGrid/ProductGrid';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { Env } from '@/lib/env';
 

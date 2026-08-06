@@ -1,8 +1,8 @@
 // src/lib/adapters/checkout-page.adapter.ts
 
-import type { CheckoutRawData } from '@/features/data/checkout-data-fetcher';
-import { adaptCheckout as adaptCheckoutUI } from '@/components/storefront/Checkout/Checkout.adapter';
-import type { CheckoutPayload } from '@/components/storefront/Checkout/Checkout.adapter';
+import type { CheckoutRawData } from '@/features/storefront-checkout/data/checkout-data-fetcher';
+import { adaptCheckout as adaptCheckoutUI } from '@/features/storefront-checkout/components/Checkout/Checkout.adapter';
+import type { CheckoutPayload } from '@/features/storefront-checkout/components/Checkout/Checkout.adapter';
 
 /**
  * أدابتر صفحة الدفع (Checkout Page Adapter)
@@ -26,4 +26,4 @@ export function adaptCheckoutPage(
 }
 
 // إعادة تصدير الأنواع لتكون متاحة للأوركسترا وصفحة الدفع.
-export type { CheckoutPayload } from '@/components/storefront/Checkout/Checkout.adapter';
+export type { CheckoutPayload } from '@/features/storefront-checkout/components/Checkout/Checkout.adapter';

@@ -1,12 +1,12 @@
 // src/lib/adapters/product-page.adapter.ts
 
 import type { Store, Product } from '@/types';
-import { adaptProductGrid } from '@/components/storefront/ProductGrid/ProductGrid.adapter';
+import { adaptProductGrid } from '@/components/shared/ProductGrid/ProductGrid.adapter';
 import { adaptHero } from '@/features/storefront-home/components/Hero/Hero.adapter';
 import type {
   ProductGridAdapterResult,
   ProductGridAdapterOptions,
-} from '@/components/storefront/ProductGrid/ProductGrid.adapter';
+} from '@/components/shared/ProductGrid/ProductGrid.adapter';
 import type { HeroAdapterResult } from '@/features/storefront-home/components/Hero/Hero.adapter';
 
 // ============================================================

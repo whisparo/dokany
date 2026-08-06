@@ -1,8 +1,8 @@
 // src/lib/orchestrators/product-details-orchestrator.ts
 
-import { getStoreRawData, getProductData } from '@/features/data/store-data-fetcher';
-import { adaptProductDetailPage } from '@/lib/adapters/product-detail-page.adapter';
-import type { ProductDetailPagePayload } from '@/lib/adapters/product-detail-page.adapter';
+import { getStoreRawData, getProductData } from '@/features/storefront-home/data/store-data-fetcher';
+import { adaptProductDetailPage } from '@/features/storefront-product/adapters/product-detail-page.adapter';
+import type { ProductDetailPagePayload } from '@/features/storefront-product/adapters/product-detail-page.adapter';
 import type { Env } from '@/lib/env'; // ✅ استيراد النوع
 
 // ============================================================

@@ -56,14 +56,17 @@
       "static/chunks/619-ba102abea3e3d0e4.js",
       "static/chunks/app/[locale]/(storefront)/[storeSlug]/not-found-5c0f6daecaccba63.js"
     ],
-    "/[locale]/(storefront)/[storeSlug]/checkout/page": [
+    "/[locale]/(storefront)/[storeSlug]/page": [
       "static/chunks/webpack-672b0ff62d7a7a0c.js",
       "static/chunks/4bd1b696-c023c6e3521b1417.js",
       "static/chunks/255-62902f04efbdd792.js",
       "static/chunks/main-app-4a0ac456191027e6.js",
       "static/chunks/125-39945b1dfd04350c.js",
       "static/chunks/239-d33310ddfa6356f4.js",
-      "static/chunks/app/[locale]/(storefront)/[storeSlug]/checkout/page-5be9f82340331dab.js"
+      "static/chunks/619-ba102abea3e3d0e4.js",
+      "static/chunks/886-a4bf107ecbb2efc3.js",
+      "static/chunks/180-9f6a351892ecb10a.js",
+      "static/chunks/app/[locale]/(storefront)/[storeSlug]/page-5165833e2d45a9fc.js"
     ],
     "/[locale]/(storefront)/[storeSlug]/products/[slug]/page": [
       "static/chunks/webpack-672b0ff62d7a7a0c.js",
@@ -74,20 +77,17 @@
       "static/chunks/239-d33310ddfa6356f4.js",
       "static/chunks/619-ba102abea3e3d0e4.js",
       "static/chunks/886-a4bf107ecbb2efc3.js",
-      "static/chunks/532-0b8d80677afaea37.js",
-      "static/chunks/app/[locale]/(storefront)/[storeSlug]/products/[slug]/page-a54fb4b6e135d1be.js"
+      "static/chunks/180-9f6a351892ecb10a.js",
+      "static/chunks/app/[locale]/(storefront)/[storeSlug]/products/[slug]/page-4be8aa53230ac26b.js"
     ],
-    "/[locale]/(storefront)/[storeSlug]/page": [
+    "/[locale]/(storefront)/[storeSlug]/checkout/page": [
       "static/chunks/webpack-672b0ff62d7a7a0c.js",
       "static/chunks/4bd1b696-c023c6e3521b1417.js",
       "static/chunks/255-62902f04efbdd792.js",
       "static/chunks/main-app-4a0ac456191027e6.js",
       "static/chunks/125-39945b1dfd04350c.js",
       "static/chunks/239-d33310ddfa6356f4.js",
-      "static/chunks/619-ba102abea3e3d0e4.js",
-      "static/chunks/886-a4bf107ecbb2efc3.js",
-      "static/chunks/532-0b8d80677afaea37.js",
-      "static/chunks/app/[locale]/(storefront)/[storeSlug]/page-5970a8a0ce5e201c.js"
+      "static/chunks/app/[locale]/(storefront)/[storeSlug]/checkout/page-19cedd943bb666b1.js"
     ]
   }
 }

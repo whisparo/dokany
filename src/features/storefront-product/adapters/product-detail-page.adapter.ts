@@ -1,8 +1,8 @@
 // src/lib/adapters/product-detail-page.adapter.ts
 
 import type { Store, Product } from '@/types';
-import { adaptProductDetails } from '@/components/storefront/ProductDetails/ProductDetails.adapter';
-import type { ProductDetailsAdapterResult } from '@/components/storefront/ProductDetails/ProductDetails.adapter';
+import { adaptProductDetails } from '@/features/storefront-product/components/ProductDetails/ProductDetails.adapter';
+import type { ProductDetailsAdapterResult } from '@/features/storefront-product/components/ProductDetails/ProductDetails.adapter';
 
 // ============================================================
 // 📦 الأنواع والواجهات الصارمة لصفحة تفاصيل المنتج (Payload)

@@ -6,7 +6,7 @@ import type {
   ShippingOption,
   PaymentMethod,
   CheckoutRawData,
-} from '@/features/data/checkout-data-fetcher';
+} from '@/features/storefront-checkout/data/checkout-data-fetcher';
 
 // ============================================================
 // 📦 الأنواع (Types)

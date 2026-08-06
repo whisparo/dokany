@@ -1,10 +1,11 @@
-// app/(storefront)/[storeSlug]/checkout/page.tsx
-
 import { notFound } from 'next/navigation';
-import { Checkout } from '@/components/storefront/Checkout';
-import { getCheckoutRawData, getSessionId } from '@/features/data/checkout-data-fetcher';
-import { getStoreRawData } from '@/features/data/store-data-fetcher';
-import { handleCheckoutSubmit } from './checkout.actions';
+import { Checkout } from '@/features/storefront-checkout/components/Checkout'; // أو المسار الجديد في features/checkout/components/Checkout
+
+// ✅ استيراد البيانات من المسارات الجديدة الاحترافية داخل src/features/
+import { getCheckoutRawData, getSessionId } from '@/features/storefront-checkout/data/checkout-data-fetcher';
+import { getStoreRawData } from '@/features/storefront-home/data/store-data-fetcher';
+
+import { handleCheckoutSubmit } from '../../../../../features/storefront-checkout/actions/checkout.actions';
 import type { Metadata } from 'next';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { Env } from '@/lib/env';
@@ -32,10 +33,9 @@ export default async function CheckoutPage({
 }) {
   const { storeSlug } = await params;
 
-  // ✅ الحصول على env من سياق OpenNext مع كاستنج آمن
+  // ✅ الحصول على env من سياق OpenNext
   const { env } = getCloudflareContext() as unknown as { env: Env };
 
-  // ✅ التحقق من وجود DB قبل الاستخدام (اختياري لكن احترازي)
   if (!env?.DB) {
     console.error('❌ D1 Database binding not available in CheckoutPage');
     notFound();

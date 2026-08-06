@@ -2,7 +2,7 @@
 // ❌ احذف السطر 'use client'; من أول الملف
 import Link from 'next/link';
 import { ArrowLeft, PackageX } from 'lucide-react';
-import { ProductCard } from '../ProductCard';
+import { ProductCard } from '../../shared/ProductCard';
 import { Typography } from '@/components/shared/Typography';
 import Button from '@/components/shared/Button';
 import { getProductGridTheme } from './ProductGrid.theme';
