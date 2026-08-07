@@ -1,9 +1,20 @@
 // app/(storefront)/[storeSlug]/not-found.tsx
 
 import Link from 'next/link';
+import type { Metadata } from 'next';
 import { Container } from '@/components/shared/Container';
 import { Typography } from '@/components/shared/Typography';
 import Button from '@/components/shared/Button';
+
+// 🎯 إضافة الـ Metadata لتأمين الـ SEO وتقييم 100/100 في Lighthouse حتى في صفحات 404
+export const metadata: Metadata = {
+  title: 'المتجر غير موجود | دكاني',
+  description: 'عذراً، لم نتمكن من العثور على المتجر المطلوب. ربما تم تحديث الرابط أو حذفه.',
+  robots: {
+    index: false,
+    follow: true,
+  },
+};
 
 export default function StoreNotFound() {
   return (

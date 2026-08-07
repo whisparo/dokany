@@ -1,5 +1,4 @@
 // src/lib/db/schema/coupons.ts
-
 import {
   sqliteTable,
   text,

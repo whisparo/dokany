@@ -1,5 +1,4 @@
 // src/lib/db/schema/shipments.ts
-
 import type { D1Database } from '@cloudflare/workers-types'; // ✅ تمت الإضافة
 import {
   sqliteTable,

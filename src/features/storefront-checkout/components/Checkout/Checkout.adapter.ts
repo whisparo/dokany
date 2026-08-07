@@ -1,6 +1,6 @@
 // src/components/storefront/Checkout/Checkout.adapter.ts
 
-import type { CartItem } from '@/stores/cart-store';
+import type { CartItem } from '@/types/cart';
 import type {
   CustomerData,
   ShippingOption,

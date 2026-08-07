@@ -1,60 +1,46 @@
 // src/lib/orchestrators/product-details-orchestrator.ts
 
-import { getStoreRawData, getProductData } from '@/features/storefront-home/data/store-data-fetcher';
+import { fetchStoreInfo } from '@/lib/services/store.service';
+import { getProductData, getRelatedProductsData } from '@/features/storefront-product/data/product-data-fetcher';
 import { adaptProductDetailPage } from '@/features/storefront-product/adapters/product-detail-page.adapter';
 import type { ProductDetailPagePayload } from '@/features/storefront-product/adapters/product-detail-page.adapter';
-import type { Env } from '@/lib/env'; // ✅ استيراد النوع
-
-// ============================================================
-// 🧠 أوركسترا صفحة تفاصيل المنتج (The Maestro)
-// ============================================================
+import type { Env } from '@/lib/env';
 
 export const ProductDetailsOrchestrator = {
-  /**
-   * ✅ يجلب البيانات الخام من الـ Fetchers المكّشة المتاحة فعلياً ويقوم بعمل الـ Adapt
-   * @param storeSlug - المعرف الفريد للمتجر
-   * @param productSlug - المعرف الفريد للمنتج
-   * @param userCurrency - العملة الحالية (ديناميكية)
-   * @param env - بيئة الـ Worker (تحتوي على DB)
-   */
   async fetchDetailPagePayload(
     storeSlug: string,
     productSlug: string,
     userCurrency: string = 'EGP',
-    env: Env // ✅ إضافة env كمعامل
+    env: Env
   ): Promise<ProductDetailPagePayload | null> {
     try {
-      // 1️⃣ جلب بيانات المتجر (باستخدام الدالة المتاحة والمكّشة عندك فعلياً)
-      // ✅ تمرير env
-      const storeData = await getStoreRawData(storeSlug, env, { page: 1, limit: 1 });
-      
-      if (!storeData || !storeData.store) {
-        return null;
-      }
+      // 1️⃣ جلب بيانات المتجر
+      const store = await fetchStoreInfo(storeSlug, env);
+      if (!store) return null;
 
-      const store = storeData.store;
-
-      // 2️⃣ جلب بيانات المنتج بشكل آمن باستدعاء الدالة المصدّرة والمكّشة getProductData
-      // ✅ تمرير env
+      // 2️⃣ جلب بيانات المنتج
       const product = await getProductData(store.id, productSlug, env);
+      if (!product) return null;
 
-      if (!product) {
-        return null;
-      }
+      // 3️⃣ جلب المنتجات ذات الصلة مع تحويل undefined إلى null
+      const relatedProducts = await getRelatedProductsData(
+        store.id,
+        product.categoryId ?? null, // ✅ تحويل undefined إلى null لحل خطأ TypeScript
+        product.id,
+        env
+      ).catch(() => []);
 
-      // 3️⃣ تمرير البيانات الخام المسترجعة للأدابتر المجمع لتجهيز الـ Payload النظيف للـ UI
+      // 4️⃣ الـ Adapt والـ Return
       return adaptProductDetailPage(
         {
           store,
           product,
+          relatedProducts,
         },
         userCurrency
       );
     } catch (error) {
-      console.error(
-        `[ProductDetailsOrchestrator] Error fetching payload for store: ${storeSlug}, product: ${productSlug}`,
-        error
-      );
+      console.error(`[ProductDetailsOrchestrator] Error: ${storeSlug}/${productSlug}`, error);
       return null;
     }
   },

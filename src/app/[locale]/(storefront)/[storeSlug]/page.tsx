@@ -7,25 +7,22 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { Env } from '@/lib/env';
 
 interface StorePageProps {
-  // ⚡ إضافة locale إلى الـ params المتوقعة
   params: Promise<{ locale: string; storeSlug: string }>;
   searchParams: Promise<{ page?: string; sort?: string; currency?: string }>;
 }
 
-export const dynamic = 'force-dynamic';
+// ⚡ 1. مسحنا force-dynamic وجعلنا الصفحة تعتمد على revalidate الذكي من Next.js
+export const revalidate = 60; 
 
 export default async function StorePage({ params, searchParams }: StorePageProps) {
-  // ✅ استخراج locale و storeSlug مع الانتظار
-  const { storeSlug, locale } = await params;
+  const { storeSlug } = await params;
   const sParams = await searchParams;
 
-  // ⚡ فك تشفير اسم المتجر العربي عشان الـ D1 يستوعبه صح (عطر بدلاً من %D8%B9...)
   const decodedStoreSlug = decodeURIComponent(storeSlug);
 
-  // ✅ الحصول على env وتحويل النوع
   const { env } = getCloudflareContext() as unknown as { env: Env };
 
-  // ✅ تمرير الاسم المفكوك للأوركسترا
+  // ⚡ 2. تمرير البيانات (سيتم تخزين النتيجة على الـ Edge لمدة 60 ثانية)
   const payload = await StorefrontOrchestrator.fetchPagePayload(decodedStoreSlug, env, sParams);
 
   return (

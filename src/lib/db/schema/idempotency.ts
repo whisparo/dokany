@@ -1,5 +1,4 @@
 // src/lib/db/schema/idempotency.ts
-
 import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 import { type InferSelectModel, type InferInsertModel } from 'drizzle-orm';

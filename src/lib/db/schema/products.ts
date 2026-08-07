@@ -1,5 +1,4 @@
 // src/lib/db/schema/products.ts
-
 import {
   sqliteTable,
   text,

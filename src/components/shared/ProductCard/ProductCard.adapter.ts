@@ -1,6 +1,6 @@
 // src/components/storefront/ProductCard/ProductCard.adapter.ts
 
-import type { Product } from '@/types'; // توحيد الـ path لتفادي تضارب الـ Aliases
+import type { Product } from '@/types';
 
 // ============================================================
 // 📦 الأنواع
@@ -21,37 +21,29 @@ export interface ProductCardAdapterResult {
 }
 
 // ============================================================
-// 🧠 الـ Adapter الرئيسي (Premium & Structurally Grounded)
+// 🧠 الـ Adapter الرئيسي
 // ============================================================
 
-/**
- * ✅ يحول بيانات المنتج الخام إلى Payload مصفى ومستقر 100% للـ UI بناءً على عملة العميل ديناميكياً
- * @param product - بيانات المنتج القادمة من D1
- * @param userCurrency - العملة المستهدفة الممررة من السيرفر (مثل: EGP, SAR, USD)
- */
 export function adaptProductCard(product: Product, userCurrency: string = 'EGP'): ProductCardAdapterResult {
   try {
-    // 1. Validation صارم لمنع تسريب داتا مشوهة لشاشات العميل
     validateProduct(product);
     
-    // 2. حساب نسبة الخصم وتأمين الحدود الرياضية
+    // 💡 إعطاء قيمة افتراضية آمنة للـ stock لحل خطأ undefined
+    const safeStock = product.stock ?? 0;
+    
     const discountPercentage = Math.min(product.discount?.percentage || 0, 100);
     
-    // 3. هندسة الأسعار: احتساب السعر الفعلي بعد الخصم وحماية النتيجة من السوالب
     const discountedPrice = Math.max(
       0,
       product.price * (1 - discountPercentage / 100)
     );
     
-    // 4. تنسيق الأسعار ديناميكياً (رقم إنجليزي نقي + اسم العملة الطائرة)
     const formattedPrice = formatPrice(discountedPrice, userCurrency);
     
-    // تأمين ظهور السعر القديم مشطوباً إذا وجد خصم حقيقي فعلي
     const originalPrice = discountPercentage > 0 
       ? formatPrice(product.price, userCurrency) 
       : undefined;
     
-    // 5. بناء كائن النتيجة المستقر والمحصن ضد الـ Runtime Failures
     return {
       id: product.id,
       name: product.name.trim(),
@@ -60,16 +52,15 @@ export function adaptProductCard(product: Product, userCurrency: string = 'EGP')
       discountedPrice,
       formattedPrice,
       originalPrice,
-      isOutOfStock: product.stock <= 0,
+      isOutOfStock: safeStock <= 0, // ✅ استخدام safeStock المحصن
       discount: discountPercentage > 0 ? discountPercentage : undefined,
       rating: product.rating,
-      stock: product.stock,
+      stock: safeStock,             // ✅ ضمان إرجاع number فقط
       reviewCount: product.reviewCount,
     };
   } catch (error) {
     console.error('[ProductCardAdapter] Critical failure during transformation:', error);
     
-    // ✅ Fallback دفاعي آمن يحمي الجريد والصفحة من الانهيار الكامل
     return {
       id: product?.id || 'unknown',
       name: product?.name || 'منتج غير متوفر حالياً',
@@ -84,7 +75,7 @@ export function adaptProductCard(product: Product, userCurrency: string = 'EGP')
 }
 
 // ============================================================
-// 🔧 الدوال المساعدة والمعزولة (Pure Helpers)
+// 🔧 الدوال المساعدة
 // ============================================================
 
 function validateProduct(product: Product): void {
@@ -96,7 +87,8 @@ function validateProduct(product: Product): void {
     throw new Error(`Invalid data type or range for product price: ${product.price}`);
   }
   
-  if (typeof product.stock !== 'number' || product.stock < 0) {
+  // 💡 فحص الـ stock بصورة تسمح بكونه undefined أو number
+  if (product.stock !== undefined && (typeof product.stock !== 'number' || product.stock < 0)) {
     throw new Error(`Invalid data type or range for product stock: ${product.stock}`);
   }
 }

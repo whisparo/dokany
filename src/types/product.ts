@@ -1,60 +1,58 @@
 // src/types/product.ts
 
-// 1. استيراد الأنواع والـ Sub-Types مباشرة من الـ Schema
-import { 
-  type Product as DBProduct,
-  type ProductImage,
-  type ProductVariant as DBProductVariant
-} from '@/lib/db/schema/products';
-
 /**
  * ✅ مواءمة متغير المنتج (Product Variant)
  */
 export interface ProductVariant {
   id: string;
   name: string;
-  price?: number; // لو مختلف عن السعر الأساسي (بالقرش مثلاً)
+  price?: number;
   stock: number;
   image?: string;
-  attributes: Record<string, string>; // مثل: { color: 'red', size: 'L' }
+  attributes: Record<string, string>;
 }
 
 /**
  * ✅ واجهة المنتج الكاملة للـ Frontend (UI-Ready Product Type)
- * نستخدم Omit لاستبعاد الحقول الخام من قاعدة البيانات التي سنعيد صياغتها للـ UI
+ * مستقلة تماماً عن الـ DB Schema لمنع التسريب لحزمة العميل
  */
-export interface Product extends Omit<
-  DBProduct, 
-  | 'price' | 'compareAtPrice' | 'cost' | 'minPrice' // مستبعدين لأنهم في الـ DB (text) وفي الـ UI (number)
-  | 'weight' | 'length' | 'width' | 'height' // مستبعدين لتجميعهم في كائن dimensions
-  | 'metaTitle' | 'metaDescription' // مستبعدين لتجميعهم في كائن seo
-  | 'images' | 'variants' // سنعيد كتابتهم لتطابق متطلبات الـ Frontend
-  | 'createdAt' | 'updatedAt'
-> {
-  
-  // 💰 الأسعار مهيأة كـ numbers للعمليات الحسابية والـ UI
+export interface Product {
+  id: string;
+  storeId?: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  status?: string;
+
+  // 💰 الأسعار
   price: number;
-  originalPrice?: number; // توازي compareAtPrice في الـ Schema
+  originalPrice?: number;
   cost?: number;
   minPrice?: number;
 
-  // 🖼️ الصور مهيأة للـ Frontend بشكل مبسط
-  image?: string; // توازي imageSrc في الـ Schema
-  images?: string[]; // مصفوفة الروابط المباشرة للـ UI
+  // 🖼️ الصور
+  image?: string;
+  images?: string[];
 
-  // 📦 الأبعاد مجمعة في كائن واحد مريح للـ UI
+  // 📦 المخزون والتوفر
+  stock?: number;
+  trackInventory?: boolean;
+  allowBackorder?: boolean;
+
+  // 📦 الأبعاد
   dimensions?: {
-    weight?: number; // kg
-    length?: number; // cm
-    width?: number; // cm
-    height?: number; // cm
+    weight?: number;
+    length?: number;
+    width?: number;
+    height?: number;
   };
 
-  // 🏷️ الفئة والوسوم والتقييمات (تُجلب غالباً عن طريق الـ Relations / Join مع الـ Stats والـ Categories)
+  // 🏷️ الفئة والوسوم والتقييمات
   category?: string;
+  categoryId?: string | null;
   tags?: string[];
-  rating?: number; // بيتحول من الـ Stats (مثلا: 450 -> 4.5)
-  reviewCount?: number; // يوازي reviewsCount من جدول الـ Stats
+  rating?: number;
+  reviewCount?: number;
 
   // 💸 الخصومات النشطة
   discount?: {
@@ -62,17 +60,17 @@ export interface Product extends Omit<
     endsAt?: string;
   };
 
-  // 👥 المتغيرات المهيأة للـ Frontend
+  // 👥 المتغيرات
   variants?: ProductVariant[];
 
-  // 🔍 تحسين محركات البحث مجمع
+  // 🔍 تحسين محركات البحث
   seo?: {
     title?: string;
     description?: string;
     keywords?: string[];
   };
 
-  // ⏱️ تكييف التواريخ لتناسب الـ JSON Serialization
+  // ⏱️ التواريخ
   createdAt: string | Date;
   updatedAt: string | Date;
 }

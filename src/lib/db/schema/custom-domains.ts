@@ -1,5 +1,4 @@
 // src/lib/db/schema/custom-domains.ts
-
 import {
   sqliteTable,
   text,

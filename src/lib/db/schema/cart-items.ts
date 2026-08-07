@@ -1,5 +1,4 @@
 // src/lib/db/schema/cart-items.ts
-
 import {
   sqliteTable,
   text,

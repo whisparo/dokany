@@ -4,8 +4,6 @@
 import React, { useState, useEffect } from 'react';
 import { getHeaderTheme } from './Header.theme';
 import type { HeaderAdapterResult } from './Header.adapter';
-import { useCartStore } from '@/stores/cart-store';
-// 🚀 استيراد العداد الذكي والمستقل اللي عندك
 import { CartCounter } from '../CartCounter'; 
 
 export interface HeaderProps {
@@ -16,9 +14,6 @@ export interface HeaderProps {
 export function Header({ payload, onCartClick }: HeaderProps) {
   const { storeName, theme, isEditorMode } = payload;
   const [isScrolled, setIsScrolled] = useState(false);
-  
-  const toggleCart = useCartStore((state) => state.toggleCart);
-  const setIsOpen = useCartStore((state) => state.setIsOpen);
 
   // مراقبة السكرول
   useEffect(() => {
@@ -30,16 +25,6 @@ export function Header({ payload, onCartClick }: HeaderProps) {
   }, []);
 
   const headerTheme = getHeaderTheme({ isScrolled, isEditorMode, theme });
-
-  const handleCartPress = () => {
-    if (onCartClick) {
-      onCartClick();
-    } else if (toggleCart) {
-      toggleCart();
-    } else if (setIsOpen) {
-      setIsOpen(true);
-    }
-  };
 
   return (
     <header className={headerTheme.container} style={headerTheme.containerStyles}>
@@ -59,12 +44,11 @@ export function Header({ payload, onCartClick }: HeaderProps) {
         <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={handleCartPress}
+            onClick={onCartClick}
             aria-label="سلة التسوق"
             className="relative p-2.5 rounded-full transition-all duration-300 flex items-center justify-center bg-black/10 border border-white/20 hover:bg-black/15 shadow-sm"
             style={{ color: theme?.colors?.primary ?? "#D4AF37" }}
           >
-            {/* إضافة aria-hidden هنا بتخلي Lighthouse يركز على اسم الزرار فقط ويتجاهل رسمة الـ SVG */}
             <svg 
               className="w-5 h-5 md:w-6 md:h-6" 
               fill="none" 

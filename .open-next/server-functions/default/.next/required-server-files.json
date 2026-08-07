@@ -175,7 +175,7 @@
       "imgOptSequentialRead": null,
       "isrFlushToDisk": true,
       "workerThreads": false,
-      "optimizeCss": true,
+      "optimizeCss": false,
       "nextScriptWorkers": false,
       "scrollRestoration": false,
       "externalDir": false,
@@ -215,6 +215,10 @@
       "middlewareClientMaxBodySize": 10485760,
       "optimizePackageImports": [
         "lucide-react",
+        "framer-motion",
+        "@radix-ui/react-icons",
+        "@radix-ui/react-dialog",
+        "@radix-ui/react-dropdown-menu",
         "date-fns",
         "lodash-es",
         "ramda",
@@ -320,9 +324,7 @@
     ".next\\BUILD_ID",
     ".next\\server\\next-font-manifest.js",
     ".next\\server\\next-font-manifest.json",
-    ".next\\required-server-files.json",
-    ".next\\static\\css\\b496025c9cd768cc.css",
-    ".next\\static\\css\\fa4adb1a8c97d1fb.css"
+    ".next\\required-server-files.json"
   ],
   "ignore": [
     "node_modules\\next\\dist\\compiled\\@ampproject\\toolbox-optimizer\\**\\*"

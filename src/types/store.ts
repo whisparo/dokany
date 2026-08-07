@@ -1,11 +1,5 @@
 // src/types/store.ts
 
-// 1. استيراد النوع المستنتج من جدول قاعدة البيانات الحقيقي مباشرة (المصدر الوحيد للحقيقة)
-import { type Store as DBStore } from '@/lib/db/schema/stores';
-
-/**
- * ✅ توكنز الثيم الموحدة لواجهات المتاجر (Theme Tokens)
- */
 export interface ThemeTokens {
   fontFamily?: string;
   colors?: {
@@ -16,21 +10,46 @@ export interface ThemeTokens {
   };
 }
 
-/**
- * ✅ واجهة المتجر للـ Frontend (تدمج الـ DB Schema مع الـ Custom Frontend Fields)
- * نستخدم Omit لاستبعاد الحقول التي نريد إعادة كتابة أنواعها للـ Frontend (مثل الـ JSON Fields)
- */
-export interface Store extends Omit<DBStore, 'theme' | 'settings' | 'createdAt' | 'updatedAt'> {
-  // 🎨 إعادة تعريف حقول الـ JSON المعقدة بأنواع قوية بدلاً من مجرد string
-  theme?: ThemeTokens;
-  
-  settings?: {
-    theme?: string;
-    colors?: Record<string, string>;
-    layout?: string[];
-  };
+export interface StoreSettings {
+  theme?: string;
+  colors?: Record<string, string>;
+  layout?: string[];
+  [key: string]: unknown;
+}
 
-  // ⏱️ جعل التواريخ مرنة للـ Frontend (سواء جاءت كـ Date أو String بعد الـ Serialization)
-  createdAt?: string | Date;
-  updatedAt?: string | Date;
+/**
+ * ✅ واجهة المتجر الشاملة والمستقلة تماماً عن الـ DB Schema
+ */
+export interface Store {
+  id: string;
+  ownerId?: string | null;
+  name: string;
+  slug: string;
+  shopName?: string | null;
+  description?: string | null;
+  coverImage?: string | null;
+  logo?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  telegramChatId?: string | null;
+  telegramUsername?: string | null;
+  country?: string | null;
+  city?: string | null;
+  address?: string | null;
+  currency?: string | null;
+  paymentGateway?: string | null;
+  verifiedBy?: string | null;
+  verifiedAt?: string | Date | null;
+  deletedBy?: string | null;
+  deletedAt?: string | Date | null;
+  deletionReason?: string | null;
+  theme?: ThemeTokens | null;
+  settings?: StoreSettings | null;
+  templateVersion?: string | number | null;
+  cloudinaryAccountIndex?: number | null;
+  isActive?: boolean | null;
+  isVerified?: boolean | null;
+  isFeatured?: boolean | null;
+  createdAt?: string | Date | null;
+  updatedAt?: string | Date | null;
 }

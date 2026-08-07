@@ -1,5 +1,4 @@
 // src/lib/db/schema/categories.ts
-
 import {
   sqliteTable,
   text,

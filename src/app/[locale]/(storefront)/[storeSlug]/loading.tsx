@@ -7,8 +7,8 @@ export default function StoreLoading() {
     <Container maxWidth="xl" className="py-8">
       {/* Title & Subtitle Skeleton */}
       <div className="mb-8 text-center space-y-4">
-        <div className="mx-auto h-10 w-64 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-800" />
-        <div className="mx-auto h-5 w-96 max-w-full animate-pulse rounded-lg bg-slate-200 dark:bg-slate-800" />
+        <div className="mx-auto h-9 w-64 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-800" />
+        <div className="mx-auto h-4 w-96 max-w-[80%] animate-pulse rounded-lg bg-slate-200/80 dark:bg-slate-800/80" />
       </div>
 
       {/* Products Grid Skeleton */}
@@ -19,10 +19,12 @@ export default function StoreLoading() {
             className="animate-pulse rounded-xl border border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900 p-4 shadow-sm"
           >
             <div className="aspect-square w-full rounded-lg bg-slate-200 dark:bg-slate-800" />
-            <div className="mt-4 space-y-2.5">
+            <div className="mt-4 space-y-3">
               <div className="h-4 w-3/4 rounded bg-slate-200 dark:bg-slate-800" />
-              <div className="h-4 w-1/3 rounded bg-slate-200 dark:bg-slate-800" />
-              <div className="mt-3 h-10 w-full rounded-lg bg-slate-200 dark:bg-slate-800" />
+              <div className="h-4 w-1/4 rounded bg-slate-200/80 dark:bg-slate-800/80" />
+              <div className="pt-1">
+                <div className="h-10 w-full rounded-lg bg-slate-200 dark:bg-slate-800" />
+              </div>
             </div>
           </div>
         ))}

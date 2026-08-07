@@ -1,5 +1,4 @@
 // src/lib/db/schema/payments.ts
-
 import {
   sqliteTable,
   text,

@@ -1,5 +1,4 @@
 // src/lib/db/schema/media.ts
-
 import {
   sqliteTable,
   text,

@@ -3,9 +3,8 @@ import { eq, and, isNull } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import type { Env } from '@/lib/env';
 
-// 📂 استيراد السكيمات الفعلية المتاحة في مشروعك
 import { stores } from '@/lib/db/schema/stores';
-import type { CartItem } from '@/stores/cart-store';
+import type { CartItem } from '@/types/cart';
 
 // ============================================================
 // 📦 الأنواع (Types)
@@ -56,7 +55,7 @@ export interface CheckoutRawData {
 // ============================================================
 
 function getDb(env: Env) {
-  if (!env.DB) {
+  if (!env?.DB) {
     console.error('❌ [getDb] D1 Database binding (DB) is missing from env');
     throw new Error('D1 Database binding not available');
   }
@@ -85,7 +84,7 @@ export async function getSessionId(): Promise<string | undefined> {
 // ============================================================
 
 /**
- * جلب بيانات المتجر والتأكد من وجوده
+ * جلب عملة المتجر والتأكد من وجوده
  */
 async function fetchStoreCurrency(storeId: string, env: Env): Promise<string> {
   try {
@@ -93,7 +92,7 @@ async function fetchStoreCurrency(storeId: string, env: Env): Promise<string> {
     const store = await db
       .select({ id: stores.id, currency: stores.currency })
       .from(stores)
-      .where(eq(stores.id, storeId))
+      .where(and(eq(stores.id, storeId), isNull(stores.deletedAt)))
       .get();
 
     return store?.currency ?? 'EGP';
@@ -119,7 +118,7 @@ async function fetchShippingOptions(storeId: string, env: Env): Promise<Shipping
 
     if (!activeStore) return [];
 
-    // خيارات الشحن القياسية المتاحة للمتجر (يمكن تخصيص أسعارها لاحقاً حسب المحافظة)
+    // خيارات الشحن القياسية المتاحة للمتجر
     return [
       {
         id: 'standard',
@@ -152,7 +151,7 @@ async function fetchPaymentMethods(storeId: string, env: Env): Promise<PaymentMe
     const store = await db
       .select({ id: stores.id })
       .from(stores)
-      .where(eq(stores.id, storeId))
+      .where(and(eq(stores.id, storeId), isNull(stores.deletedAt)))
       .get();
 
     if (!store) return [];
@@ -194,8 +193,8 @@ async function fetchPaymentMethods(storeId: string, env: Env): Promise<PaymentMe
 export async function getCheckoutRawData(
   storeId: string,
   env: Env,
-  customerId?: string,
-  sessionId?: string
+  _customerId?: string,
+  _sessionId?: string
 ): Promise<CheckoutRawData> {
   if (!storeId) {
     throw new Error('[CheckoutDataFetcher] storeId is required');
@@ -209,7 +208,7 @@ export async function getCheckoutRawData(
     ]);
 
     return {
-      cartItems: [], // السلة تُقرأ محلياً من cart-store على الـ Client أو عبر الـ Session
+      cartItems: [],
       customer: null,
       shippingOptions,
       paymentMethods,

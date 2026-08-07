@@ -1,4 +1,3 @@
-// src/lib/db/schema/auth.ts
 
 import { sqliteTable, text, integer, index, uniqueIndex, check } from 'drizzle-orm/sqlite-core';
 import { sql, type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
@@ -8,7 +7,7 @@ import { users } from './users';
 // 1. جدول الجلسات (Session) - متوافق مع معايير Better Auth الفطرية
 // ============================================================================
 export const sessions = sqliteTable(
-  'session', // ✅ تم تحويل الاسم للمفرد ليطابق Better Auth تلقائياً دون كراش
+  'session',
   {
     id: text('id').primaryKey(),
     expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
@@ -18,7 +17,7 @@ export const sessions = sqliteTable(
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),
-    tokenFamily: text('token_family').notNull(), // Custom Field للـ Rotation حارس بوابة إضافي
+    tokenFamily: text('token_family').notNull(),
   },
   (table) => [
     uniqueIndex('session_token_unique').on(table.token),
@@ -34,7 +33,7 @@ export const sessions = sqliteTable(
 // 2. جدول الحسابات الخارجية (Account) - متوافق مع Better Auth
 // ============================================================================
 export const accounts = sqliteTable(
-  'account', // ✅ تم تحويل الاسم للمفرد
+  'account',
   {
     id: text('id').primaryKey(),
     accountId: text('account_id').notNull(),
@@ -63,7 +62,7 @@ export const accounts = sqliteTable(
 // 3. جدول التحقق (Verification) - متوافق مع Better Auth
 // ============================================================================
 export const verifications = sqliteTable(
-  'verification', // ✅ تم تحويل الاسم للمفرد
+  'verification',
   {
     id: text('id').primaryKey(),
     identifier: text('identifier').notNull(),

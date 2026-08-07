@@ -302,137 +302,174 @@ SEO مُحسَّن (Sitemaps، OpenGraph، JSON-LD).
 
 حدود أداء صارمة (حجم حزمة < 120KB للمتجر).
 
-app/
-├── favicon.ico
-├── globals.css
-├── layout.tsx                          # ✅ Root Layout العام جداً (HTML, Global Fonts)
-├── page.tsx                            # 🏠 الصفحة الرئيسية للمنصة الأم (dokany.com)
+
+src/features/
 │
-├── (storefront)/                       # 🆕 نظام المتاجر العامة (العملاء)
-│   └── [storeSlug]/                    # 🚀 المسار الديناميكي للتاجر (e.g., /zara)
-│       ├── layout.tsx                  # Layout المتجر (خفيف + كاش SWR)
-│       ├── page.tsx                    # الرئيسية للمتجر (منتجات مميزة)
-│       ├── cart/
-│       │   └── page.tsx                # صفحة السلة
-│       ├── checkout/
-│       │   └── page.tsx                # صفحة إتمام الدفع
-│       └── products/
-│           ├── page.tsx                # قائمة المنتجات (تصفية وبحث)
-│           └── [slug]/
-│               └── page.tsx            # صفحة تفاصيل المنتج
-│
-├── (dashboard)/                        # 🆕 لوحة تحكم التجار (الأدمن)
-│   └── dashboard/                      # 🔐 مسار ثابت ومحمي (e.g., dokany.com/dashboard)
-│       ├── layout.tsx                  # Layout الداشبورد (Auth Guard + Sidebar)
-│       ├── page.tsx                    # الرئيسية (التحليلات والـ DuckDB)
-│       ├── products/
-│       │   ├── page.tsx                # جدول إدارة المنتجات
-│       │   └── new/
-│       │       └── page.tsx            # إضافة منتج جديد
-│       ├── orders/
-│       │   └── page.tsx                # إدارة الطلبات
-│       └── settings/
-│           └── page.tsx                # إعدادات المتجر والثيمات
-│
-├── (miniapp)/                          # 🆕 نظام Telegram Mini App
-│   └── miniapp/                        # 🤖 مسار خاص بالتطبيق المصغر (e.g., /miniapp)
-│       └── [storeSlug]/                # يلقط التاجر جوه تليجرام
-│           ├── layout.tsx              # Layout بدون سكرول خارجي أو هيدر
-│           └── page.tsx                # واجهة الشراء السريع للـ Mini App
-│
-├── auth/                               # 🆕 بوابة المصادقة الموحدة للتاجر
-│   ├── login/
-│   │   └── page.tsx                    # صفحة الـ Magic Link
-│   └── verify/
-│       └── page.tsx                    # الـ Callback للتحقق
-│
-└── api/                                # ✅ الـ API Routes الحالية (Edge Runtime)
-    ├── auth/[...all]/                  # Better-Auth Handler
-    ├── ping/                           # التست اللي قفلناه
-    └── telegram/
-        └── webhook/                    # بوت تليجرام
-
-
-
-
-
-
-
-
-        src/features/
-├── dashboard-overview/                 # 📊 ميزة النظرة العامة للداشبورد
+├── dashboard-overview/                     # 📊 ميزة النظرة العامة للداشبورد
 │   ├── adapters/
-│   │   └── dashboard-overview.adapter.ts # تحويل المبيعات والطلبات الخام لـ Payload
+│   │   └── dashboard-overview.adapter.ts   # تحويل مبيعات وطلبات D1 إلى KPIs
 │   ├── components/
 │   │   ├── MetricsGrid/
 │   │   │   ├── MetricsGrid.tsx
-│   │   │   └── MetricCard.tsx          # كارت إحصائي صغير ومستقل
+│   │   │   └── MetricCard.tsx              # كارت الإحصائيات (الإيرادات، الطلبات...)
 │   │   ├── RecentOrdersTable/
-│   │   │   ├── RecentOrdersTable.tsx    # الهيكل الخارجي للجدول
-│   │   │   ├── RecentOrderRow.tsx      # صف الطلب
-│   │   │   ├── RecentOrdersTable.adapter.ts
-│   │   │   └── RecentOrdersTable.theme.ts
-│   │   └── AnalyticsChart.tsx
+│   │   │   ├── RecentOrdersTable.tsx       # جدول أحدث الطلبات في الداشبورد
+│   │   │   └── RecentOrderRow.tsx
+│   │   ├── AnalyticsChart.tsx              # رسم بياني للمبيعات
+│   │   └── DateRangePicker.tsx             # فلترة تصفية التاريخ
+│   ├── data/
+│   │   └── dashboard-data-fetcher.ts       # جلب بيانات الداشبورد الأساسية
+│   ├── orchestrators/
+│   │   └── dashboard.orchestrator.ts
 │   └── hooks/
 │       └── useDashboardData.ts
 │
-├── products-management/                # 📦 ميزة إدارة المنتجات (الداشبورد)
+├── products-management/                    # 📦 ميزة إدارة المنتجات (الداشبورد)
+│   ├── actions/
+│   │   └── products.actions.ts             # Server Actions (إضافة/تعديل/حذف)
 │   ├── adapters/
 │   │   └── products-management.adapter.ts # تجهيز بيانات الجدول والفلاتر
 │   ├── components/
 │   │   ├── ProductTable/
-│   │   │   ├── ProductTable.tsx        # الهيكل الخارجي للجدول (Shell)
-│   │   │   ├── ProductTableRow.tsx     # صف المنتج الواحد
-│   │   │   ├── ProductPriceCell.tsx    # عرض السعر مع العملة
-│   │   │   ├── ProductStatusBadge.tsx  # شارة الحالة (نشط / مسودة / منتهي)
-│   │   │   ├── ProductActionsMenu.tsx  # قائمة الإجراءات السريعة (تعديل/حذف)
-│   │   │   └── ProductTableSkeleton.tsx# حالة التحميل
+│   │   │   ├── ProductTable.tsx            # هيكل جدول المنتجات
+│   │   │   ├── ProductTableRow.tsx         # صف المنتج
+│   │   │   ├── ProductPriceCell.tsx        # عرض السعر والعملة
+│   │   │   ├── ProductStatusBadge.tsx      # شارة الحالة (نشط/مسودة/منتهي)
+│   │   │   ├── ProductActionsMenu.tsx      # إجراءات (تعديل/حذف/إيقاف)
+│   │   │   └── ProductTableSkeleton.tsx
 │   │   ├── ProductForm/
-│   │   │   ├── ProductForm.tsx         # الحاوية الرئيسية للفورم
-│   │   │   ├── ProductMediaUpload.tsx  # رفع الصور
-│   │   │   └── ProductPricingInputs.tsx# مدخلات الأسعار والخصومات
-│   │   └── ProductFilters.tsx          # شريط البحث والفلترة
+│   │   │   ├── ProductForm.tsx            # نموذج إنشاء/تعديل المنتج
+│   │   │   ├── ProductMediaUpload.tsx      # رفع الصور لـ Cloudinary
+│   │   │   ├── ProductPricingInputs.tsx   # مدخلات الأسعار والخصومات
+│   │   │   └── ProductVariantsManager.tsx # إدارة الأحجام والألوان والـ SKUs
+│   │   ├── CategoriesManager/             # إدارة أقسام المتجر
+│   │   │   ├── CategoryList.tsx
+│   │   │   └── CategoryFormModal.tsx
+│   │   └── ProductFilters.tsx              # البحث والفلترة حسب القسم والحالة
+│   ├── data/
+│   │   └── products-data-fetcher.ts
 │   └── hooks/
 │       └── useProducts.ts
 │
-├── orders-management/                  # 🛒 ميزة إدارة الطلبات (الداشبورد)
+├── orders-management/                      # 🛒 ميزة إدارة الطلبات (الداشبورد)
+│   ├── actions/
+│   │   └── orders.actions.ts               # Server Actions لتحديث حالة الطلب
 │   ├── adapters/
-│   │   └── orders-management.adapter.ts
+│   │   └── orders-management.adapter.ts   # تحويل الطلبات لشكل متوافق مع الجدول
 │   ├── components/
 │   │   ├── OrdersTable/
-│   │   │   ├── OrdersTable.tsx         # هيكل الجدول
-│   │   │   ├── OrderTableRow.tsx       # صف الطلب
-│   │   │   ├── OrderStatusBadge.tsx    # شارة حالة الطلب (قيد الانتظار/مكتمل)
-│   │   │   ├── OrderCustomerCell.tsx   # بيانات العميل المختصرة
-│   │   │   └── OrderActionsMenu.tsx    # إجراءات تغيير الحالة
-│   │   └── OrderFilters.tsx            # فلترة الطلبات
+│   │   │   ├── OrdersTable.tsx            # هيكل جدول الطلبات
+│   │   │   ├── OrderTableRow.tsx           # صف الطلب
+│   │   │   ├── OrderStatusBadge.tsx       # شارة حالة الطلب والشحن
+│   │   │   ├── OrderCustomerCell.tsx      # اسم العميل ورقم الهواتف
+│   │   │   └── OrderActionsMenu.tsx       # تغيير الحالة السريعة
+│   │   ├── OrderDetailDrawer.tsx          # عرض التفاصيل الكاملة والفاتورة
+│   │   └── OrderFilters.tsx               # تصفية حسب حالة الدفع والشحن
+│   ├── data/
+│   │   └── orders-data-fetcher.ts
 │   └── hooks/
 │       └── useOrders.ts
 │
-├── storefront-home/                    # 🏬 ميزة الصفحة الرئيسية للمتجر
+├── customers-management/                   # 👥 ميزة إدارة العملاء (الداشبورد)
 │   ├── adapters/
-│   │   └── storefront-home.adapter.ts  # تقسيم بيانات المتجر للاقسام
-│   └── components/
-│       ├── HeroBanner/
-│       │   ├── HeroBanner.tsx
-│       │   └── HeroBanner.theme.ts
-│       ├── CategoryList/
-│       │   ├── CategoryList.tsx
-│       │   └── CategoryCard.tsx        # كارت التصنيف الفردي
-│       └── FeaturedProducts/
-│           ├── FeaturedProducts.tsx
-│           └── ProductCard.tsx         # كارت المنتج العام في المتجر
+│   │   └── customers-management.adapter.ts
+│   ├── components/
+│   │   ├── CustomersTable/
+│   │   │   ├── CustomersTable.tsx
+│   │   │   ├── CustomerTableRow.tsx
+│   │   │   └── CustomerActionsMenu.tsx
+│   │   └── CustomerDetailSheet.tsx         # سجل شراء العميل وعناوينه
+│   ├── data/
+│   │   └── customers-data-fetcher.ts
+│   └── hooks/
+│       └── useCustomers.ts
 │
-└── storefront-product/                 # 🏷️ ميزة صفحة التفاصيل للمنتج (المتجر)
+├── store-settings/                         # ⚙️ ميزة إعدادات المتجر (الداشبورد)
+│   ├── actions/
+│   │   └── settings.actions.ts             # تحديث بيانات المتجر والشحن
+│   ├── adapters/
+│   │   └── store-settings.adapter.ts
+│   ├── components/
+│   │   ├── GeneralSettingsForm.tsx        # اسم المتجر، الشعار، والعملة
+│   │   ├── ShippingZoneManager.tsx        # مناطق وأسعار الشحن
+│   │   └── PaymentGatewaysForm.tsx        # طرق الدفع المتاحة (COD / Knet / Visa)
+│   ├── data/
+│   │   └── settings-data-fetcher.ts
+│   └── hooks/
+│       └── useStoreSettings.ts
+│
+├── storefront-checkout/                    # 🟢 قائم بالفعل (صفحة إتمام الشراء)
+│   ├── actions/
+│   │   └── checkout.actions.ts
+│   ├── adapters/
+│   │   └── checkout-page.adapter.ts
+│   ├── components/
+│   │   └── Checkout/
+│   │       ├── Checkout.adapter.ts
+│   │       ├── Checkout.theme.ts
+│   │       ├── Checkout.tsx
+│   │       ├── CheckoutForm.tsx
+│   │       ├── OrderSummary.tsx
+│   │       ├── PaymentMethods.tsx
+│   │       ├── ShippingOptions.tsx
+│   │       └── index.ts
+│   ├── data/
+│   │   └── checkout-data-fetcher.ts
+│   └── orchestrators/
+│       └── checkout.orchestrator.ts
+│
+├── storefront-home/                        # 🟢 قائم بالفعل (الصفحة الرئيسية للمتجر)
+│   ├── adapters/
+│   │   └── product-page.adapter.ts
+│   ├── components/
+│   │   ├── CartCounter.tsx
+│   │   ├── CartDrawer.tsx
+│   │   ├── CartSheet.tsx
+│   │   ├── ClientCartDrawer.tsx
+│   │   ├── MobileMenu.tsx
+│   │   ├── CategoryList/
+│   │   │   ├── CategoryCard.tsx
+│   │   │   ├── CategoryList.tsx
+│   │   │   └── index.ts
+│   │   ├── FeaturedProducts/
+│   │   │   └── FeaturedProducts.tsx
+│   │   ├── Footer/
+│   │   │   ├── Footer.adapter.ts
+│   │   │   ├── Footer.theme.ts
+│   │   │   ├── Footer.tsx
+│   │   │   └── index.ts
+│   │   ├── Header/
+│   │   │   ├── Header.adapter.ts
+│   │   │   ├── Header.theme.ts
+│   │   │   ├── Header.tsx
+│   │   │   └── index.ts
+│   │   └── Hero/
+│   │       ├── Hero.adapter.ts
+│   │       ├── Hero.theme.ts
+│   │       ├── Hero.tsx
+│   │       ├── HeroImage.tsx
+│   │       └── index.ts
+│   ├── data/
+│   │   └── store-data-fetcher.ts
+│   └── orchestrators/
+│       └── storefront-orchestrator.ts
+│
+└── storefront-product/                     # 🟢 قائم بالفعل (صفحة تفاصيل المنتج)
     ├── adapters/
-    │   └── product-detail.adapter.ts   # تحويل تفاصيل المنتج لـ Page Payload
-    └── components/
-        ├── ProductGallery/
-        │   ├── ProductGallery.tsx      # المعرض الرئيسي
-        │   └── ImageThumbnail.tsx      # المصغرات
-        ├── ProductInfo/
-        │   ├── ProductInfo.tsx
-        │   ├── AddToCartButton.tsx     # جزيرة إضافة للسلة تفاعلية
-        │   └── ProductVariantPicker.tsx# خيارات الأحجام والألوان
-        └── RelatedProducts/
-            └── RelatedProducts.tsx
+    │   └── product-detail-page.adapter.ts
+    ├── components/
+    │   ├── ProductDetails/
+    │   │   ├── ProductActions.tsx
+    │   │   ├── ProductDetails.adapter.ts
+    │   │   ├── ProductDetails.theme.ts
+    │   │   ├── ProductDetails.tsx
+    │   │   ├── ProductMedia.tsx
+    │   │   ├── ProductVariants.tsx
+    │   │   └── index.ts
+    │   └── RelatedProducts/
+    │       ├── RelatedProducts.tsx
+    │       └── index.ts
+    ├── data/
+    │   └── product-data-fetcher.ts
+    └── orchestrators/
+        └── product-details-orchestrator.ts

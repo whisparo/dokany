@@ -1,0 +1,1 @@
+This folder contains the built output assets for the worker "www" generated at 2026-08-07T10:17:04.871Z.

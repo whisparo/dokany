@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[272],{272:(e,r,a)=>{a.r(r),a.d(r,{ClientCartDrawer:()=>l});var t=a(5155);let n=(0,a(7909).default)(()=>Promise.all([a.e(239),a.e(146)]).then(a.bind(a,1146)).then(e=>e.CartDrawer),{loadableGenerated:{webpack:()=>[1146]},ssr:!1});function l(){return(0,t.jsx)(n,{})}}}]);

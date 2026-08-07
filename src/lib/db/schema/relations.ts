@@ -1,5 +1,4 @@
 // src/lib/db/schema/relations.ts
-
 import { relations } from 'drizzle-orm';
 
 import { users } from './users';

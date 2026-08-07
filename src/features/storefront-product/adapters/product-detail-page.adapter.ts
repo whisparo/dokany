@@ -11,13 +11,13 @@ import type { ProductDetailsAdapterResult } from '@/features/storefront-product/
 export interface ProductDetailPagePayload {
   store: Store;
   productDetails: ProductDetailsAdapterResult;
-  // 💡 يمكنك مستقبلاً إضافة أي أدابترز لـ Components أخرى هنا بسهولة
-  // مثل: relatedProducts, storeHeader, etc.
+  relatedProducts: Product[]; // 👈 تم إضافة المنتجات ذات الصلة هنا
 }
 
 export interface RawProductDetailPageData {
   store: Store;
   product: Product;
+  relatedProducts?: Product[]; // 👈 تم إضافتها كـ Optional في البيانات الخام
 }
 
 // ============================================================
@@ -26,14 +26,14 @@ export interface RawProductDetailPageData {
 
 /**
  * ✅ يحول البيانات الخام المجلوبة بواسطة الأوركسترا إلى Payload نظيف ومُهندم للـ UI
- * @param rawData - البيانات الخام القادمة من السيرفر (المتجر + المنتج)
+ * @param rawData - البيانات الخام القادمة من السيرفر (المتجر + المنتج + المنتجات ذات الصلة)
  * @param userCurrency - العملة المفضلة للمستخدم المستخرجة ديناميكياً
  */
 export function adaptProductDetailPage(
   rawData: RawProductDetailPageData,
   userCurrency: string = 'EGP'
 ): ProductDetailPagePayload {
-  const { store, product } = rawData;
+  const { store, product, relatedProducts = [] } = rawData;
 
   // ✅ التحقق الصارم من سلامة البيانات لمنع حدوث Runtime crashes
   if (!store || !store.id || !store.name) {
@@ -51,5 +51,6 @@ export function adaptProductDetailPage(
   return {
     store,
     productDetails,
+    relatedProducts,
   };
 }

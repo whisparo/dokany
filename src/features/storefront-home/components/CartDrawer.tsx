@@ -82,3 +82,6 @@ export function CartDrawer() {
     </div>
   );
 }
+
+// ✅ إضافة export default لحل مشكلة Next Dynamic Import والـ Type Checking
+export default CartDrawer;

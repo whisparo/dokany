@@ -1,5 +1,4 @@
 // src/lib/db/schema/chat-sessions.ts
-
 import {
   sqliteTable,
   text,

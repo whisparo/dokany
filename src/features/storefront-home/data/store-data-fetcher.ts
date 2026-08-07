@@ -1,21 +1,19 @@
-// src/lib/data/store-data-fetcher.ts
+//src/features/storefront-home/data/store-data-fetcher.ts
 
 import { unstable_cache } from 'next/cache';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, and } from 'drizzle-orm';
-import { stores, products } from '@/lib/db/schema';
+import { eq, and, isNull } from 'drizzle-orm';
+import { stores, products, categories } from '@/lib/db/schema';
+import type { Category } from '@/lib/db/schema/categories';
 import type { ProductImage, ProductMetadata } from '@/lib/db/schema/products';
 import type { Store, Product } from '@/types';
 import type { RawStorePageData } from '@/features/storefront-home/adapters/product-page.adapter';
-import type { Env } from '@/lib/env'; // ✅ استيراد النوع
+import type { Env } from '@/lib/env';
 
 // ============================================================
 // 🔌 الحصول على اتصال قاعدة البيانات (مع env)
 // ============================================================
 
-/**
- * الحصول على اتصال D1 من البيئة الممررة
- */
 function getDb(env: Env) {
   if (!env.DB) {
     console.error('❌ [getDb] D1 Database binding (DB) is missing from env');
@@ -25,7 +23,7 @@ function getDb(env: Env) {
 }
 
 // ============================================================
-// 🗄️ دوال جلب البيانات الفعلية (تستقبل env)
+// 🗄️ دوال جلب البيانات الفعلية
 // ============================================================
 
 async function fetchStoreInfo(storeSlug: string, env: Env): Promise<Store | null> {
@@ -105,31 +103,32 @@ async function fetchStoreInfo(storeSlug: string, env: Env): Promise<Store | null
   return storeData;
 }
 
-async function fetchStoreProducts(
-  storeId: string,
-  env: Env,
-  options?: { page?: number; limit?: number }
-): Promise<{ products: Product[]; total: number }> {
+/**
+ * 🗂️ جلب الأقسام النشطة الخاصة بالمتجر
+ */
+async function fetchStoreCategories(storeId: string, env: Env): Promise<Category[]> {
   const db = getDb(env);
-  const page = options?.page || 1;
-  const limit = options?.limit || 20;
-  const offset = (page - 1) * limit;
 
-  const dbProducts = await db
+  const rawCategories = await db
     .select()
-    .from(products)
-    .where(eq(products.storeId, storeId))
-    .limit(limit)
-    .offset(offset)
+    .from(categories)
+    .where(
+      and(
+        eq(categories.storeId, storeId),
+        eq(categories.isActive, true),
+        isNull(categories.deletedAt)
+      )
+    )
     .all();
 
-  const totalProducts = await db
-    .select()
-    .from(products)
-    .where(eq(products.storeId, storeId))
-    .all();
+  return rawCategories;
+}
 
-  const formattedProducts: Product[] = dbProducts.map((p) => {
+/**
+ * 📦 محول المنتجات النظيف (Mapper Helper)
+ */
+function mapRawProducts(dbProducts: any[]): Product[] {
+  return dbProducts.map((p) => {
     let imageUrls: string[] = [];
     if (p.images) {
       try {
@@ -187,9 +186,51 @@ async function fetchStoreProducts(
       updatedAt: p.updatedAt,
     };
   });
+}
+
+async function fetchStoreProducts(
+  storeId: string,
+  env: Env,
+  options?: { page?: number; limit?: number }
+): Promise<{ products: Product[]; featuredProducts: Product[]; total: number }> {
+  const db = getDb(env);
+  const page = options?.page || 1;
+  const limit = options?.limit || 20;
+  const offset = (page - 1) * limit;
+
+  // 1. جلب المنتجات المفهرسة بالـ Pagination
+  const dbProducts = await db
+    .select()
+    .from(products)
+    .where(and(eq(products.storeId, storeId), isNull(products.deletedAt)))
+    .limit(limit)
+    .offset(offset)
+    .all();
+
+  // 2. حساب إجمالي المنتجات
+  const totalProducts = await db
+    .select()
+    .from(products)
+    .where(and(eq(products.storeId, storeId), isNull(products.deletedAt)))
+    .all();
+
+  // 3. جلب المنتجات المميزة (isFeatured = true)
+  const dbFeatured = await db
+    .select()
+    .from(products)
+    .where(
+      and(
+        eq(products.storeId, storeId),
+        eq(products.isFeatured, true),
+        isNull(products.deletedAt)
+      )
+    )
+    .limit(8)
+    .all();
 
   return {
-    products: formattedProducts,
+    products: mapRawProducts(dbProducts),
+    featuredProducts: mapRawProducts(dbFeatured),
     total: totalProducts.length,
   };
 }
@@ -208,74 +249,18 @@ async function fetchProductBySlug(
     .where(
       and(
         eq(products.storeId, storeId),
-        eq(products.slug, decodedProductSlug)
+        eq(products.slug, decodedProductSlug),
+        isNull(products.deletedAt)
       )
     )
     .get();
 
   if (!p) return null;
-
-  let imageUrls: string[] = [];
-  if (p.images) {
-    try {
-      const parsedImages = (typeof p.images === 'string' ? JSON.parse(p.images) : p.images) as ProductImage[];
-      if (Array.isArray(parsedImages)) {
-        imageUrls = parsedImages.map((img: ProductImage) => img.url);
-      }
-    } catch (e) {
-      imageUrls = [];
-    }
-  }
-  const mainImage = p.imageSrc || (imageUrls.length > 0 ? imageUrls[0] : '/images/default-product.png');
-
-  const productData: Product = {
-    id: p.id,
-    storeId: p.storeId,
-    categoryId: p.categoryId ?? null,
-    name: p.name,
-    slug: p.slug,
-    description: p.description ?? '',
-    shortDescription: p.shortDescription ?? '',
-    sku: p.sku ?? null,
-    barcode: p.barcode ?? null,
-    stock: p.stock,
-    lowStockThreshold: p.lowStockThreshold,
-
-    mediaIds: p.mediaIds,
-    videoUrl: p.videoUrl ?? null,
-    imageSrc: p.imageSrc ?? null,
-    variantPrices: p.variantPrices ?? {},
-    haggleEnabled: p.haggleEnabled,
-    metadata: (p.metadata ?? {}) as ProductMetadata,
-
-    isPublished: p.isPublished,
-    isFeatured: p.isFeatured,
-
-    price: Number(p.price) || 0,
-    originalPrice: p.compareAtPrice ? Number(p.compareAtPrice) : undefined,
-    cost: p.cost ? Number(p.cost) : undefined,
-    minPrice: p.minPrice ? Number(p.minPrice) : undefined,
-
-    image: mainImage,
-    images: imageUrls,
-
-    dimensions: {
-      weight: p.weight ? Number(p.weight) : undefined,
-      length: p.length ? Number(p.length) : undefined,
-      width: p.width ? Number(p.width) : undefined,
-      height: p.height ? Number(p.height) : undefined,
-    },
-
-    deletedAt: p.deletedAt ?? null,
-    createdAt: p.createdAt,
-    updatedAt: p.updatedAt,
-  };
-
-  return productData;
+  return mapRawProducts([p])[0];
 }
 
 // ============================================================
-// 🧠 Data Fetchers مع الـ Cache (تستقبل env)
+// 🧠 Data Fetchers مع الـ Cache
 // ============================================================
 
 export const getStoreRawData = unstable_cache(
@@ -291,12 +276,18 @@ export const getStoreRawData = unstable_cache(
     const store = await fetchStoreInfo(storeSlug, env);
     if (!store) return null;
 
-    const { products: storeProducts, total } = await fetchStoreProducts(store.id, env, options);
+    // جلب بالتوازي (Parallel Fetching) لضمان أقصى سرعة أداء
+    const [categoriesData, productsData] = await Promise.all([
+      fetchStoreCategories(store.id, env),
+      fetchStoreProducts(store.id, env, options),
+    ]);
 
     return {
       store,
-      filteredProducts: storeProducts,
-      totalCount: total,
+      categories: categoriesData,
+      featuredProducts: productsData.featuredProducts,
+      filteredProducts: productsData.products,
+      totalCount: productsData.total,
     };
   },
   ['store-raw-data'],

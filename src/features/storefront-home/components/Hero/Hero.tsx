@@ -18,7 +18,6 @@ export interface HeroProps {
 export function Hero({ payload, className }: HeroProps) {
   const { title, description, ctaText, ctaLink } = payload;
 
-  // ⚡ تنظيف وتصفية الصور المرفوعة من التاجر
   const validDesktop = payload.desktopImages?.filter((img) => img && !img.includes('default-banner.png')) || [];
   const validMobile = payload.mobileImages?.filter((img) => img && !img.includes('default-banner.png')) || [];
 
@@ -28,7 +27,6 @@ export function Hero({ payload, className }: HeroProps) {
   const hasImage = desktopImages.length > 0 || mobileImages.length > 0;
   const [currentSlide, setCurrentSlide] = useState(0);
 
-  // ⚡ السلايدر ذكي: بيشتغل تلقائياً فقط لو التاجر ضايف أكتر من صورة
   useEffect(() => {
     const maxSlides = Math.max(desktopImages.length, mobileImages.length);
     if (maxSlides <= 1) return;
@@ -39,6 +37,9 @@ export function Hero({ payload, className }: HeroProps) {
 
     return () => clearInterval(interval);
   }, [desktopImages.length, mobileImages.length]);
+
+  const currentDesktop = desktopImages[currentSlide] || desktopImages[0];
+  const currentMobile = mobileImages[currentSlide] || currentDesktop;
 
   return (
     <section 
@@ -58,48 +59,19 @@ export function Hero({ payload, className }: HeroProps) {
             maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
           }}
         >
-          {/* 📱 سلايدر الموبايل */}
-          <div className="block md:hidden absolute inset-0">
-            {mobileImages.map((src, index) => (
-              <div
-                key={`mobile-${src}-${index}`}
-                className={cn(
-                  "absolute inset-0 transition-opacity duration-1000 ease-in-out",
-                  index === currentSlide ? "opacity-100 z-10" : "opacity-0 z-0"
-                )}
-              >
-                <HeroImage 
-                  src={src} 
-                  alt={title || "Hero Mobile Image"} 
-                  // ⚡ priority فقط لأول صورة (LCP Optimization)
-                  priority={index === 0} 
-                  sizes="(max-width: 768px) 100vw, 1px"
-                  className="w-full h-full object-cover object-top" 
-                />
-              </div>
-            ))}
-          </div>
-
-          {/* 💻 سلايدر الكمبيوتر */}
-          <div className="hidden md:block absolute inset-0">
-            {desktopImages.map((src, index) => (
-              <div
-                key={`desktop-${src}-${index}`}
-                className={cn(
-                  "absolute inset-0 transition-opacity duration-1000 ease-in-out",
-                  index === currentSlide ? "opacity-100 z-10" : "opacity-0 z-0"
-                )}
-              >
-                <HeroImage 
-                  src={src} 
-                  alt={`${title || "Hero Desktop Image"} - Slide ${index + 1}`} 
-                  // ⚡ priority فقط لأول صورة (LCP Optimization)
-                  priority={index === 0} 
-                  sizes="(min-width: 769px) 100vw, 1px"
-                  className="w-full h-full object-cover object-top" 
-                />
-              </div>
-            ))}
+          {/* سلايدر ذكي ينزل شريحة واحدة ممزوجة بحسب الشاشة بدلاً من مضاعفة الـ DOM */}
+          <div className="absolute inset-0 transition-opacity duration-1000 ease-in-out z-10">
+            <picture className="w-full h-full">
+              <source media="(max-width: 768px)" srcSet={currentMobile} />
+              <source media="(min-width: 769px)" srcSet={currentDesktop} />
+              <HeroImage 
+                src={currentDesktop} 
+                alt={title || "Hero Banner Image"} 
+                priority={currentSlide === 0} 
+                sizes="100vw"
+                className="w-full h-full object-cover object-top" 
+              />
+            </picture>
           </div>
           
           <div className="absolute inset-0 bg-black/10 z-15" />

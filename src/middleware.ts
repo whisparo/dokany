@@ -3,7 +3,7 @@
 /**
  * ============================================================
  * 🛡️ Middleware الموحد (Unified Middleware for Cloudflare Edge)
- * الإصدار: 4.1 (مستقر وعالي الكفاءة + دعم Root Landing Page)
+ * الإصدار: 4.2 (مستقر - دعم العربية السيادية للـ Storefront)
  * ============================================================
  */
 
@@ -21,9 +21,9 @@ const DEFAULT_LOCALE = 'ar';
 const i18nMiddleware = createMiddleware({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
-  // ⚡ 'always' يضمن وجود /ar أو /en للمسارات التي تمر بالـ i18n
   localePrefix: 'always',
-  localeDetection: true,
+  // 🛑 إيقاف اكتشاف لغة متصفح الزائر تماماً لإجبار السيادة للغة العربية
+  localeDetection: false,
 });
 
 // ============================================================
@@ -72,7 +72,7 @@ export default async function middleware(request: NextRequest) {
   const isAuthRoute = AUTH_PATTERNS.some((pattern) => pattern.test(pathname));
 
   const token = request.cookies.get('auth_token')?.value;
-  const JWT_SECRET = process.env.JWT_SECRET || 'default-secret';
+  const JWT_SECRET = process.env.BETTER_AUTH_SECRET || 'default-secret';
   let isAuthenticated = false;
 
   if (token) {
@@ -97,13 +97,13 @@ export default async function middleware(request: NextRequest) {
   // 5️⃣ تشغيل i18nMiddleware (معالجة البادئات والتحويلات للـ [locale])
   const response = i18nMiddleware(request);
 
-  // 6️⃣ إضافة Response Headers للـ Caching والـ Debugging
+  // 6️⃣ إضافة Response Headers للتتبع واللغات
   response.headers.set('x-correlation-id', correlationId);
 
-  // تحديث الاتجاه (RTL/LTR) واللغة
-  const currentLocale = request.cookies.get('NEXT_LOCALE')?.value || DEFAULT_LOCALE;
-  response.headers.set('x-direction', currentLocale === 'ar' ? 'rtl' : 'ltr');
-  response.headers.set('x-locale', currentLocale);
+  // استخراج الـ locale من الـ pathname بعد معالجة الـ i18nMiddleware (لأنه أدق من الكوكي)
+  const pathLocale = pathname.match(/^\/(ar|en)/)?.[1] || DEFAULT_LOCALE;
+  response.headers.set('x-direction', pathLocale === 'ar' ? 'rtl' : 'ltr');
+  response.headers.set('x-locale', pathLocale);
 
   // 7️⃣ ضبط سياسة التخزين المؤقت (Cache Strategy)
   if (pathname.includes('/dashboard')) {

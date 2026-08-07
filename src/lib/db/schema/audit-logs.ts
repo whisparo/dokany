@@ -1,5 +1,4 @@
 // src/lib/db/schema/audit-logs.ts
-
 import {
   sqliteTable,
   text,

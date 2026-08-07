@@ -1,5 +1,4 @@
 // src/lib/db/schema/group-buys.ts
-
 import {
   sqliteTable,
   text,

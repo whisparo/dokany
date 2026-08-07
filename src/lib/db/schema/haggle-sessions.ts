@@ -1,5 +1,4 @@
 // src/lib/db/schema/haggle-sessions.ts
-
 import {
   sqliteTable,
   text,

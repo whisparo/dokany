@@ -11,11 +11,23 @@
       "static/chunks/646.f342b7cffc01feb0.js"
     ]
   },
+  "components\\shared\\ProductCard\\ProductCard.tsx -> @/features/storefront-home/components/AddToCartButton": {
+    "id": 9148,
+    "files": [
+      "static/chunks/148.58e8d8d6a902232f.js"
+    ]
+  },
+  "features\\storefront-home\\components\\CartDrawerWrapper.tsx -> ./ClientCartDrawer": {
+    "id": 272,
+    "files": [
+      "static/chunks/272.d007721e5c7cb2f7.js"
+    ]
+  },
   "features\\storefront-home\\components\\ClientCartDrawer.tsx -> ./CartDrawer": {
     "id": 1146,
     "files": [
       "static/chunks/239-d33310ddfa6356f4.js",
-      "static/chunks/146.50f119d82320b024.js"
+      "static/chunks/146.3d941bbc34a121da.js"
     ]
   }
 }

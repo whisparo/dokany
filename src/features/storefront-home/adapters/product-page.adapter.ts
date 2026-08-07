@@ -1,6 +1,6 @@
 // src/lib/adapters/product-page.adapter.ts
 
-import type { Store, Product } from '@/types';
+import type { Store, Product, Category } from '@/types';
 import { adaptProductGrid } from '@/components/shared/ProductGrid/ProductGrid.adapter';
 import { adaptHero } from '@/features/storefront-home/components/Hero/Hero.adapter';
 import type {
@@ -10,47 +10,56 @@ import type {
 import type { HeroAdapterResult } from '@/features/storefront-home/components/Hero/Hero.adapter';
 
 // ============================================================
-// 📦 الأنواع الموحدة والصارمة (No Any, Strongly Typed)
+// 📦 الأنواع الموحدة والصارمة
 // ============================================================
 
 export interface ProductPagePayload {
   store: Store;
   hero: HeroAdapterResult;
+  categories: Category[];
+  featuredProductsGrid: ProductGridAdapterResult;
   productGrid: ProductGridAdapterResult;
 }
 
 export interface RawStorePageData {
   store: Store;
+  categories?: Category[];
+  featuredProducts?: Product[];
   filteredProducts: Product[];
   totalCount: number;
 }
 
 // ============================================================
-// 🧠 الـ Adapter الرئيسي (Pure Function - No Side Effects)
+// 🧠 الـ Adapter الرئيسي
 // ============================================================
 
-/**
- * ✅ يحول البيانات الخام القادمة من السيرفر إلى Payload نظيف ومقفل للـ UI
- * @param rawData - البيانات الخام (المتجر + المنتجات المفلترة + التوتال)
- * @param userCurrency - العملة الطائرة الملقوطة من التليجرام/URL
- * @param gridOptions - خيارات الصفحة الحالية (رقم الصفحة والـ limit)
- */
 export function adaptProductPage(
   rawData: RawStorePageData,
   userCurrency: string,
   gridOptions: Omit<ProductGridAdapterOptions, 'totalCountFromDB'> = { page: 1, limit: 20 }
 ): ProductPagePayload {
-  const { store, filteredProducts, totalCount } = rawData;
+  const { store, categories = [], featuredProducts = [], filteredProducts, totalCount } = rawData;
 
-  // ✅ Validation صارم لمنع تمرير بيانات مشوهة
+  // Validation
   if (!store || !store.id || !store.name) {
     throw new Error('[ProductPageAdapter] Invalid store data: missing required fields');
   }
 
-  // ✅ تشغيل أدابتر الـ Hero
+  // 1. Hero Adapter
   const hero = adaptHero(store);
 
-  // ✅ تشغيل أدابتر الـ Grid وتمرير العملة والتوتال بشكل متناسق 100%
+  // 2. Featured Products Grid Adapter
+  const featuredProductsGrid = adaptProductGrid(
+    featuredProducts,
+    userCurrency,
+    {
+      page: 1,
+      limit: featuredProducts.length,
+      totalCountFromDB: featuredProducts.length,
+    }
+  );
+
+  // 3. Main Product Grid Adapter
   const productGrid = adaptProductGrid(
     filteredProducts,
     userCurrency,
@@ -64,6 +73,8 @@ export function adaptProductPage(
   return {
     store,
     hero,
+    categories,
+    featuredProductsGrid,
     productGrid,
   };
 }

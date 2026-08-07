@@ -1,4 +1,4 @@
-// src/lib/orchestrators/storefront-orchestrator.ts
+//src/features/storefront-home/orchestrators/storefront-orchestrator.ts
 
 import { getStoreRawData } from '@/features/storefront-home/data/store-data-fetcher';
 import { adaptProductPage } from '@/features/storefront-home/adapters/product-page.adapter';
@@ -6,6 +6,7 @@ import { adaptHeader, type HeaderAdapterResult } from '@/features/storefront-hom
 import { adaptFooter, type FooterAdapterResult } from '@/features/storefront-home/components/Footer/Footer.adapter';
 import type { HeroAdapterResult } from '@/features/storefront-home/components/Hero/Hero.adapter';
 import type { ProductGridAdapterResult } from '@/components/shared/ProductGrid/ProductGrid.adapter';
+import type { Category } from '@/types/category'; // 👈 استيراد نوع التصنيفات
 import { notFound } from 'next/navigation';
 import type { Env } from '@/lib/env';
 
@@ -33,6 +34,8 @@ export interface StorefrontPayload {
   };
   header: HeaderAdapterResult;
   hero: HeroAdapterResult;
+  categories: Category[]; // 👈 إضافة التصنيفات للـ Payload
+  featuredProductsGrid: ProductGridAdapterResult; // 👈 إضافة شبكة المنتجات المميزة
   productGrid: ProductGridAdapterResult;
   footer: FooterAdapterResult;
 }
@@ -58,7 +61,7 @@ export const StorefrontOrchestrator = {
       notFound();
     }
 
-    // 2. فك وتأمين البارامترات وضبط الافتراضيات (تم تنظيف الترتيب المتروك مؤقتاً)
+    // 2. فك وتأمين البارامترات وضبط الافتراضيات
     const currentPage = Math.max(1, parseInt(options.page || '1', 10));
     const userCurrency = options.currency || 'EGP';
 
@@ -81,7 +84,7 @@ export const StorefrontOrchestrator = {
       const adaptedHeader = adaptHeader(rawData.store);
       const adaptedFooter = adaptFooter(rawData.store);
 
-      // 5. تجميع وترجيع الـ Payload النهائي
+      // 5. تجميع وترجيع الـ Payload النهائي المكتمل
       return {
         storeInfo: {
           name: rawData.store.name,
@@ -89,6 +92,8 @@ export const StorefrontOrchestrator = {
         },
         header: adaptedHeader,
         hero: adaptedPage.hero,
+        categories: adaptedPage.categories, // 👈 تمرير الأقسام
+        featuredProductsGrid: adaptedPage.featuredProductsGrid, // 👈 تمرير المنتجات المميزة
         productGrid: adaptedPage.productGrid,
         footer: adaptedFooter,
       };
