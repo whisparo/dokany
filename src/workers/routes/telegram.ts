@@ -5,6 +5,9 @@ import type { Env } from '@/lib/env';
 import { safeExecute } from '@/lib/errors/safe-executor';
 import { handleTelegramUpdate } from '@/lib/telegram/adapter'; 
 
+// 🛡️ استيراد الـ Rate Limiter Client
+import { checkRateLimit } from '@/lib/rate-limit-client';
+
 /**
  * 🤖 Telegram Router
  * 
@@ -31,7 +34,7 @@ const requireInternalAuth = async (c: Context<{ Bindings: Env }>, next: Next) =>
 
 /**
  * POST /api/telegram/webhook
- * نقطة نهاية ويب هوك تليجرام الرئيسية
+ * نقطة نهاية ويب هوك تليجرام الرئيسية (محمية بـ Rate Limit متطور)
  */
 telegramRouter.post('/telegram/webhook', (c) =>
   safeExecute(async () => {
@@ -41,7 +44,7 @@ telegramRouter.post('/telegram/webhook', (c) =>
       return c.json({ ok: false, error: 'Bot not configured' }, 500);
     }
 
-    // التحقق الاختياري من الـ Secret Token (فقط لو تم إعداده مسبقاً)
+    // 1️⃣ التحقق الاختياري من الـ Secret Token الخاص بـ Telegram
     const expectedSecret = c.env.TELEGRAM_WEBHOOK_SECRET;
     const receivedSecret = c.req.header('x-telegram-bot-api-secret-token');
 
@@ -52,9 +55,31 @@ telegramRouter.post('/telegram/webhook', (c) =>
 
     const update = await c.req.json();
 
+    // 2️⃣ استخراج chatId والـ IP و storeId لحماية الـ Webhook
+    const message = update.message || update.callback_query?.message;
+    const chatId = message?.chat?.id ? String(message.chat.id) : undefined;
+    const text = update.message?.text || '';
+    const storeIdMatch = text.match(/store_([a-zA-Z0-9_-]+)/);
+    const storeId = storeIdMatch ? storeIdMatch[1] : undefined;
+    const clientIp = c.req.header('cf-connecting-ip') || '0.0.0.0';
+
+    // 🛡️ 3️⃣ تطبيق الـ Rate Limit عبر الـ Worker
+    const rlResult = await checkRateLimit({
+      action: 'telegram_webhook',
+      ip: clientIp,
+      userId: chatId,
+      storeId: storeId,
+    });
+
+    if (!rlResult.allowed) {
+      console.warn(`⚠️ Rate limit exceeded for Telegram Chat ID: ${chatId || 'unknown'}`);
+      // نرجع status 200 حتى لا يكرر Telegram إرسال نفس الـ Webhook المقفول
+      return c.json({ ok: false, error: 'Rate limit exceeded', retryAfter: rlResult.retryAfter }, 200);
+    }
+
     console.log('📥 Telegram update received:', update.update_id || 'unknown');
 
-    // 🎯 تم الإصلاح: تمرير c.env (تحتوي على DB) لتتوافق مع adapter.ts
+    // 4️⃣ معالجة الـ Update عبر الـ Adapter
     await handleTelegramUpdate(c.env, update, botToken);
 
     return c.json({ ok: true });
@@ -108,7 +133,7 @@ telegramRouter.post('/telegram/send', requireInternalAuth, (c) =>
 
 /**
  * GET /api/telegram/setup
- * إعداد ويب هوك تليجرام (بدون قيود معقدة لتسهيل الربط المباشر)
+ * إعداد ويب هوك تليجرام
  */
 telegramRouter.get('/telegram/setup', (c) =>
   safeExecute(async () => {
@@ -128,6 +153,7 @@ telegramRouter.get('/telegram/setup', (c) =>
         body: JSON.stringify({
           url: webhookUrl,
           allowed_updates: ['message', 'callback_query'],
+          secret_token: c.env.TELEGRAM_WEBHOOK_SECRET,
         }),
       }
     );
@@ -148,7 +174,6 @@ telegramRouter.get('/telegram/setup', (c) =>
  * إرسال خطأ إلى قناة الأخطاء (محمي بـ Internal Secret)
  */
 telegramRouter.post('/telegram/error-channel', requireInternalAuth, (c) =>
-  
   safeExecute(async () => {
     const errorBotToken = c.env.ERROR_BOT_TOKEN || c.env.TELEGRAM_BOT_TOKEN;
     if (!errorBotToken) {

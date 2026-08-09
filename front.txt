@@ -342,9 +342,11 @@ src/features/
 │   │   │   ├── ProductMediaUpload.tsx      # رفع الصور لـ Cloudinary
 │   │   │   ├── ProductPricingInputs.tsx   # مدخلات الأسعار والخصومات
 │   │   │   └── ProductVariantsManager.tsx # إدارة الأحجام والألوان والـ SKUs
-│   │   ├── CategoriesManager/             # إدارة أقسام المتجر
+│   │   ├── CategoriesManager/
+            ├── CategoryTree.tsx             # إدارة أقسام المتجر
 │   │   │   ├── CategoryList.tsx
 │   │   │   └── CategoryFormModal.tsx
+        ├── ProductBreadcrumb.tsx
 │   │   └── ProductFilters.tsx              # البحث والفلترة حسب القسم والحالة
 │   ├── data/
 │   │   └── products-data-fetcher.ts

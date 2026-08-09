@@ -3247,7 +3247,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-      "bytes": 57571,
+      "bytes": 57703,
       "imports": [
         {
           "path": "path",
@@ -3790,7 +3790,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/[locale]/(storefront)/[storeSlug]/checkout/page.js": {
-      "bytes": 62349,
+      "bytes": 67779,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/router/utils/app-paths.js",
@@ -7192,7 +7192,7 @@
       "format": "esm"
     },
     ".open-next/server-functions/default/index.mjs": {
-      "bytes": 85033,
+      "bytes": 85165,
       "imports": [
         {
           "path": "node:module",
@@ -8362,7 +8362,7 @@
           "bytesInOutput": 586
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-          "bytesInOutput": 47348
+          "bytesInOutput": 47480
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/app-render/action-async-storage-instance.js": {
           "bytesInOutput": 501
@@ -8449,7 +8449,7 @@
           "bytesInOutput": 17304
         },
         ".open-next/server-functions/default/.next/server/app/[locale]/(storefront)/[storeSlug]/checkout/page.js": {
-          "bytesInOutput": 68202
+          "bytesInOutput": 74226
         },
         ".open-next/server-functions/default/.next/server/app/[locale]/(storefront)/[storeSlug]/page.js": {
           "bytesInOutput": 17165
@@ -8917,10 +8917,10 @@
           "bytesInOutput": 5074
         },
         ".open-next/server-functions/default/index.mjs": {
-          "bytesInOutput": 58833
+          "bytesInOutput": 58965
         }
       },
-      "bytes": 3709671
+      "bytes": 3715959
     }
   }
 }

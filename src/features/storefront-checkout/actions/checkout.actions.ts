@@ -8,7 +8,10 @@ import type { Env } from '@/lib/env';
 import { processCheckout } from '@/features/storefront-checkout/orchestrators/checkout.orchestrator';
 import { CustomerService } from '@/lib/services/customer.service';
 import { OrderService } from '@/lib/services/order-service';
-import { SystemError } from '@/lib/errors/types';
+
+// 🛡️ 1. استيراد دالة الحماية والـ Action Error Handler الموحد
+import { enforceRateLimit } from '@/lib/rate-limit-client';
+import { handleActionError } from '@/lib/error-handler';
 
 export interface ShippingAddress {
   street: string;
@@ -19,6 +22,7 @@ export interface ShippingAddress {
   recipientName: string;
   recipientPhone: string;
 }
+
 export interface CheckoutFormSubmission {
   customer: {
     name: string;
@@ -26,7 +30,6 @@ export interface CheckoutFormSubmission {
     email?: string;
   };
   shippingAddress: ShippingAddress;
-  // ⚡ استخدام ReturnType للتعرف التلقائي على نوع العناصر المدخلة والمخرجة
   items: Parameters<typeof OrderService.prepareOrderItems>[0];
   shippingCost: number;
   discountAmount?: number;
@@ -52,6 +55,12 @@ export async function handleCheckoutSubmit(
   let redirectUrlTarget: string | null = null;
 
   try {
+    // 🛡️ 2. تطبيق الـ Rate Limit قبل تنفيذ أي عمليات هامة أو الاتصال بالـ DB
+    await enforceRateLimit({
+      action: 'checkout',
+      storeId: storeId,
+    });
+
     const context = await getCloudflareContext();
     const env = context.env as unknown as Env;
 
@@ -59,7 +68,7 @@ export async function handleCheckoutSubmit(
       return { success: false, error: 'تعذر الاتصال بقاعدة البيانات' };
     }
 
-    // 👤 1. جلب أو إنشاء العميل
+    // 👤 3. جلب أو إنشاء العميل
     const customer = await CustomerService.findOrCreateCustomer(env, {
       storeId,
       name: payload.customer.name,
@@ -67,14 +76,13 @@ export async function handleCheckoutSubmit(
       email: payload.customer.email,
     });
 
-    // 📦 2. تحضير العناصر وحساب الإجماليات (استنتاج النوع تلقائياً دون استيراد صريح)
+    // 📦 4. تحضير العناصر وحساب الإجماليات
     const preparedItems = OrderService.prepareOrderItems(payload.items);
 
     if (!preparedItems || preparedItems.length === 0) {
       return { success: false, error: 'سلة الشراء فارغة' };
     }
 
-    // ⚡ حساب الإجمالي الفرعي بأمان بدون مشاكل في الأنواع
     const subtotalNumber = preparedItems.reduce(
       (acc, item) => acc + (parseFloat(item.lineTotal) || 0),
       0
@@ -91,7 +99,7 @@ export async function handleCheckoutSubmit(
     const orderNumber = OrderService.generateOrderNumber();
     const idempotencyKey = payload.idempotencyKey || `chk_${orderId}`;
 
-    // 🔄 3. التنفيذ عبر الأوركستريتر
+    // 🔄 5. التنفيذ عبر الأوركستريتر
     const result = await processCheckout(
       env as Env & Record<string, unknown>,
       idempotencyKey,
@@ -130,21 +138,14 @@ export async function handleCheckoutSubmit(
   } catch (err: unknown) {
     console.error('Checkout Submission Error:', err);
 
-    if (err instanceof SystemError) {
-      return {
-        success: false,
-        error: err.userMessage,
-      };
-    }
-
-    const errorMessage = err instanceof Error ? err.message : 'حدث خطأ غير متوقع أثناء تنفيذ الطلب';
+    // 🛠️ 6. معالجة موحدة لكل أنواع الأخطاء (Rate Limit, SystemError, الخ) عبر handleActionError
     return {
       success: false,
-      error: errorMessage,
+      error: handleActionError(err),
     };
   }
 
-  // 🚀 4. التوجيه الخارجي التلقائي خارج الـ try/catch
+  // 🚀 7. التوجيه الخارجي التلقائي خارج الـ try/catch
   if (redirectUrlTarget) {
     redirect(redirectUrlTarget);
   }

@@ -3,7 +3,7 @@
 /**
  * ============================================================
  * 🛡️ Middleware الموحد (Unified Middleware for Cloudflare Edge)
- * الإصدار: 4.2 (مستقر - دعم العربية السيادية للـ Storefront)
+ * الإصدار: 5.0 (أمان متكامل + Distributed Rate Limiter via Worker)
  * ============================================================
  */
 
@@ -12,8 +12,11 @@ import type { NextRequest } from 'next/server';
 import createMiddleware from 'next-intl/middleware';
 import { jwtVerify } from 'jose';
 
+// 🛡️ استيراد الـ Rate Limiter Client المربوط بالـ Cloudflare Worker
+import { checkRateLimit } from '@/lib/rate-limit-client';
+
 // ============================================================
-// 📌 تكوينات next-intl مع وجود مجلد [locale]
+// 📌 تكوينات next-intl
 // ============================================================
 const LOCALES = ['ar', 'en'] as const;
 const DEFAULT_LOCALE = 'ar';
@@ -22,26 +25,41 @@ const i18nMiddleware = createMiddleware({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
   localePrefix: 'always',
-  // 🛑 إيقاف اكتشاف لغة متصفح الزائر تماماً لإجبار السيادة للغة العربية
-  localeDetection: false,
+  localeDetection: false, // السيادة للعربية
 });
 
 // ============================================================
 // 🛡️ المسارات المحمية وقواعد الوصول
 // ============================================================
-const PROTECTED_PATTERNS = [/^\/(ar|en)?\/?dashboard(\/.*)?$/, /^\/(ar|en)?\/?admin(\/.*)?$/];
+const PROTECTED_PATTERNS = [
+  /^\/(ar|en)?\/?dashboard(\/.*)?$/,
+  /^\/(ar|en)?\/?admin(\/.*)?$/,
+];
 const AUTH_PATTERNS = [/^\/(ar|en)?\/?auth(\/.*)?$/];
 
 // ============================================================
 // 🧠 دالة التحقق من JWT (Edge-compatible)
 // ============================================================
-async function verifyJWT(token: string, secret: string): Promise<boolean> {
+interface JWTPayload {
+  merchant_id?: string;
+  store_id?: string;
+  role?: string;
+  exp?: number;
+}
+
+async function verifyJWT(
+  token: string,
+  secret: string
+): Promise<{ valid: boolean; payload?: JWTPayload }> {
   try {
     const encoder = new TextEncoder();
-    const { payload } = await jwtVerify(token, encoder.encode(secret));
-    return !!payload;
+    const { payload } = await jwtVerify(token, encoder.encode(secret), {
+      issuer: 'dokany.com',
+      audience: 'dokany-api',
+    });
+    return { valid: true, payload: payload as JWTPayload };
   } catch {
-    return false;
+    return { valid: false };
   }
 }
 
@@ -51,35 +69,88 @@ async function verifyJWT(token: string, secret: string): Promise<boolean> {
 export default async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 1️⃣ استثناء الصفحة الرئيسية (Root `/`) لتعمل صفحة Engine Status بدون تحويلات لغوية
-  if (pathname === '/') {
+  // 1️⃣ استثناء الصفحة الرئيسية ومسارات الـ API الداخلية والملفات الاستاتيكية
+  if (
+    pathname === '/' ||
+    pathname.startsWith('/api/') ||
+    pathname.startsWith('/_next/') ||
+    pathname === '/health'
+  ) {
     return NextResponse.next();
   }
 
-  // 2️⃣ استثناء الأصول الثابتة والـ APIs فوراً لأداء أسرع
-  const isStatic = /\.(ico|png|jpg|jpeg|gif|svg|webp|css|js|map|json|txt|xml)$/i.test(pathname);
-  const isInternal = pathname.startsWith('/api/') || pathname.startsWith('/_next/') || pathname === '/health';
-
-  if (isStatic || isInternal) {
-    return NextResponse.next();
-  }
-
-  // 3️⃣ تجهيز الـ Correlation ID للتتبع
+  // 2️⃣ تجهيز الـ Correlation ID والـ Client IP
   const correlationId = request.headers.get('x-correlation-id') || crypto.randomUUID();
+  const clientIp =
+    request.headers.get('cf-connecting-ip') ||
+    request.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+    '127.0.0.1';
 
-  // 4️⃣ التحقق من المصادقة (Auth & JWT Verification)
-  const isProtectedRoute = PROTECTED_PATTERNS.some((pattern) => pattern.test(pathname));
+  // 3️⃣ Rate Limiting موزع عبر Cloudflare Worker لمسارات الـ Auth والـ Checkout
   const isAuthRoute = AUTH_PATTERNS.some((pattern) => pattern.test(pathname));
+  const isCheckoutRoute = pathname.includes('/checkout');
 
+  if (isAuthRoute || isCheckoutRoute) {
+    const action = isAuthRoute ? 'login' : 'checkout';
+
+    const rlResult = await checkRateLimit({
+      action,
+      ip: clientIp,
+    });
+
+    if (!rlResult.allowed) {
+      return new NextResponse(
+        JSON.stringify({
+          error: 'Too many requests. Please try again later.',
+          retryAfter: rlResult.retryAfter || 60,
+          layer: rlResult.layer || 'global',
+        }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'Retry-After': String(rlResult.retryAfter || 60),
+            'X-RateLimit-Limit': String(rlResult.limit),
+            'X-RateLimit-Remaining': String(rlResult.remaining),
+            'X-RateLimit-Reset': String(rlResult.resetAt),
+            'x-correlation-id': correlationId,
+          },
+        }
+      );
+    }
+  }
+
+  // 4️⃣ التحقق من BETTER_AUTH_SECRET
+  const JWT_SECRET = process.env.BETTER_AUTH_SECRET;
+  if (!JWT_SECRET) {
+    console.error('🚨 BETTER_AUTH_SECRET is not defined in environment variables');
+    return new NextResponse('Server configuration error', { status: 500 });
+  }
+
+  // 5️⃣ التحقق من المصادقة (Auth & JWT Verification)
+  const isProtectedRoute = PROTECTED_PATTERNS.some((pattern) => pattern.test(pathname));
   const token = request.cookies.get('auth_token')?.value;
-  const JWT_SECRET = process.env.BETTER_AUTH_SECRET || 'default-secret';
+
   let isAuthenticated = false;
+  let userPayload: JWTPayload | undefined;
 
   if (token) {
-    isAuthenticated = await verifyJWT(token, JWT_SECRET);
+    const result = await verifyJWT(token, JWT_SECRET);
+    isAuthenticated = result.valid;
+    userPayload = result.payload;
   }
 
-  // توجيه غير المصادقين بعيداً عن الداشبورد
+  // 6️⃣ التحقق من الصلاحيات (Authorization - Admin Check)
+  if (isProtectedRoute && isAuthenticated && userPayload) {
+    const userRole = userPayload.role || 'merchant';
+
+    if (pathname.includes('/admin') && userRole !== 'admin') {
+      const matchLocale = pathname.match(/^\/(ar|en)/)?.[1] || DEFAULT_LOCALE;
+      return NextResponse.redirect(new URL(`/${matchLocale}/403`, request.url));
+    }
+  }
+
+  // 7️⃣ توجيه غير المصادقين بعيداً عن الداشبورد
   if (isProtectedRoute && !isAuthenticated) {
     const matchLocale = pathname.match(/^\/(ar|en)/)?.[1] || DEFAULT_LOCALE;
     const loginUrl = new URL(`/${matchLocale}/auth/login`, request.url);
@@ -87,29 +158,34 @@ export default async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // توجيه المصادقين بعيداً عن صفحات الدخول
+  // 8️⃣ توجيه المصادقين بعيداً عن صفحات الدخول
   if (isAuthRoute && isAuthenticated) {
     const matchLocale = pathname.match(/^\/(ar|en)/)?.[1] || DEFAULT_LOCALE;
-    const dashboardUrl = new URL(`/${matchLocale}/dashboard`, request.url);
-    return NextResponse.redirect(dashboardUrl);
+    return NextResponse.redirect(new URL(`/${matchLocale}/dashboard`, request.url));
   }
 
-  // 5️⃣ تشغيل i18nMiddleware (معالجة البادئات والتحويلات للـ [locale])
+  // 9️⃣ تشغيل i18nMiddleware
   const response = i18nMiddleware(request);
 
-  // 6️⃣ إضافة Response Headers للتتبع واللغات
+  // 🔟 إضافة Response Headers للتتبع والأمان
   response.headers.set('x-correlation-id', correlationId);
 
-  // استخراج الـ locale من الـ pathname بعد معالجة الـ i18nMiddleware (لأنه أدق من الكوكي)
   const pathLocale = pathname.match(/^\/(ar|en)/)?.[1] || DEFAULT_LOCALE;
   response.headers.set('x-direction', pathLocale === 'ar' ? 'rtl' : 'ltr');
   response.headers.set('x-locale', pathLocale);
 
-  // 7️⃣ ضبط سياسة التخزين المؤقت (Cache Strategy)
-  if (pathname.includes('/dashboard')) {
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  // 1️⃣1️⃣ ضبط سياسة التخزين المؤقت
+  if (pathname.includes('/dashboard') || pathname.includes('/admin')) {
     response.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
   } else {
-    response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400');
+    response.headers.set(
+      'Cache-Control',
+      'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400'
+    );
   }
 
   return response;
@@ -120,6 +196,6 @@ export default async function middleware(request: NextRequest) {
 // ============================================================
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)',
+    '/((?!api|_next/static|_next/image|favicon\\.ico|robots\\.txt|sitemap\\.xml|.*\\.(?:png|jpg|jpeg|gif|svg|webp|css|js|map|json|txt|xml)$).*)',
   ],
 };
