@@ -40,3 +40,15 @@ next-env.d.ts
 
 # testing & coverage
 /coverage
+
+# ─────────────── Cloudflare & Wrangler ───────────────
+.wrangler/
+.wrangler/cache/
+.dev.vars
+*.pem
+
+# ─────────────── OpenNext / Build Artifacts ───────────────
+.open-next/
+.next/
+dist/
+out/
