@@ -222,7 +222,7 @@ export function generateIdempotencyKey(): string {
   return `pay_${Date.now()}_${crypto.randomUUID()}`;
 }
 
-export function calculateNetAmount(amount: number, fee: number): number {
+export function calculatePaymentNetAmount(amount: number, fee: number): number {
   return amount - fee;
 }
 

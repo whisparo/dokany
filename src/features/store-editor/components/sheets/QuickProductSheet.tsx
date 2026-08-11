@@ -8,7 +8,7 @@ import Button from '@/components/shared/Button';
 import { Typography } from '@/components/shared/Typography';
 import { X, Loader2, CheckCircle, AlertCircle, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { generateId } from '@/lib/utils/id';
+import { generateUUID } from '@/lib/utils/id';
 
 import { QuickProductImageUploader } from './quick-product/QuickProductImageUploader';
 import { QuickProductVideoUploader } from './quick-product/QuickProductVideoUploader';
@@ -63,7 +63,7 @@ export function QuickProductSheet({ storeId, isOpen, onClose }: QuickProductShee
   const handleSubmit = async (formData: FormData) => {
     formData.append('storeId', storeId);
 
-    const idempotencyKey = `product_${storeId}_${Date.now()}_${generateId()}`;
+    const idempotencyKey = `product_${storeId}_${Date.now()}_${generateUUID()}`;
     formData.append('idempotencyKey', idempotencyKey);
 
     const priceInCents = Math.round(parseFloat(priceCents) * 100);

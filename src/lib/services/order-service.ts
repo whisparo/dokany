@@ -29,7 +29,12 @@ export class OrderService {
    */
   static generateOrderNumber(): string {
     const prefix = 'ORD';
-    const randomPart = Math.random().toString(36).substring(2, 7).toUpperCase();
+    
+    // توليد قيم عشوائية آمنة بطول 4 بايت بدل Math.random()
+    const array = new Uint32Array(1);
+    crypto.getRandomValues(array);
+    const randomPart = array[0].toString(36).substring(0, 5).toUpperCase();
+    
     const timePart = Date.now().toString().slice(-4);
     return `${prefix}-${randomPart}-${timePart}`;
   }

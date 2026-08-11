@@ -1,7 +1,7 @@
 // src/workers/routes/categories.ts
 
 import { Hono } from 'hono';
-import { eq, and, sql, isNull } from 'drizzle-orm';
+import { eq, and, sql, isNull, ne } from 'drizzle-orm';
 import type { Env } from '@/lib/env';
 import { getDb } from '@/lib/db/db';
 import * as schema from '@/lib/db/schema';
@@ -13,29 +13,40 @@ export const categoriesRouter = new Hono<{ Bindings: Env }>();
  * دالة تحويل الاسم إلى Slug مع دعم اللغة العربية
  */
 function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s\u0600-\u06FF-]/g, '') // يدعم الحروف العربية والإنجليزي والأرقام
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '') || `category-${Date.now()}`;
+  return (
+    text
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s\u0600-\u06FF-]/g, '')
+      .replace(/[\s_-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || `category-${Date.now()}`
+  );
 }
 
 /**
- * دالة مساعدة لجلب المتجر وضمان وجوده
+ * دالة مساعدة لجلب المتجر وضمان وجوده وعدم حذفه
  */
-async function getStoreBySlugOrThrow(db: ReturnType<typeof getDb>, slug: string, path: string) {
+async function getStoreBySlugOrThrow(
+  db: ReturnType<typeof getDb>,
+  slug: string,
+  path: string
+) {
   const store = await db
     .select()
     .from(schema.stores)
-    .where(eq(schema.stores.slug, slug))
+    .where(
+      and(
+        eq(schema.stores.slug, slug),
+        isNull(schema.stores.deletedAt)
+      )
+    )
     .get();
 
   if (!store) {
     throw new SystemError({
       code: 'STORE_NOT_FOUND',
       userMessage: 'المتجر المطلوب غير موجود.',
-      technicalMessage: `Store with slug '${slug}' was not found.`,
+      technicalMessage: `Store with slug '${slug}' was not found or is deleted.`,
       category: 'business',
       severity: 'info',
       retryable: false,
@@ -57,18 +68,18 @@ categoriesRouter.get('/store/:slug/categories', async (c) => {
 
   const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
 
-  const categories = await db
+  const categoriesList = await db
     .select()
     .from(schema.categories)
     .where(
       and(
         eq(schema.categories.storeId, store.id),
-        isNull(schema.categories.deletedAt) // مراعاة Soft Delete المعرف في السكيما
+        isNull(schema.categories.deletedAt)
       )
     )
     .orderBy(schema.categories.name);
 
-  return c.json({ success: true, data: categories }, 200);
+  return c.json({ success: true, data: categoriesList }, 200);
 });
 
 /**
@@ -111,14 +122,26 @@ categoriesRouter.get('/store/:slug/categories/:id/products', async (c) => {
   const products = await db
     .select()
     .from(schema.products)
-    .where(eq(schema.products.categoryId, id))
+    .where(
+      and(
+        eq(schema.products.categoryId, id),
+        isNull(schema.products.deletedAt)
+      )
+    )
     .limit(limit)
     .offset(offset);
 
-  const [{ count }] = await db
+  const countResult = await db
     .select({ count: sql<number>`count(*)` })
     .from(schema.products)
-    .where(eq(schema.products.categoryId, id));
+    .where(
+      and(
+        eq(schema.products.categoryId, id),
+        isNull(schema.products.deletedAt)
+      )
+    );
+
+  const total = Number(countResult[0]?.count ?? 0);
 
   return c.json(
     {
@@ -129,8 +152,8 @@ categoriesRouter.get('/store/:slug/categories/:id/products', async (c) => {
         pagination: {
           limit,
           offset,
-          total: count,
-          hasMore: offset + limit < count,
+          total,
+          hasMore: offset + limit < total,
         },
       },
     },
@@ -144,9 +167,11 @@ categoriesRouter.get('/store/:slug/categories/:id/products', async (c) => {
  */
 categoriesRouter.post('/store/:slug/categories', async (c) => {
   const slug = c.req.param('slug');
-  const body = await c.req.json<{ name: string; description?: string; slug?: string }>();
+  const body = await c.req.json<{ name?: string; description?: string; slug?: string }>();
 
-  if (!body.name || body.name.trim().length === 0) {
+  const trimmedName = body.name?.trim();
+
+  if (!trimmedName) {
     throw new SystemError({
       code: 'CATEGORY_NAME_REQUIRED',
       userMessage: 'اسم التصنيف مطلوب ولا يمكن أن يكون فارغاً.',
@@ -162,14 +187,13 @@ categoriesRouter.post('/store/:slug/categories', async (c) => {
   const db = getDb({ DB: c.env.DB });
   const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
 
-  // فحص وجود نفس الاسم في التصنيفات النشطة
   const existing = await db
     .select()
     .from(schema.categories)
     .where(
       and(
         eq(schema.categories.storeId, store.id),
-        eq(schema.categories.name, body.name.trim()),
+        eq(schema.categories.name, trimmedName),
         isNull(schema.categories.deletedAt)
       )
     )
@@ -179,7 +203,7 @@ categoriesRouter.post('/store/:slug/categories', async (c) => {
     throw new SystemError({
       code: 'CATEGORY_ALREADY_EXISTS',
       userMessage: 'يوجد تصنيف آخر بنفس هذا الاسم في متجرك.',
-      technicalMessage: `Category name '${body.name}' already exists for storeId '${store.id}'.`,
+      technicalMessage: `Category name '${trimmedName}' already exists for storeId '${store.id}'.`,
       category: 'business',
       severity: 'info',
       retryable: false,
@@ -188,19 +212,18 @@ categoriesRouter.post('/store/:slug/categories', async (c) => {
     });
   }
 
-  const categorySlug = body.slug?.trim() || slugify(body.name);
+  const categorySlug = body.slug?.trim() || slugify(trimmedName);
   const now = new Date();
 
-  // ✅ المطابقة الدقيقة للسكيما
   const newCategory = await db
     .insert(schema.categories)
     .values({
       id: crypto.randomUUID(),
       storeId: store.id,
-      name: body.name.trim(),
-      slug: categorySlug, // 👈 حقل إجباري تم توفيره
+      name: trimmedName,
+      slug: categorySlug,
       description: body.description?.trim() || null,
-      createdAt: now, // 👈 Date Object لأن المود timestamp
+      createdAt: now,
       updatedAt: now,
     })
     .returning();
@@ -217,7 +240,9 @@ categoriesRouter.put('/store/:slug/categories/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json<{ name?: string; description?: string; slug?: string }>();
 
-  if (!body.name || body.name.trim().length === 0) {
+  const trimmedName = body.name?.trim();
+
+  if (!trimmedName) {
     throw new SystemError({
       code: 'CATEGORY_NAME_REQUIRED',
       userMessage: 'اسم التصنيف مطلوب ولا يمكن أن يكون فارغاً.',
@@ -233,15 +258,42 @@ categoriesRouter.put('/store/:slug/categories/:id', async (c) => {
   const db = getDb({ DB: c.env.DB });
   const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
 
-  const categorySlug = body.slug?.trim() || slugify(body.name);
+  // التحقق من أن الاسم غير مستخدم في تصنيف آخر داخل نفس المتجر
+  const duplicate = await db
+    .select()
+    .from(schema.categories)
+    .where(
+      and(
+        eq(schema.categories.storeId, store.id),
+        eq(schema.categories.name, trimmedName),
+        ne(schema.categories.id, id),
+        isNull(schema.categories.deletedAt)
+      )
+    )
+    .get();
+
+  if (duplicate) {
+    throw new SystemError({
+      code: 'CATEGORY_ALREADY_EXISTS',
+      userMessage: 'يوجد تصنيف آخر بنفس هذا الاسم في متجرك.',
+      technicalMessage: `Category name '${trimmedName}' is already taken by another category in store '${store.id}'.`,
+      category: 'business',
+      severity: 'info',
+      retryable: false,
+      shouldAlert: false,
+      context: { storeId: store.id, path: c.req.path },
+    });
+  }
+
+  const categorySlug = body.slug?.trim() || slugify(trimmedName);
 
   const updated = await db
     .update(schema.categories)
     .set({
-      name: body.name.trim(),
+      name: trimmedName,
       slug: categorySlug,
       description: body.description?.trim() || null,
-      updatedAt: new Date(), // 👈 Date Object
+      updatedAt: new Date(),
     })
     .where(
       and(
@@ -304,17 +356,24 @@ categoriesRouter.delete('/store/:slug/categories/:id', async (c) => {
     });
   }
 
-  // التحقق من وجود منتجات مرتبطة
-  const [{ count }] = await db
+  // التحقق من وجود منتجات غير محذوفة مرتبطة بالتصنيف
+  const countResult = await db
     .select({ count: sql<number>`count(*)` })
     .from(schema.products)
-    .where(eq(schema.products.categoryId, id));
+    .where(
+      and(
+        eq(schema.products.categoryId, id),
+        isNull(schema.products.deletedAt)
+      )
+    );
 
-  if (count > 0) {
+  const productCount = Number(countResult[0]?.count ?? 0);
+
+  if (productCount > 0) {
     throw new SystemError({
       code: 'CATEGORY_NOT_EMPTY',
-      userMessage: `لا يمكن حذف التصنيف لأنه يحتوي على ${count} منتج. قم بنقل المنتجات أو حذفها أولاً.`,
-      technicalMessage: `Cannot delete category '${id}'. Contains ${count} linked products.`,
+      userMessage: `لا يمكن حذف التصنيف لأنه يحتوي على ${productCount} منتج. قم بنقل المنتجات أو حذفها أولاً.`,
+      technicalMessage: `Cannot delete category '${id}'. Contains ${productCount} linked products.`,
       category: 'business',
       severity: 'info',
       retryable: false,
@@ -323,7 +382,6 @@ categoriesRouter.delete('/store/:slug/categories/:id', async (c) => {
     });
   }
 
-  // تنفيذ الـ Soft Delete بحسب تصميمة السكيما
   await db
     .update(schema.categories)
     .set({

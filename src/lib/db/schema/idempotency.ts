@@ -15,11 +15,12 @@ export const idempotency = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
       .default(sql`(unixepoch() * 1000)`),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(), // 👈 حقل انتهاء الصلاحية الأساسي للـ TTL
     completedAt: integer('completed_at', { mode: 'timestamp' }),
   },
   (table) => [
-    index('idempotency_created_at_idx').on(table.createdAt),
-    index('idempotency_status_idx').on(table.status), // 👈 إضافة إندكس للحالة لتحسين سرعة الاستعلامات
+    index('idempotency_expires_at_idx').on(table.expiresAt),
+    index('idempotency_status_idx').on(table.status),
   ]
 );
 

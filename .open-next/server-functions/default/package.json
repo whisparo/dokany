@@ -15,7 +15,10 @@
     "deploy": "npm run deploy:frontend && npm run deploy:worker",
     "lint": "next lint",
     "db:push": "npx drizzle-kit push",
-    "db:studio": "npx drizzle-kit studio"
+    "db:studio": "npx drizzle-kit studio",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:e2e": "playwright test"
   },
   "browserslist": {
     "production": [
@@ -60,10 +63,13 @@
     "@next/bundle-analyzer": "^15.5.21",
     "@opennextjs/aws": "^4.0.2",
     "@opennextjs/cloudflare": "^1.20.2",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.0.5",
+    "@vitest/coverage-v8": "^4.1.10",
     "critters": "^0.0.23",
     "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.10",
@@ -72,6 +78,7 @@
     "eslint-config-next": "15.5.21",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vitest": "^4.1.10",
     "wrangler": "^4.120.0"
   },
   "overrides": {

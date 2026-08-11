@@ -1,4 +1,4 @@
-//src/app/[locale]/(storefront)/[storeSlug]/page.tsx
+// src/app/[locale]/(storefront)/[storeSlug]/page.tsx
 import { StorefrontOrchestrator } from '@/features/storefront-home/orchestrators/storefront-orchestrator';
 import { Hero } from '@/features/storefront-home/components/Hero/Hero';
 import { ProductGrid } from '@/components/shared/ProductGrid/ProductGrid';
@@ -17,12 +17,12 @@ export default async function StorePage({ params, searchParams }: StorePageProps
   const sParams = await searchParams;
   const decodedStoreSlug = decodeURIComponent(storeSlug);
 
-  const { env } = await getCloudflareContext();
-  const cfEnv = env as unknown as Env;
+  // تمرير Env للـ Generic كـ Context صريح ونظيف
+  const { env } = await getCloudflareContext<{ env: Env }>();
 
   const payload = await StorefrontOrchestrator.fetchPagePayload(
     decodedStoreSlug, 
-    cfEnv, 
+    env, 
     sParams
   );
 

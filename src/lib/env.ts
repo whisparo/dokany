@@ -1,10 +1,11 @@
 // src/lib/env.ts
 
-import type { D1Database, Queue } from '@cloudflare/workers-types';
+import type { D1Database, KVNamespace, Queue } from '@cloudflare/workers-types';
 
 export interface Env {
-  // Database
+  // Database & Storage KV
   DB: D1Database;
+  CUSTOM_DOMAINS_KV?: KVNamespace;
 
   // Authentication & Internal Security
   BETTER_AUTH_SECRET: string;
@@ -20,6 +21,7 @@ export interface Env {
   // Telegram Notifications & Webhooks
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_ERROR_CHAT_ID: string;
+  TELEGRAM_ADMIN_CHAT_ID?: string;
   ERROR_CHANNEL_ID?: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
   TELEGRAM_WEBHOOK_URL?: string;
@@ -32,7 +34,7 @@ export interface Env {
   QSTASH_TOKEN: string;
 
   // Background Media Worker & Queue Services
-  MEDIA_QUEUE?: Queue<any>;
+  MEDIA_QUEUE?: Queue<unknown>;
   MEDIA_PROCESSOR_URL?: string;
 
   // Application Public URLs

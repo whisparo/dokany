@@ -6,7 +6,7 @@ import { useRef, useState } from 'react';
 import Image from 'next/image';
 import { uploadToCloudinary } from '@/lib/services/cloudinary';
 import { useEditorStore } from '../../../store/useEditorStore';
-import { generateId } from '@/lib/utils/id';
+import { generateUUID } from '@/lib/utils/id';
 import { Typography } from '@/components/shared/Typography';
 import { X, Upload, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -48,7 +48,7 @@ export function QuickProductImageUploader({
     setIsUploading(true);
     onError(null);
 
-    const uploadId = generateId();
+    const uploadId = generateUUID();
     const tempPreviewUrl = URL.createObjectURL(file);
     tempPreviewUrlRef.current = tempPreviewUrl;
 

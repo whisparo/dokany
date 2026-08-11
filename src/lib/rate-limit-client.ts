@@ -1,9 +1,8 @@
-//src/lib/rate-limit-client.ts
+// src/lib/rate-limit-client.ts
 
 import { headers } from 'next/headers';
-
-const RATE_LIMITER_URL = process.env.RATE_LIMITER_URL;
-const RATE_LIMITER_TOKEN = process.env.RATE_LIMITER_TOKEN;
+import { getCloudflareContext } from '@opennextjs/cloudflare';
+import type { Env } from '@/lib/env';
 
 export interface CheckOptions {
   action: string;
@@ -22,10 +21,36 @@ export interface CheckResult {
   degraded?: boolean;
 }
 
+/**
+ * 🛠️ Helper لاستخراج أسرار البيئة ديناميكياً بين Cloudflare Workers و Node
+ */
+async function getRateLimiterEnv(): Promise<{ url?: string; token?: string }> {
+  try {
+    const context = await getCloudflareContext();
+    const cfEnv = context.env as unknown as Env & {
+      RATE_LIMITER_URL?: string;
+      RATE_LIMITER_TOKEN?: string;
+    };
+
+    return {
+      url: cfEnv?.RATE_LIMITER_URL || process.env.RATE_LIMITER_URL,
+      token: cfEnv?.RATE_LIMITER_TOKEN || process.env.RATE_LIMITER_TOKEN,
+    };
+  } catch {
+    return {
+      url: process.env.RATE_LIMITER_URL,
+      token: process.env.RATE_LIMITER_TOKEN,
+    };
+  }
+}
+
 export async function checkRateLimit(options: CheckOptions): Promise<CheckResult> {
+  // 🟢 جلب المتغيرات ديناميكياً لتتوافق مع Cloudflare Context
+  const { url: rateLimiterUrl, token: rateLimiterToken } = await getRateLimiterEnv();
+
   // إذا لم يتم ضبط المتغيرات، اسمح بالطلب بدلاً من إيقاف الموقع (Fail-Open)
-  if (!RATE_LIMITER_URL || !RATE_LIMITER_TOKEN) {
-    console.warn('Rate limiter env vars missing, skipping check.');
+  if (!rateLimiterUrl || !rateLimiterToken) {
+    console.warn('⚠️ Rate limiter env vars missing, skipping check.');
     return { allowed: true, degraded: true, limit: 0, remaining: 0, resetAt: 0 };
   }
 
@@ -38,11 +63,11 @@ export async function checkRateLimit(options: CheckOptions): Promise<CheckResult
       || headersList.get('x-forwarded-for')?.split(',')[0].trim()
       || '127.0.0.1';
 
-    const response = await fetch(`${RATE_LIMITER_URL}/check`, {
+    const response = await fetch(`${rateLimiterUrl}/check`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-RL-Token': RATE_LIMITER_TOKEN,
+        'X-RL-Token': rateLimiterToken,
       },
       body: JSON.stringify({ ...options, ip: rawIp }),
       // timeout بعد ثانيتين كي لا يتعطل الـ Server Action

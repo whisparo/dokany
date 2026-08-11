@@ -29,6 +29,7 @@ export interface CreateOrderItemInput {
   quantity: number;
   price?: string | number;
   options?: ProductOptions;
+  variantSku?: string;
 }
 
 export interface CreateOrderBody {
@@ -47,6 +48,8 @@ export interface CreateOrderBody {
   paymentMethod?: 'cod' | 'credit_card' | 'wallet' | 'bank_transfer' | 'installments';
   shippingMethod?: 'standard' | 'express' | 'same-day' | 'pickup';
   customerNotes?: string;
+  haggleSessionId?: string;
+  haggleDiscount?: string | number;
 }
 
 export interface UpdateOrderStatusBody {
@@ -58,6 +61,7 @@ interface PreparedOrderItem {
   productId: string;
   productName: string;
   productSku: string;
+  variantSku: string;
   productImage: string | null;
   productOptions: ProductOptions;
   quantity: number;
@@ -67,13 +71,27 @@ interface PreparedOrderItem {
 
 export const ordersRouter = new Hono<{ Bindings: Env }>();
 
+/**
+ * تحويل المبالغ إلى سنتات/قروش بشكل آمن لمنع مشاكل Float precision و NaN
+ */
 function toCents(amount: string | number | undefined | null): number {
-  if (!amount) return 0;
-  return Math.round(parseFloat(amount.toString()) * 100);
+  if (amount === undefined || amount === null || amount === '') return 0;
+  const parsed = typeof amount === 'number' ? amount : parseFloat(amount);
+  if (Number.isNaN(parsed)) return 0;
+  return Math.round(parsed * 100);
 }
 
 function toFormattedString(cents: number): string {
   return (cents / 100).toFixed(2);
+}
+
+/**
+ * توليد رقم عشوائي آمن تشفيرياً
+ */
+function secureRandomInt(min: number, max: number): number {
+  const array = new Uint32Array(1);
+  crypto.getRandomValues(array);
+  return min + (array[0] % (max - min + 1));
 }
 
 /**
@@ -82,8 +100,8 @@ function toFormattedString(cents: number): string {
 ordersRouter.get('/store/:slug/orders', (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
-    const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
-    const offset = Number(c.req.query('offset')) || 0;
+    const limit = Math.min(Math.max(Number(c.req.query('limit')) || 20, 1), 100);
+    const offset = Math.max(Number(c.req.query('offset')) || 0, 0);
     const status = c.req.query('status');
 
     const db = getDb({ DB: c.env.DB });
@@ -166,7 +184,6 @@ ordersRouter.post('/store/:slug/orders', (c) =>
     const slug = c.req.param('slug');
     const body = await c.req.json<CreateOrderBody>();
 
-    // Validation
     if (!body.items || body.items.length === 0) {
       return c.json({ success: false, error: 'Order must have at least one item' }, 400);
     }
@@ -176,7 +193,11 @@ ordersRouter.post('/store/:slug/orders', (c) =>
     if (!body.customerName?.trim() || !body.customerPhone?.trim()) {
       return c.json({ success: false, error: 'Customer name and phone are required' }, 400);
     }
-    if (!body.shippingAddress?.recipientName || !body.shippingAddress?.recipientPhone || !body.shippingAddress?.country) {
+    if (
+      !body.shippingAddress?.recipientName?.trim() ||
+      !body.shippingAddress?.recipientPhone?.trim() ||
+      !body.shippingAddress?.country?.trim()
+    ) {
       return c.json({ success: false, error: 'Shipping address missing required recipient information' }, 400);
     }
 
@@ -190,6 +211,10 @@ ordersRouter.post('/store/:slug/orders', (c) =>
       const preparedItems: PreparedOrderItem[] = [];
 
       for (const item of body.items) {
+        if (!item.quantity || item.quantity <= 0) {
+          throw new Error(`Invalid item quantity for product ${item.productId}`);
+        }
+
         const product = await tx
           .select()
           .from(schema.products)
@@ -215,8 +240,8 @@ ordersRouter.post('/store/:slug/orders', (c) =>
         if (product.images) {
           try {
             const parsedImages = typeof product.images === 'string' ? JSON.parse(product.images) : product.images;
-            if (Array.isArray(parsedImages) && parsedImages.length > 0) {
-              mainImage = String(parsedImages[0]);
+            if (Array.isArray(parsedImages) && parsedImages.length > 0 && typeof parsedImages[0] === 'string') {
+              mainImage = parsedImages[0];
             }
           } catch {
             mainImage = null;
@@ -224,11 +249,13 @@ ordersRouter.post('/store/:slug/orders', (c) =>
         }
 
         const sku = product.sku && product.sku.trim() !== '' ? product.sku : `SKU-${product.id.slice(0, 8)}`;
+        const variantSku = item.variantSku && item.variantSku.trim() !== '' ? item.variantSku : sku;
 
         preparedItems.push({
           productId: product.id,
           productName: product.name,
           productSku: sku,
+          variantSku: variantSku,
           productImage: mainImage,
           productOptions: item.options || {},
           quantity: item.quantity,
@@ -236,28 +263,36 @@ ordersRouter.post('/store/:slug/orders', (c) =>
           lineTotal: toFormattedString(lineTotalCents),
         });
 
-        // الخصم من المخزون
-        await tx
+        // خصم المخزون بشكل ذري (Atomic Update)
+        const updateResult = await tx
           .update(schema.products)
-          .set({ stock: product.stock - item.quantity })
+          .set({ stock: sql`${schema.products.stock} - ${item.quantity}` })
           .where(and(eq(schema.products.id, item.productId), sql`${schema.products.stock} >= ${item.quantity}`));
+
+        if (!updateResult) {
+          throw new Error(`Failed to update stock for product "${product.name}"`);
+        }
       }
 
-      const shippingCostCents = toCents(body.shippingCost ?? 0);
-      const taxAmountCents = toCents(body.taxAmount ?? 0);
-      const discountCents = toCents(body.discount ?? 0);
+      const shippingCostCents = toCents(body.shippingCost);
+      const taxAmountCents = toCents(body.taxAmount);
+      
+      // لحساب الخصم الكلي بشكل متوافق مع chk_order_total_calculation
+      const generalDiscountCents = toCents(body.discount);
+      const haggleDiscountCents = toCents(body.haggleDiscount);
+      const totalDiscountCents = generalDiscountCents + haggleDiscountCents;
 
-      // Total Calculation Constraint
-      const totalCents = subtotalCents + shippingCostCents + taxAmountCents - discountCents;
+      const totalCents = subtotalCents + shippingCostCents + taxAmountCents - totalDiscountCents;
 
       if (totalCents < 0) {
         throw new Error('Calculated order total cannot be negative');
       }
 
       const orderId = crypto.randomUUID();
-      const generatedOrderNumber = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const randomPart = secureRandomInt(1000, 9999);
+      const generatedOrderNumber = `ORD-${Date.now().toString().slice(-6)}-${randomPart}`;
+      const now = new Date();
 
-      // 1. إنشاء الطلب الرئيسي
       const [newOrder] = await tx
         .insert(schema.orders)
         .values({
@@ -276,27 +311,32 @@ ordersRouter.post('/store/:slug/orders', (c) =>
           subtotal: toFormattedString(subtotalCents),
           shippingCost: toFormattedString(shippingCostCents),
           taxAmount: toFormattedString(taxAmountCents),
-          discount: toFormattedString(discountCents),
+          discount: toFormattedString(totalDiscountCents),
           total: toFormattedString(totalCents),
 
           couponCode: body.couponCode ?? null,
           couponId: body.couponId ?? null,
+
+          haggleSessionId: body.haggleSessionId ?? null,
+          haggleDiscount: toFormattedString(haggleDiscountCents),
+          originalTotal: body.haggleSessionId ? toFormattedString(subtotalCents + shippingCostCents + taxAmountCents) : null,
 
           status: 'pending',
           paymentStatus: 'pending',
           paymentMethod: body.paymentMethod ?? 'cod',
           shippingMethod: body.shippingMethod ?? 'standard',
           customerNotes: body.customerNotes ?? null,
+          createdAt: now,
+          updatedAt: now,
         })
         .returning();
 
-      // 2. إنشاء عناصر الطلب باستخدام النمط الصريح Drizzle NewOrderItem
       const orderItemsData: NewOrderItem[] = preparedItems.map((item) => ({
         id: crypto.randomUUID(),
         orderId: newOrder.id,
         productId: item.productId,
         storeId: store.id,
-        variantSku: item.productSku,
+        variantSku: item.variantSku,
         productName: item.productName,
         productImage: item.productImage ?? undefined,
         productSku: item.productSku,
@@ -321,6 +361,8 @@ ordersRouter.post('/store/:slug/orders', (c) =>
         fulfillmentStatus: 'unfulfilled',
         refundAmount: '0',
         metadata: {},
+        createdAt: now,
+        updatedAt: now,
       }));
 
       await tx.insert(schema.orderItems).values(orderItemsData);
@@ -364,7 +406,7 @@ ordersRouter.put('/store/:slug/orders/:id/status', (c) =>
       if (!order) throw new Error('Order not found');
 
       const nowTimestamp = new Date();
-      const updateData: Partial<schema.Order> = {
+      const updateData: Partial<typeof schema.orders.$inferInsert> = {
         status: body.status,
         updatedAt: nowTimestamp,
       };
@@ -394,6 +436,7 @@ ordersRouter.put('/store/:slug/orders/:id/status', (c) =>
                 .set({
                   cancelledQty: item.orderedQty - item.shippedQty,
                   status: 'cancelled',
+                  updatedAt: nowTimestamp,
                 })
                 .where(eq(schema.orderItems.id, item.id));
             }
@@ -445,11 +488,12 @@ ordersRouter.delete('/store/:slug/orders/:id', (c) =>
       }, 400);
     }
 
+    const now = new Date();
     await db
       .update(schema.orders)
       .set({
-        deletedAt: new Date(),
-        updatedAt: new Date(),
+        deletedAt: now,
+        updatedAt: now,
       })
       .where(eq(schema.orders.id, id));
 

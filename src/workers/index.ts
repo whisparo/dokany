@@ -4,7 +4,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
-import { Env } from '../lib/env';
+import type { Env } from '@/lib/env';
 
 // Routes
 import { healthRouter } from './routes/health';
@@ -17,10 +17,11 @@ import { telegramRouter } from './routes/telegram';
 import { cronRouter } from './routes/cron';
 import { errorsRouter } from './routes/errors';
 import { cartRouter } from './routes/cart';
+
 // 🏛️ الاستيرادات المعتمدة والدقيقة للمشروع
 import { classifyError } from '@/lib/errors/classifier';
 import { sendErrorToTelegram, createTestErrorForNotifier } from '@/lib/errors/notifier';
-import { ErrorCategory } from '@/lib/errors/types';
+import type { ErrorCategory } from '@/lib/errors/types';
 
 // 🌐 استيراد الـ OpenNext Server Handler ليمرر له Hono باقي طلبات الفرونت إند
 // @ts-ignore
@@ -43,23 +44,56 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-// ✅ تنظيف الـ CORS لاعتماد الدومين الحالي فقط
+// ⚡ 2. Dynamic CORS Origin Resolution (Task 2.1)
 app.use('*', async (c, next) => {
-  const allowedOrigins = [
+  const staticOrigins = [
     'https://www.dokany.workers.dev',
     'http://localhost:3000',
     'http://localhost:8787',
+    'http://127.0.0.1:3000',
   ];
 
   const corsMiddleware = cors({
-    origin: (origin) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        return origin || '*';
+    origin: async (origin) => {
+      // 1. السماح بالطلبات التي لا تحتوي Origin (مثل Server-to-Server أو Telegram Webhooks)
+      if (!origin) return '*';
+
+      // 2. مطابقة النطاقات الثابتة والتطويرية
+      if (staticOrigins.includes(origin)) {
+        return origin;
       }
+
+      // 3. التحقق الديناميكي من نطاقات المتاجر المخصصة (Subdomains / Custom Domains)
+      try {
+        const url = new URL(origin);
+
+        // السماح بنطاقات المتاجر الفرعية الثابتة على المنصة
+        if (url.hostname.endsWith('.dokany.workers.dev')) {
+          return origin;
+        }
+
+        // استخدام KV المخصص للمتاجر إذا كان معرّفاً في c.env
+        if (c.env.CUSTOM_DOMAINS_KV) {
+          const isCustomDomain = await c.env.CUSTOM_DOMAINS_KV.get(`domain:${url.hostname}`);
+          if (isCustomDomain) {
+            return origin;
+          }
+        }
+      } catch {
+        return null;
+      }
+
       return null;
     },
-    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Idempotency-Key', 'X-Cron-Secret', 'x-internal-secret'],
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Idempotency-Key',
+      'X-Cron-Secret',
+      'x-internal-secret',
+      'x-store-id',
+    ],
     exposeHeaders: ['Content-Length'],
     maxAge: 86400,
   });
@@ -70,18 +104,22 @@ app.use('*', async (c, next) => {
 // 🏛️ مسارات المراقبة الخارجية (Uptime Robot Check)
 app.get('/ping', (c) => c.text('OK', 200));
 
+/**
+ * 🛠️ Helper لاستخراج معرف شات الأخطاء بأمان من c.env مباشرة
+ */
+function resolveTelegramChatId(env: Env): string | undefined {
+  return env.TELEGRAM_ERROR_CHAT_ID || env.TELEGRAM_ADMIN_CHAT_ID || env.ERROR_CHANNEL_ID;
+}
+
 // 🧪 Route مباشر لتجربة التنبيهات مع فحص البيئة (Debug Mode)
 app.get('/api/test-error', async (c) => {
   try {
     const testError = createTestErrorForNotifier();
+    const chatId = resolveTelegramChatId(c.env);
 
-    // 🎯 دعم اسم المتغير الموجود عندك بالبيئة ERROR_CHANNEL_ID
     const envWithFallback = {
       ...c.env,
-      TELEGRAM_ERROR_CHAT_ID: 
-        c.env.TELEGRAM_ERROR_CHAT_ID || 
-        (c.env as any).TELEGRAM_ADMIN_CHAT_ID || 
-        (c.env as any).ERROR_CHANNEL_ID, // 👈 إضافتها هنا
+      TELEGRAM_ERROR_CHAT_ID: chatId || '',
     };
 
     // إرسال كارت التنبيه
@@ -92,16 +130,19 @@ app.get('/api/test-error', async (c) => {
       message: '🚀 تم تنفيذ أمر الإرسال بنجاح!',
       debug: {
         hasBotToken: !!c.env.TELEGRAM_BOT_TOKEN,
-        chatIdUsed: envWithFallback.TELEGRAM_ERROR_CHAT_ID,
+        chatIdUsed: chatId,
         hasRedisUrl: !!c.env.UPSTASH_REDIS_REST_URL,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'حدث خطأ أثناء إرسال التنبيه التجريبي';
+    const errorStack = err instanceof Error ? err.stack : undefined;
+
     return c.json(
       {
         success: false,
-        error: err.message || 'حدث خطأ أثناء إرسال التنبيه التجريبي',
-        stack: err.stack,
+        error: errorMessage,
+        stack: errorStack,
       },
       500
     );
@@ -109,7 +150,7 @@ app.get('/api/test-error', async (c) => {
 });
 
 /**
- * 🎯 تحديد الـ Status Code الدقيق وفق أنواع Hono بدون الحاجة لـ Casting
+ * 🎯 تحديد الـ Status Code الدقيق وفق أنواع Hono
  */
 function mapCategoryToStatusCode(category: ErrorCategory): ContentfulStatusCode {
   switch (category) {
@@ -133,10 +174,11 @@ function mapCategoryToStatusCode(category: ErrorCategory): ContentfulStatusCode 
 app.onError((err, c) => {
   // 1. تصنيف الخطأ وتحويله إلى SystemError الموحد
   const systemError = classifyError(err);
+  const chatId = resolveTelegramChatId(c.env);
 
   const envWithFallback = {
     ...c.env,
-    TELEGRAM_ERROR_CHAT_ID: c.env.TELEGRAM_ERROR_CHAT_ID || (c.env as any).TELEGRAM_ADMIN_CHAT_ID,
+    TELEGRAM_ERROR_CHAT_ID: chatId || '',
   };
 
   // 2. استدعاء المبلّغ المركزي
@@ -172,7 +214,7 @@ app.route('/api', cronRouter);
 app.route('/api', errorsRouter);
 app.route('/api', cartRouter);
 
-// 🎯 2. Pass-through Fallback: أي مسار غير معرف في Hono يروح لـ Next.js مباشرة
+// 🎯 3. Pass-through Fallback: أي مسار غير معرف في Hono يروح لـ Next.js مباشرة
 app.all('*', async (c) => {
   return openNextHandler.fetch(c.req.raw, c.env, c.executionCtx);
 });

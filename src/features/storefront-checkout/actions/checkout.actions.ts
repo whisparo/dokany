@@ -3,7 +3,6 @@
 
 import { redirect } from 'next/navigation';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
-import type { Env } from '@/lib/env';
 
 import { processCheckout } from '@/features/storefront-checkout/orchestrators/checkout.orchestrator';
 import { CustomerService } from '@/lib/services/customer.service';
@@ -62,12 +61,8 @@ export async function handleCheckoutSubmit(
       storeId: storeId,
     });
 
-    const context = await getCloudflareContext();
-    const env = context.env as unknown as Env;
-
-    if (!env?.DB) {
-      return { success: false, error: 'تعذر الاتصال بقاعدة البيانات' };
-    }
+    // 🟢 استخراج env مباشرة ونظيف بدون Type Casting
+    const { env } = await getCloudflareContext();
 
     // 👤 3. جلب أو إنشاء العميل
     const customer = await CustomerService.findOrCreateCustomer(env, {
@@ -100,9 +95,9 @@ export async function handleCheckoutSubmit(
     const orderNumber = OrderService.generateOrderNumber();
     const idempotencyKey = payload.idempotencyKey || `chk_${orderId}`;
 
-    // 🔄 5. التنفيذ عبر الأوركستريتر
+    // 🔄 5. التنفيذ عبر الأوركستريتر (تمرير env النظيف مباشرة)
     const result = await processCheckout(
-      env as Env & Record<string, unknown>,
+      env,
       idempotencyKey,
       {
         id: orderId,
@@ -132,7 +127,7 @@ export async function handleCheckoutSubmit(
       };
     }
 
-    // 🎯 تجهيز رابط التوجيه عند النجاح
+    // 🎯 هنا TypeScript أدرك تماماً أن result هي من نوع النجاح وبها orderId و orderNumber
     const decodedSlug = decodeURIComponent(storeSlug);
     redirectUrlTarget = `/${decodedSlug}/order-confirmation?orderId=${result.orderId}&orderNumber=${result.orderNumber}`;
 

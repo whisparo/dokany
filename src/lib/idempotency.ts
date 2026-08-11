@@ -1,143 +1,132 @@
 // src/lib/idempotency.ts
 
 import { getDb } from '@/lib/db';
-import type { Env } from '@/lib/env';
 import { idempotency as idempotencyTable } from '@/lib/db/schema/idempotency';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, lte } from 'drizzle-orm';
 import { SystemError } from '@/lib/errors/types';
 
-const PENDING_TIMEOUT_MS = 30 * 1000; // 30 ثانية قفل كحد أقصى للطلب المعلق
+// ⏱️ المدة الزمنية للقفل المعلق (30 ثانية)
+const PENDING_LOCK_TTL_MS = 30 * 1000;
 
 export const idempotency = {
   async execute<T>(
-    env: Env,
+    env: CloudflareEnv,
     key: string,
     fn: () => Promise<T>
   ): Promise<T> {
     const db = getDb(env);
-    const nowMs = Date.now();
+    const now = new Date();
+    const lockExpiry = new Date(now.getTime() + PENDING_LOCK_TTL_MS);
 
     try {
-      // 1️⃣ محاولة الإدراج الذرية (Atomic Insert)
+      // 1️⃣ محاولة الإدراج الذرية (Atomic Lock Acquisition)
       const insertResult = await db
         .insert(idempotencyTable)
         .values({
           key,
           status: 'pending',
-          createdAt: nowMs as unknown as Date, // إسناد الميلي ثانية مباشرة للاتساق
+          createdAt: now,
+          expiresAt: lockExpiry,
         })
         .onConflictDoNothing()
         .returning({ key: idempotencyTable.key });
 
-      // 2️⃣ إذا كان المفتاح موجوداً مسبقاً (Conflict - الطلب تكرر)
+      // 2️⃣ في حالة وجود السجل مسبقاً (Conflict)
       if (insertResult.length === 0) {
-        const existing = await db
+        const [record] = await db
           .select()
           .from(idempotencyTable)
           .where(eq(idempotencyTable.key, key))
           .limit(1);
 
-        if (existing.length === 0) {
+        if (!record) {
           throw new SystemError({
             code: 'IDEM_500',
-            userMessage: 'حدث خطأ أثناء التأكد من تكرار الطلب، يرجى المحاولة لاحقاً.',
+            userMessage: 'حدث خطأ أثناء التحقق من تكرار الطلب، يرجى المحاولة لاحقاً.',
             category: 'database',
             severity: 'critical',
             retryable: true,
             shouldAlert: true,
-            technicalMessage: `Idempotency record missing after conflict detection for key: ${key}`,
+            technicalMessage: `Idempotency record not found post-conflict for key: ${key}`,
           });
         }
 
-        const record = existing[0];
-
-        // 🟢 2.1 العملية مكتملة بنجاح سابقاً (Return Cached Result)
+        // 🟢 2.1 العملية مكتملة بنجاح (Return Cached Result)
         if (record.status === 'completed') {
-          if (!record.result) return null as unknown as T;
+          if (!record.result) return null as T;
           return JSON.parse(record.result) as T;
         }
 
-        // 🟠 2.2 إعادة المحاولة بعد فشل سابق (Retry after Failure)
-        if (record.status === 'failed') {
+        // 🟠 2.2 الطلب انتهت صلاحية قفله (Expired Lock Renewal) أو فشل سابقاً (Failed Retry)
+        const isExpired = record.status === 'pending' && record.expiresAt.getTime() <= now.getTime();
+        const isFailed = record.status === 'failed';
+
+        if (isExpired || isFailed) {
+          // محاولة استعادة القفل بشكل ذري (Atomic Lock Takeover)
           const updateResult = await db
             .update(idempotencyTable)
             .set({
               status: 'pending',
-              createdAt: nowMs as unknown as Date,
+              createdAt: now,
+              expiresAt: lockExpiry,
               result: null,
             })
             .where(
               and(
                 eq(idempotencyTable.key, key),
-                eq(idempotencyTable.status, 'failed')
+                // ضابط سباق التنفيذ (Race Condition Guard)
+                isExpired 
+                  ? lte(idempotencyTable.expiresAt, now)
+                  : eq(idempotencyTable.status, 'failed')
               )
             );
 
           if (updateResult.meta.changes === 0) {
             throw new SystemError({
               code: 'IDEM_409',
-              userMessage: 'جاري معالجة طلبك حالياً بواسطة سيرفر آخر، يرجى الانتظار.',
+              userMessage: 'طلبك قيد المعالجة حالياً من قِبل سيرفر آخر، يرجى الانتظار.',
               category: 'business',
               severity: 'info',
               retryable: true,
               shouldAlert: false,
-              technicalMessage: `Failed to acquire lock for failed record ${key}. Race condition detected.`,
+              technicalMessage: `Failed atomic lock takeover for key: ${key}. Concurrent request won the race.`,
             });
           }
-        } 
-        
-        // 🔴 2.3 التعامل مع الـ Timeout للطلبات المعلقة (Atomic Timeout Lock)
-        else if (record.status === 'pending') {
-          const thresholdMs = nowMs - PENDING_TIMEOUT_MS;
-
-          // استخدام SQL صريح لحساب فرق الوقت بدقة على D1
-          const updateResult = await db
-            .update(idempotencyTable)
-            .set({
-              createdAt: nowMs as unknown as Date, // تجديد القفل
-            })
-            .where(
-              and(
-                eq(idempotencyTable.key, key),
-                eq(idempotencyTable.status, 'pending'),
-                sql`${idempotencyTable.createdAt} <= ${thresholdMs}`
-              )
-            );
-
-          if (updateResult.meta.changes === 0) {
-            throw new SystemError({
-              code: 'IDEM_409',
-              userMessage: 'طلبك قيد المعالجة حالياً، يرجى عدم إعادة التحديث.',
-              category: 'business',
-              severity: 'info',
-              retryable: true,
-              shouldAlert: false,
-              technicalMessage: `Operation with key ${key} is active and currently in progress.`,
-            });
-          }
+        } else {
+          // 🔴 2.3 الطلب ما زال قيد المعالجة النشطة (Active Pending)
+          throw new SystemError({
+            code: 'IDEM_409',
+            userMessage: 'طلبك قيد المعالجة حالياً، يرجى عدم إعادة التحديث.',
+            category: 'business',
+            severity: 'info',
+            retryable: true,
+            shouldAlert: false,
+            technicalMessage: `Operation with key ${key} is currently active and pending.`,
+          });
         }
       }
 
-      // 3️⃣ تنفيذ الكود الممرر (Business Logic) وحفظ النتيجة
+      // 3️⃣ تنفيذ الـ Business Logic
       const result = await fn();
 
+      // 4️⃣ حفظ النتيجة وتعليم العملية كـ Completed
       await db
         .update(idempotencyTable)
         .set({
           status: 'completed',
           result: result !== undefined ? JSON.stringify(result) : null,
-          completedAt: Date.now() as unknown as Date,
+          completedAt: new Date(),
         })
         .where(eq(idempotencyTable.key, key));
 
       return result;
+
     } catch (error) {
-      // إذا كان الخطأ أصلاً SystemError وليس خطأ تنفيذي داخل fn، سجل الفشل في الجدول ثم ارمِه
       if (error instanceof SystemError && error.code.startsWith('IDEM_')) {
         throw error;
       }
 
-      // 4️⃣ تسجيل حالة الفشل لتسمح بالـ Retry لاحقاً
+      // 5️⃣ تسجيل الفشل لتسمح بالـ Retry المباشر
       try {
         await db
           .update(idempotencyTable)
@@ -149,7 +138,7 @@ export const idempotency = {
           })
           .where(eq(idempotencyTable.key, key));
       } catch (dbError) {
-        console.error('⚠️ Failed to update idempotency status to failed:', dbError);
+        console.error('⚠️ Failed to register idempotency failure status:', dbError);
       }
 
       throw error;

@@ -1,8 +1,7 @@
 // src/lib/db/index.ts
 
-
 // ============================================================
-// 📂 استيراد جميع الجداول من مجلد schema
+// 📂 استيراد جميع الجداول والأنواع من مجلد schema
 // ============================================================
 
 import * as addresses from './schema/addresses';
@@ -30,10 +29,10 @@ import * as telegramMessages from './schema/telegram-messages';
 import * as users from './schema/users';
 
 // ============================================================
-// 🧠 دمج جميع الجداول في كائن Schema واحد
+// 🧠 دمج جميع الجداول في كائن Schema واحد لـ Drizzle Client
 // ============================================================
 
-const schema = {
+export const schema = {
   ...addresses,
   ...auditLogs,
   ...auth,
@@ -60,13 +59,35 @@ const schema = {
 };
 
 // ============================================================
+// 📤 إعادة تصدير كافة الجداول والأنواع مباشرة
+// ============================================================
+
+export * from './schema/addresses';
+export * from './schema/audit-logs';
+export * from './schema/auth';
+export * from './schema/cart-items';
+export * from './schema/categories';
+export * from './schema/chat-sessions';
+export * from './schema/coupons';
+export * from './schema/custom-domains';
+export * from './schema/customers';
+export * from './schema/group-buys';
+export * from './schema/haggle-sessions';
+export * from './schema/idempotency';
+export * from './schema/media';
+export * from './schema/order-items';
+export * from './schema/orders';
+export * from './schema/payments';
+export * from './schema/platform-settings';
+export * from './schema/products';
+export * from './schema/reviews';
+export * from './schema/shipments';
+export * from './schema/stores';
+export * from './schema/telegram-messages';
+export * from './schema/users';
+
+// ============================================================
 // 📦 إعادة تصدير getDb و DbInstance و D1Transaction
 // ============================================================
 
 export { getDb, type DbInstance, type D1Transaction } from './db';
-
-// ============================================================
-// 📤 تصدير الـ Schema الكامل لاستخدامه في Drizzle
-// ============================================================
-
-export { schema };

@@ -4,7 +4,6 @@ import { eq, sql } from 'drizzle-orm';
 import { Redis } from '@upstash/redis';
 import { getDb } from '@/lib/db';
 import { customers, type Customer } from '@/lib/db/schema/customers';
-import type { Env } from '@/lib/env';
 import { SystemError } from '@/lib/errors/types';
 
 export interface FindOrCreateCustomerInput {
@@ -21,7 +20,7 @@ export class CustomerService {
    * إيجاد العميل برقم الهاتف (مع الكاش)، أو إنشائه تلقائياً إذا لم يكن موجوداً
    */
   static async findOrCreateCustomer(
-    env: Env,
+    env: CloudflareEnv,
     input: FindOrCreateCustomerInput
   ): Promise<Customer> {
     const cleanPhone = input.phone.trim();
@@ -118,7 +117,7 @@ export class CustomerService {
   /**
    * دالة مساعدة لتخزين العميل في Redis
    */
-  private static async setCache(env: Env, key: string, customerData: Customer): Promise<void> {
+  private static async setCache(env: CloudflareEnv, key: string, customerData: Customer): Promise<void> {
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return;
 
     try {

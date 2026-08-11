@@ -59,6 +59,15 @@
       "namedRegex": "^/(?<nxtPlocale>[^/]+?)/(?<nxtPstoreSlug>[^/]+?)/checkout(?:/)?$"
     },
     {
+      "page": "/[locale]/[storeSlug]/order-confirmation",
+      "regex": "^/([^/]+?)/([^/]+?)/order\\-confirmation(?:/)?$",
+      "routeKeys": {
+        "nxtPlocale": "nxtPlocale",
+        "nxtPstoreSlug": "nxtPstoreSlug"
+      },
+      "namedRegex": "^/(?<nxtPlocale>[^/]+?)/(?<nxtPstoreSlug>[^/]+?)/order\\-confirmation(?:/)?$"
+    },
+    {
       "page": "/[locale]/[storeSlug]/products/[slug]",
       "regex": "^/([^/]+?)/([^/]+?)/products/([^/]+?)(?:/)?$",
       "routeKeys": {

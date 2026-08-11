@@ -1,4 +1,5 @@
 // src/lib/telegram/main-bot.ts
+
 /**
  * ============================================================================
  * 🤖 Central Telegram Bot Service - نظام دكاني
@@ -7,9 +8,8 @@
  * يضم حماية صارمة للأنواع وهياكل الرسائل.
  */
 
-const MAIN_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
-const ERROR_BOT_TOKEN = process.env.ERROR_BOT_TOKEN!;
-const ERROR_CHANNEL_ID = process.env.ERROR_CHANNEL_ID!;
+import { getCloudflareContext } from '@opennextjs/cloudflare';
+import type { Env } from '@/lib/env';
 
 // تعريف واجهات الأنواع لمنع الـ any تماماً في هياكل الأزرار
 export interface TelegramButton {
@@ -24,7 +24,41 @@ export interface TelegramPayload {
   chat_id: string;
   text: string;
   parse_mode: 'Markdown' | 'HTML';
-  reply_markup?: any;
+  reply_markup?: Record<string, unknown>;
+}
+
+/**
+ * 🛠️ Helper لاستخراج متطلبات التليجرام ديناميكياً لتتوافق مع Cloudflare Workers Context
+ */
+async function getTelegramEnv(explicitEnv?: Env): Promise<{
+  mainToken?: string;
+  errorToken?: string;
+  errorChannelId?: string;
+}> {
+  if (explicitEnv) {
+    return {
+      mainToken: explicitEnv.TELEGRAM_BOT_TOKEN,
+      errorToken: explicitEnv.ERROR_BOT_TOKEN,
+      errorChannelId: explicitEnv.ERROR_CHANNEL_ID,
+    };
+  }
+
+  try {
+    const context = await getCloudflareContext();
+    const cfEnv = context.env as unknown as Env;
+
+    return {
+      mainToken: cfEnv?.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN,
+      errorToken: cfEnv?.ERROR_BOT_TOKEN || process.env.ERROR_BOT_TOKEN,
+      errorChannelId: cfEnv?.ERROR_CHANNEL_ID || process.env.ERROR_CHANNEL_ID,
+    };
+  } catch {
+    return {
+      mainToken: process.env.TELEGRAM_BOT_TOKEN,
+      errorToken: process.env.ERROR_BOT_TOKEN,
+      errorChannelId: process.env.ERROR_CHANNEL_ID,
+    };
+  }
 }
 
 /**
@@ -34,9 +68,17 @@ export async function sendTelegramMessage(
   chatId: string,
   text: string,
   buttons?: TelegramButton[] | TelegramButton[][],
-  persistentButtons?: TelegramButton[][]
+  persistentButtons?: TelegramButton[][],
+  env?: Env
 ): Promise<boolean> {
   try {
+    const { mainToken } = await getTelegramEnv(env);
+
+    if (!mainToken) {
+      console.warn('⚠️ TELEGRAM_BOT_TOKEN missing, skipping message send.');
+      return false;
+    }
+
     const payload: TelegramPayload = {
       chat_id: chatId,
       text,
@@ -49,7 +91,7 @@ export async function sendTelegramMessage(
     }
 
     const response = await fetch(
-      `https://api.telegram.org/bot${MAIN_BOT_TOKEN}/sendMessage`,
+      `https://api.telegram.org/bot${mainToken}/sendMessage`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,7 +109,10 @@ export async function sendTelegramMessage(
 /**
  * بناء وتشكيل كائنات أزرار تليجرام (Reply Markup) بدقة هندسية
  */
-function buildReplyMarkup(buttons?: TelegramButton[] | TelegramButton[][], persistentButtons?: TelegramButton[][]) {
+function buildReplyMarkup(
+  buttons?: TelegramButton[] | TelegramButton[][],
+  persistentButtons?: TelegramButton[][]
+): Record<string, unknown> {
   // 1. معالجة الأزرار الثابتة (Persistent Bottom Keyboard Menu)
   if (persistentButtons && Array.isArray(persistentButtons) && persistentButtons.length > 0) {
     return {
@@ -89,7 +134,6 @@ function buildReplyMarkup(buttons?: TelegramButton[] | TelegramButton[][], persi
     return {
       inline_keyboard: rows.map((row) =>
         row.map((btn) => {
-          // 🎯 تصحيح: التحقق من الـ web_app أولاً قبل الـ url القياسي لمنع تداخل الشروط
           if (btn.type === 'web_app' && btn.url) {
             return { text: btn.text, web_app: { url: btn.url } };
           }
@@ -106,7 +150,6 @@ function buildReplyMarkup(buttons?: TelegramButton[] | TelegramButton[][], persi
   const flatButtons = buttons as TelegramButton[];
   const hasContact = flatButtons.some((b) => b.type === 'contact');
 
-  // 🎯 تصحيح: أزرار طلب الاتصال (Contact) تجبرنا على استخدام الـ Normal Keyboard وليس الـ Inline
   if (hasContact) {
     return {
       keyboard: [
@@ -123,7 +166,6 @@ function buildReplyMarkup(buttons?: TelegramButton[] | TelegramButton[][], persi
   return {
     inline_keyboard: [
       flatButtons.map((b) => {
-        // 🎯 تصحيح: التحقق من الـ web_app أولاً هنا أيضاً
         if (b.type === 'web_app' && b.url) {
           return { text: b.text, web_app: { url: b.url } };
         }
@@ -139,15 +181,22 @@ function buildReplyMarkup(buttons?: TelegramButton[] | TelegramButton[][], persi
 /**
  * إرسال إشعار فوري للأخطاء البرمجية إلى قناة الإشراف الفني والأدمنز
  */
-export async function sendErrorNotification(text: string): Promise<boolean> {
+export async function sendErrorNotification(text: string, env?: Env): Promise<boolean> {
   try {
+    const { errorToken, errorChannelId } = await getTelegramEnv(env);
+
+    if (!errorToken || !errorChannelId) {
+      console.warn('⚠️ ERROR_BOT_TOKEN or ERROR_CHANNEL_ID missing.');
+      return false;
+    }
+
     const response = await fetch(
-      `https://api.telegram.org/bot${ERROR_BOT_TOKEN}/sendMessage`,
+      `https://api.telegram.org/bot${errorToken}/sendMessage`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id: ERROR_CHANNEL_ID,
+          chat_id: errorChannelId,
           text,
           parse_mode: 'Markdown',
         }),
@@ -171,11 +220,12 @@ export async function notifyVendorNewOrder(
     customerName: string;
     total: number;
     items: Array<{ name: string; quantity: number; price: number }>;
-  }
+  },
+  env?: Env
 ): Promise<boolean> {
   const message = `📦 **طلب جديد!**\n─────────────────\n🆔 **رقم الطلب:** \`${orderData.orderId}\`\n👤 **العميل:** ${orderData.customerName}\n💰 **الإجمالي:** ${orderData.total} ج.م\n\n**المنتجات:**\n${orderData.items.map(item => `• ${item.name} × ${item.quantity} = ${item.price * item.quantity} ج.م`).join('\n')}\n─────────────────\n📱 **توجه إلى لوحة التحكم لإدارة الطلب.**`;
 
-  return sendTelegramMessage(vendorChatId, message);
+  return sendTelegramMessage(vendorChatId, message, undefined, undefined, env);
 }
 
 /**
@@ -185,7 +235,8 @@ export async function notifyCustomerOrderUpdate(
   customerChatId: string,
   orderId: string,
   status: string,
-  vendorName: string
+  vendorName: string,
+  env?: Env
 ): Promise<boolean> {
   const statusMap: Record<string, string> = {
     processing: '🔵 جاري التجهيز',
@@ -196,5 +247,5 @@ export async function notifyCustomerOrderUpdate(
 
   const message = `📋 **تحديث حالة الطلب**\n─────────────────\n🆔 **رقم الطلب:** \`${orderId}\`\n🏪 **المتجر:** ${vendorName}\n📌 **الحالة:** ${statusMap[status] || status}\n─────────────────\n📱 **تابع طلباتك من لوحة التحكم.**`;
 
-  return sendTelegramMessage(customerChatId, message);
+  return sendTelegramMessage(customerChatId, message, undefined, undefined, env);
 }

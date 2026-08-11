@@ -1,4 +1,4 @@
-//src/features/storefront-checkout/orchestrators/checkout.orchestrator.ts
+// src/features/storefront-checkout/orchestrators/checkout.orchestrator.ts
 
 import { getCheckoutRawData } from '@/features/storefront-checkout/data/checkout-data-fetcher';
 import { adaptCheckoutPage } from '@/features/storefront-checkout/adapters/checkout-page.adapter';
@@ -22,6 +22,21 @@ import {
 
 import type { Env } from '@/lib/env';
 
+// 🎯 تعريف نوع النتيجة بشكل صريح لضمان Type Safety كامل عند التوجيه (Redirect)
+export type ProcessCheckoutResult =
+  | {
+      success: true;
+      orderId: string;
+      orderNumber: string;
+      message: string;
+    }
+  | {
+      success: false;
+      message: string;
+      orderId?: undefined;
+      orderNumber?: undefined;
+    };
+
 /**
  * 1. جلب بيانات صفحة الدفع (Query - Safe)
  */
@@ -40,10 +55,10 @@ export async function getCheckoutData(
 
 /**
  * 2. تنفيذ عملية الشراء الفعلية (Mutation - Critical)
- * ✅ الآن: طلب + عناصر + خصم مخزون + إحصائيات في ACID Transaction واحد
+ * ✅ الآن: حماية ضد العناصر الفارغة + Type-Safe Discriminated Union + ACID Transaction
  */
 export async function processCheckout(
-  env: Env & Record<string, unknown>,
+  env: Env,
   idempotencyKey: string,
   orderInput: {
     id: string;
@@ -79,8 +94,16 @@ export async function processCheckout(
     netAmount: string;
     metadata?: OrderItemMetadata;
   }[]
-) {
-  return await idempotency.execute(env, idempotencyKey, async () => {
+): Promise<ProcessCheckoutResult> {
+  // 🛡️ 0. Guard Clause: منع الشراء إذا كانت سلة المنتجات فارغة
+  if (!itemsInput || itemsInput.length === 0) {
+    return {
+      success: false,
+      message: 'سلة الشراء فارغة، لا يمكن إتمام الطلب.',
+    };
+  }
+
+  return await idempotency.execute(env, idempotencyKey, async (): Promise<ProcessCheckoutResult> => {
     const db = getDb(env);
 
     return await db.transaction(async (tx) => {
@@ -134,7 +157,6 @@ export async function processCheckout(
       );
 
       // 🚀 الخطوة ج: خصم المخزون داخل نفس الـ Transaction (ACID)
-      // لو منتج نفد، الـ transaction كلها هتتراجع والطلب مش هيتعمل
       await updateStock(
         itemsInput.map((item) => ({
           productId: item.productId,
@@ -143,7 +165,7 @@ export async function processCheckout(
         tx
       );
 
-      // 🚀 الخطوة د: تحديث إحصائيات المتجر (الإيرادات + عدد الطلبات)
+      // 🚀 الخطوة د: تحديث إحصائيات المتجر
       await updateStoreStatsAfterOrder(
         env,
         orderInput.storeId,
@@ -151,7 +173,7 @@ export async function processCheckout(
         tx
       );
 
-      // 🚀 الخطوة هـ: تحديث إحصائيات العميل (إجمالي المشتريات + عدد الطلبات)
+      // 🚀 الخطوة هـ: تحديث إحصائيات العميل
       if (orderInput.customerId) {
         await updateCustomerStats(
           env,
