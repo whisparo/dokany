@@ -2,11 +2,33 @@
 
 import { getDb, schema, type D1Transaction } from '@/lib/db';
 import { eq, sql } from 'drizzle-orm';
-import type { Env } from '@/lib/env'; // ✅ استيراد النوع الموحد من env.ts
+import { Redis } from '@upstash/redis';
+import type { Env } from '@/lib/env';
 import { SystemError } from '@/lib/errors/types';
 
+/**
+ * دالة مساعدة لحذف مفاتيح الكاش من Redis بعد أي عملية تحديث
+ */
+async function invalidateStatsCache(env: Env, keys: string[]) {
+  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN || keys.length === 0) {
+    return;
+  }
+  try {
+    const redis = new Redis({
+      url: env.UPSTASH_REDIS_REST_URL,
+      token: env.UPSTASH_REDIS_REST_TOKEN,
+    });
+    await redis.del(...keys);
+  } catch (error) {
+    console.warn('⚠️ Failed to invalidate stats cache in Redis:', error);
+  }
+}
+
+/**
+ * تحديث إحصائيات المتجر الإجمالية بعد إنشاء أو تعديل طلب
+ */
 export async function updateStoreStatsAfterOrder(
-  env: Env & Record<string, unknown>,
+  env: Env,
   storeId: string,
   orderTotal: string,
   tx?: D1Transaction
@@ -33,6 +55,9 @@ export async function updateStoreStatsAfterOrder(
         totalCustomers: 0,
       });
     }
+
+    // ⚡ إبطال كاش إحصائيات المتجر المربوط في Redis
+    await invalidateStatsCache(env, [`cache:store-stats:${storeId}`]);
   } catch (error) {
     throw new SystemError({
       code: 'STA_501',
@@ -48,8 +73,11 @@ export async function updateStoreStatsAfterOrder(
   }
 }
 
+/**
+ * تحديث سجلات الشراء الخاصة بالعميل
+ */
 export async function updateCustomerStats(
-  env: Env & Record<string, unknown>,
+  env: Env,
   customerId: string,
   orderTotal: string,
   tx?: D1Transaction
@@ -63,7 +91,7 @@ export async function updateCustomerStats(
       .set({
         totalSpent: sql`CAST(COALESCE(${schema.customerStats.totalSpent}, '0') AS REAL) + CAST(${orderTotal} AS REAL)`,
         ordersCount: sql`${schema.customerStats.ordersCount} + 1`,
-        lastOrderAt: new Date(),
+        lastOrderAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(schema.customerStats.customerId, customerId))
       .returning({ id: schema.customerStats.id });
@@ -77,6 +105,9 @@ export async function updateCustomerStats(
         lastOrderAt: new Date(),
       });
     }
+
+    // ⚡ إبطال كاش إحصائيات العميل
+    await invalidateStatsCache(env, [`cache:customer-stats:${customerId}`]);
   } catch (error) {
     throw new SystemError({
       code: 'STA_502',
@@ -92,8 +123,11 @@ export async function updateCustomerStats(
   }
 }
 
+/**
+ * تحديث كميات المبيعات الإجمالية للجمود والمنتجات المشتراة في دُفعة واحدة (Batch)
+ */
 export async function updateProductStatsBatch(
-  env: Env & Record<string, unknown>,
+  env: Env,
   items: { productId: string; quantity: number }[],
   tx?: D1Transaction
 ) {
@@ -102,6 +136,8 @@ export async function updateProductStatsBatch(
   if (items.length === 0) return;
 
   try {
+    const invalidateKeys: string[] = [];
+
     for (const item of items) {
       const result = await client
         .update(schema.productStats)
@@ -121,7 +157,12 @@ export async function updateProductStatsBatch(
           rating: 0,
         });
       }
+
+      invalidateKeys.push(`cache:product-stats:${item.productId}`);
     }
+
+    // ⚡ إبطال الكاش لجميع المنتجات المحدثة
+    await invalidateStatsCache(env, invalidateKeys);
   } catch (error) {
     throw new SystemError({
       code: 'STA_503',

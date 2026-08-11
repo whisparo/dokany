@@ -1,4 +1,40 @@
-📐 الميثاق المعماري النهائي والمغلق (The Master Blueprint)🎨 المبادئ المعمارية الحاكمة (The Architectural Pillars)Clean Overlay Pattern (Zero-Bloat Storefront):طبقة التحرير (store-editor) مفصولة تماماً عن شجرة مكونات الزبون (Storefront).يتم تحميل كود التحرير بـ Dynamic Import (ssr: false) للتاجر فقط بناءً على فحص الملكية والجلسة عند وجود المعلمة ?edit=1.Edge-Cache Proof Auth Anchor (سلامة الكاش والأمان):صفحات الـ Storefront تُخزن على الـ Edge Cache (مثل Cloudflare CDN) بسياسات التخزين s-maxage=3600.الضمانة: كود المحرر والزر التفاعلي غير موجودين مطلقاً في الـ HTML المولد سيرفرالياً أو المخبأ في الكاش. المعلمة ?edit=1 تُفحص حصراً لدى متصفح العميل (Client-Side) بعد التحقق التام من الـ Session والـ Ownership، مما يمنع تسريب المحرر أو إضعاف أداء الـ CDN للزبائن.Feature-Driven Isolation:كل ميزة عبارة عن صندوق مغلق (Self-Contained Module) يملك الـ UI, Hooks, State, Actions, و Types الخاصة به.Optimistic UI & Progressive Media Enrichment (Zero-Cost Optimization):إضافة سريعة فورية: التاجر يرفع الأصل ويحصل فوراً على استجابة سريعة في الـ UI بوضع status = 'raw' عبر Cloudinary.معالجة خلفية: يقوم الـ Pipeline بتنقية الصور وإزالة الخلفيات (إذا كانت media_type = 'image') وأرشفتها في Backblaze B2 asynchronously وتحويل الحالة إلى status = 'processed'.توحيد العرض: الهيرو والمنتجات تستخدم نفس المحرك الموحد: العرض من B2 عند الجاهزية والـ Fallback على Cloudinary لحين الانتهاء لتوفير التكلفة نهائياً.Multi-Tenant Isolation (Product Slugs & Variants SKUs):عزل تام على مستوى المتاجر بفرادة مرّكبة UNIQUE(store_id, slug) للمنتجات لمنع تصادم روابط الـ SEO، و UNIQUE(store_id, sku) للـ Variants لمنع التعارض مع الحفاظ على الـ Transactions الذرية.Unified Financial Precision Standard:توحيد كافة الأسعار والمبالغ في كافة الجداول (products و product_variants) كـ INTEGER بأصغر وحدة عملة (فلس / سنت / هللة) للحد التام من أخطاء التقريب بكسور النقطة العائمة (Floating Point Imprecision) عند الفواتير والخصومات.🌳 شجرة المجلدات الكاملة والمحدثة (Directory Tree)Plaintextsrc/
+📐 الميثاق المعماري النهائي والمغلق (The Master Blueprint)
+🎨 المبادئ المعمارية الحاكمة (The Architectural Pillars)
+Clean Overlay Pattern (Zero-Bloat Storefront):
+
+طبقة التحرير (store-editor) مفصولة تماماً عن شجرة مكونات الزبون (Storefront).
+
+يتم تحميل كود التحرير بـ Dynamic Import (ssr: false) للتاجر فقط بناءً على فحص الملكية والجلسة عند وجود المعلمة ?edit=1.
+
+Edge-Cache Proof Auth Anchor (سلامة الكاش والأمان):
+
+صفحات الـ Storefront تُخزن على الـ Edge Cache (مثل Cloudflare CDN) بسياسات التخزين s-maxage=3600.
+
+الضمانة: كود المحرر والزر التفاعلي غير موجودين مطلقاً في الـ HTML المولد سيرفرالياً أو المخبأ في الكاش. المعلمة ?edit=1 تُفحص حصراً لدى متصفح العميل (Client-Side) بعد التحقق التام من الـ Session والـ Ownership، مما يمنع تسريب المحرر أو إضعاف أداء الـ CDN للزبائن.
+
+Feature-Driven Isolation:
+
+كل ميزة عبارة عن صندوق مغلق (Self-Contained Module) يملك الـ UI, Hooks, State, Actions, و Types الخاصة به.
+
+Optimistic UI & Progressive Media Enrichment (Zero-Cost Optimization):
+
+إضافة سريعة فورية: التاجر يرفع الأصل ويحصل فوراً على استجابة سريعة في الـ UI بوضع status = 'raw' عبر Cloudinary.
+
+معالجة خلفية: يقوم الـ Pipeline بتنقية الصور وإزالة الخلفيات (إذا كانت media_type = 'image') وأرشفتها في Backblaze B2 asynchronously وتحويل الحالة إلى status = 'processed'.
+
+توحيد العرض: الهيرو والمنتجات تستخدم نفس المحرك الموحد: العرض من B2 عند الجاهزية والـ Fallback على Cloudinary لحين الانتهاء لتوفير التكلفة نهائياً.
+
+Multi-Tenant Isolation (Product Slugs & Variants SKUs):
+
+عزل تام على مستوى المتاجر بفرادة مرّكبة UNIQUE(store_id, slug) للمنتجات لمنع تصادم روابط الـ SEO، و UNIQUE(store_id, sku) للـ Variants لمنع التعارض مع الحفاظ على الـ Transactions الذرية.
+
+Unified Financial Precision Standard:
+
+توحيد كافة الأسعار والمبالغ في كافة الجداول (products و product_variants) كـ INTEGER بأصغر وحدة عملة (فلس / سنت / هللة) للحد التام من أخطاء التقريب بكسور النقطة العائمة (Floating Point Imprecision) عند الفواتير والخصومات.
+
+🌳 شجرة المجلدات الكاملة والمحدثة (Directory Tree)
+Plaintext
+src/
 ├── app/                                  # Next.js App Router (Routing Layer Only)
 │   ├── [locale]/
 │   │   ├── (auth)/                       # 🔑 مسارات المصادقة (مطابقة لـ AUTH_PATTERNS)
@@ -97,81 +133,3 @@
 │   ├── hooks/                            # Common Custom Hooks
 │   ├── lib/                              # Utility Functions, Clients (D1, B2, Cloudinary)
 │   └── types/                            # Shared Domain Types
-🗄️ ملف الـ Migration التنفيذي (migrations/0001_store_editor_schema.sql)انسخ هذا الكود فوراً وضعه في ملف الـ Migration لتشغيله في Step 0:SQL-- 1. جدول الميديا الشامل (دعم أنواع الميديا وحالات الرفع المتدرج)
-CREATE TABLE IF NOT EXISTS media (
-    id TEXT PRIMARY KEY,
-    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
-    raw_url TEXT NOT NULL,                     -- رابط Cloudinary المباشر السريع
-    processed_url TEXT NULL,                   -- رابط Backblaze B2 المنقى والمؤرشف
-    media_type TEXT NOT NULL DEFAULT 'image',  -- 'image' | 'video'
-    status TEXT NOT NULL DEFAULT 'raw',        -- 'raw' | 'processing' | 'processed' | 'failed'
-    created_at INTEGER NOT NULL DEFAULT (unixepoch())
-);
-
--- 2. تحديث جدول المنتجات الرئيسي (المعيار المالي INTEGER + SEO Slug فريد مركب)
-CREATE TABLE IF NOT EXISTS products (
-    id TEXT PRIMARY KEY,
-    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    description TEXT NULL,
-    price_cents INTEGER NOT NULL DEFAULT 0,    -- توحيد المعيار المالي بأصغر وحدة عملة
-    stock INTEGER NOT NULL DEFAULT 0,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    CONSTRAINT unique_store_product_slug UNIQUE (store_id, slug) -- 🟢 فرادة الـ Slug على مستوى المتجر
-);
-
--- 3. جدول الأقسام (دعم العرض الهرمي والترتيب)
-CREATE TABLE IF NOT EXISTS categories (
-    id TEXT PRIMARY KEY,
-    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    parent_id TEXT NULL REFERENCES categories(id) ON DELETE CASCADE,
-    sort_order INTEGER DEFAULT 0,
-    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    CONSTRAINT unique_store_category_slug UNIQUE (store_id, slug)
-);
-
--- 4. جدول محتوى الهيرو (مربوط بالـ Progressive Media Pipeline)
-CREATE TABLE IF NOT EXISTS hero_slides (
-    id TEXT PRIMARY KEY,
-    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
-    media_id TEXT NOT NULL REFERENCES media(id) ON DELETE CASCADE, -- 🟢 ربط تلقائي بـ B2 عند جاهزيته
-    title TEXT NULL,
-    subtitle TEXT NULL,
-    sort_order INTEGER DEFAULT 0,
-    is_active INTEGER NOT NULL DEFAULT 1,      -- 1 = نشط، 0 = مخفي مؤقتاً
-    created_at INTEGER NOT NULL DEFAULT (unixepoch())
-);
-
--- 5. جدول تنوعات المنتجات (خصم ذري للمخزون، عزل SKU مرّكب، ودقة مالية)
-CREATE TABLE IF NOT EXISTS product_variants (
-    id TEXT PRIMARY KEY,
-    product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
-    sku TEXT NULL,                             -- قد يكون NULL في الـ MVP
-    price_cents INTEGER NULL,                 -- NULL تعني استخدام price_cents للمنتج الرئيسي
-    stock INTEGER NOT NULL DEFAULT 0,          -- الخصم الذري المباشر
-    options_json TEXT NOT NULL,                -- مثال: {"color": "Red", "size": "XL"}
-    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    CONSTRAINT unique_store_variant_sku UNIQUE (store_id, sku) -- 🛑 فرادة مرّكبة تجنب التعارض بين المتاجر
-);
-
--- الفهارس المركبة لتحسين أداء الاستعلامات والـ Multi-Tenancy
-CREATE INDEX IF NOT EXISTS idx_media_store_status ON media(store_id, status);
-CREATE INDEX IF NOT EXISTS idx_products_store ON products(store_id);
-CREATE INDEX IF NOT EXISTS idx_categories_store ON categories(store_id);
-CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id);
-CREATE INDEX IF NOT EXISTS idx_hero_slides_store ON hero_slides(store_id);
-CREATE INDEX IF NOT EXISTS idx_variants_product ON product_variants(product_id);
-CREATE INDEX IF NOT EXISTS idx_variants_store ON product_variants(store_id);
-
-
-🚀 التعليمات للبدء فوراً (Step 0 Execution)
-نقل المسارات ليصبح شجرة الـ Routing تحت app/[locale]/(dashboard)/dashboard/... و app/[locale]/(auth)/auth/....
-
-تشغيل الـ Migration أعلاه على D1.
-
-الاختبار السريع: التأكد من حماية المسارات وإنشاء الجداول.

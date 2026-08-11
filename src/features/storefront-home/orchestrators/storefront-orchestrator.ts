@@ -1,112 +1,58 @@
-//src/features/storefront-home/orchestrators/storefront-orchestrator.ts
+// src/features/storefront-home/orchestrators/storefront-orchestrator.ts
 
 import { getStoreRawData } from '@/features/storefront-home/data/store-data-fetcher';
 import { adaptProductPage } from '@/features/storefront-home/adapters/product-page.adapter';
-import { adaptHeader, type HeaderAdapterResult } from '@/features/storefront-home/components/Header/Header.adapter';
-import { adaptFooter, type FooterAdapterResult } from '@/features/storefront-home/components/Footer/Footer.adapter';
-import type { HeroAdapterResult } from '@/features/storefront-home/components/Hero/Hero.adapter';
-import type { ProductGridAdapterResult } from '@/components/shared/ProductGrid/ProductGrid.adapter';
-import type { Category } from '@/types/category'; // 👈 استيراد نوع التصنيفات
+import { adaptHeader } from '@/features/storefront-home/components/Header/Header.adapter';
+import { adaptFooter } from '@/features/storefront-home/components/Footer/Footer.adapter';
 import { notFound } from 'next/navigation';
-import type { Env } from '@/lib/env';
+import type { Env } from '@/lib/env'; // ✅ إضافة import
 
-// 🛑 قائمة الكلمات المحجوزة التي لا يجب اعتبارها أسماء متاجر
 const RESERVED_SLUGS = new Set([
-  'terms',
-  'privacy',
-  'about',
-  'contact',
-  'api',
-  'admin',
-  'dashboard',
-  'login',
-  'register',
-  'favicon.ico',
-  'robots.txt',
-  'sitemap.xml',
+  'terms', 'privacy', 'about', 'contact', 'api', 'admin', 
+  'dashboard', 'login', 'register'
 ]);
 
-// 🔥 العقد الموحد والوحيد لبيانات الواجهة كاملة (Strongly Typed Portfolio - Zero Any)
-export interface StorefrontPayload {
-  storeInfo: {
-    name: string;
-    slug: string;
-  };
-  header: HeaderAdapterResult;
-  hero: HeroAdapterResult;
-  categories: Category[]; // 👈 إضافة التصنيفات للـ Payload
-  featuredProductsGrid: ProductGridAdapterResult; // 👈 إضافة شبكة المنتجات المميزة
-  productGrid: ProductGridAdapterResult;
-  footer: FooterAdapterResult;
-}
-
-interface OrchestratorOptions {
+export interface OrchestratorOptions {
   page?: string;
   sort?: string;
   currency?: string;
 }
 
 export const StorefrontOrchestrator = {
-  /**
-   * 🧠 المايسترو: يقود عملية جلب البيانات الخام وتحويلها بالملي عبر الأدابترز السيادية
-   */
+  // ✅ إضافة env: Env كـ parameter إجباري
   async fetchPagePayload(
     storeSlug: string,
     env: Env,
     options: OrchestratorOptions = {}
-  ): Promise<StorefrontPayload> {
-    
-    // 1. حارس البوابة الفوري لمنع استهلاك الباقة في طلبات الصفحات الثابتة
-    if (RESERVED_SLUGS.has(storeSlug.toLowerCase())) {
-      notFound();
-    }
+  ) {
+    if (RESERVED_SLUGS.has(storeSlug.toLowerCase())) notFound();
 
-    // 2. فك وتأمين البارامترات وضبط الافتراضيات
     const currentPage = Math.max(1, parseInt(options.page || '1', 10));
     const userCurrency = options.currency || 'EGP';
 
-    const gridOptions = {
-      page: currentPage,
-      limit: 20,
-    };
-
     try {
-      // 3. سحب البيانات الخام مركزياً عبر D1
-      const rawData = await getStoreRawData(storeSlug, env, gridOptions);
+      // ✅ تمرير env كـ argument تاني + options كـ argument تالت
+      const rawData = await getStoreRawData(storeSlug, env, { 
+        page: currentPage, 
+        limit: 20 
+      });
       
-      // حماية السيستم في حال عدم وجود المتجر
-      if (!rawData || !rawData.store) {
-        notFound();
-      }
+      if (!rawData || !rawData.store) notFound();
 
-      // 4. نداء الأدابترز السيادية
-      const adaptedPage = adaptProductPage(rawData, userCurrency); 
-      const adaptedHeader = adaptHeader(rawData.store);
-      const adaptedFooter = adaptFooter(rawData.store);
-
-      // 5. تجميع وترجيع الـ Payload النهائي المكتمل
+      const adaptedPage = adaptProductPage(rawData, userCurrency);
+      
       return {
-        storeInfo: {
-          name: rawData.store.name,
-          slug: rawData.store.slug,
-        },
-        header: adaptedHeader,
+        storeInfo: { name: rawData.store.name, slug: rawData.store.slug },
+        header: adaptHeader(rawData.store),
         hero: adaptedPage.hero,
-        categories: adaptedPage.categories, // 👈 تمرير الأقسام
-        featuredProductsGrid: adaptedPage.featuredProductsGrid, // 👈 تمرير المنتجات المميزة
+        categories: adaptedPage.categories,
+        featuredProductsGrid: adaptedPage.featuredProductsGrid,
         productGrid: adaptedPage.productGrid,
-        footer: adaptedFooter,
+        footer: adaptFooter(rawData.store),
       };
-
     } catch (error: any) {
-      if (
-        error?.message === 'NEXT_NOT_FOUND' || 
-        error?.digest === 'NEXT_NOT_FOUND'
-      ) {
-        throw error;
-      }
-
-      console.error('[StorefrontOrchestrator] Critical Orchestration Failure:', error);
+      if (error?.digest === 'NEXT_NOT_FOUND') throw error;
+      console.error('[StorefrontOrchestrator] Failure:', error);
       notFound();
     }
   }

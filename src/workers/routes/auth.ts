@@ -11,8 +11,57 @@ import { safeExecute } from '@/lib/errors/safe-executor';
 export const authRouter = new Hono<{ Bindings: Env }>();
 
 // ============================================================
+// 🔒 واجهات البيانات (Interfaces)
+// ============================================================
+
+interface JWTPayload {
+  sub: string;
+  exp: number;
+  iat: number;
+  [key: string]: unknown;
+}
+
+// ============================================================
 // 🔧 دوال مساعدة (Helpers)
 // ============================================================
+
+/**
+ * دالة استدعاء خفيفة لـ Upstash Redis بدون مكتبات ثقيلة
+ */
+async function redisCommand(env: Env, command: string[]) {
+  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return null;
+  try {
+    const res = await fetch(`${env.UPSTASH_REDIS_REST_URL}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(command),
+    });
+    const data = (await res.json()) as { result: unknown };
+    return data.result;
+  } catch (e) {
+    console.error('❌ [Redis Error]:', e);
+    return null;
+  }
+}
+
+/**
+ * فحص هل التوكن ملغى في Upstash Redis
+ */
+async function isTokenBlacklisted(token: string, env: Env): Promise<boolean> {
+  const result = await redisCommand(env, ['GET', `bl_${token}`]);
+  return result !== null;
+}
+
+/**
+ * إدراج التوكن في القائمة السوداء بـ TTL تلقائي
+ */
+async function blacklistToken(token: string, ttlSeconds: number, env: Env): Promise<void> {
+  if (ttlSeconds <= 0) return;
+  await redisCommand(env, ['SET', `bl_${token}`, 'revoked', 'EX', ttlSeconds.toString()]);
+}
 
 /**
  * التحقق من توقيع بيانات Telegram WebApp (HMAC-SHA256)
@@ -25,7 +74,6 @@ async function verifyTelegramWebAppData(
     const { hash, ...data } = initData;
     if (!hash) return false;
 
-    // 1. ترتيب المفاتيح أبجدياً
     const checkString = Object.keys(data)
       .sort()
       .map((key) => `${key}=${data[key]}`)
@@ -33,7 +81,6 @@ async function verifyTelegramWebAppData(
 
     const encoder = new TextEncoder();
 
-    // 2. إنشاء Secret Key: HMAC-SHA256("WebAppData", botToken)
     const tokenKey = await crypto.subtle.importKey(
       'raw',
       encoder.encode('WebAppData'),
@@ -48,7 +95,6 @@ async function verifyTelegramWebAppData(
       encoder.encode(botToken)
     );
 
-    // 3. التوقيع باستخدام Secret Key المُستخرج
     const secretKey = await crypto.subtle.importKey(
       'raw',
       secretKeyBuffer,
@@ -75,16 +121,16 @@ async function verifyTelegramWebAppData(
 }
 
 /**
- * إنشاء JWT
+ * إنشاء JWT (مدة الصلاحية: 7 أيام)
  */
 async function createToken(userId: string, env: Env): Promise<string> {
   if (!env.BETTER_AUTH_SECRET) {
     throw new Error('BETTER_AUTH_SECRET is not configured');
   }
 
-  const payload = {
+  const payload: JWTPayload = {
     sub: userId,
-    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 أيام
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
     iat: Math.floor(Date.now() / 1000),
   };
 
@@ -92,13 +138,19 @@ async function createToken(userId: string, env: Env): Promise<string> {
 }
 
 /**
- * التحقق من JWT
+ * التحقق من JWT مع فحص الـ Blacklist من Redis
  */
-async function verifyToken(token: string, env: Env): Promise<any> {
+async function verifyToken(token: string, env: Env): Promise<JWTPayload | null> {
   if (!env.BETTER_AUTH_SECRET) return null;
 
   try {
-    return await verify(token, env.BETTER_AUTH_SECRET, 'HS256');
+    // 1. فحص الحظر في Redis
+    const blacklisted = await isTokenBlacklisted(token, env);
+    if (blacklisted) return null;
+
+    // 2. فحص صلاحيات وتوقيع الـ JWT
+    const payload = (await verify(token, env.BETTER_AUTH_SECRET, 'HS256')) as unknown as JWTPayload;
+    return payload;
   } catch {
     return null;
   }
@@ -126,13 +178,11 @@ authRouter.post('/auth/telegram', (c) =>
       return c.json({ success: false, error: 'Telegram bot not configured' }, 500);
     }
 
-    // 1. التحقق من توقيع تليجرام
     const isValid = await verifyTelegramWebAppData(body, botToken);
     if (!isValid) {
       return c.json({ success: false, error: 'Invalid telegram signature' }, 401);
     }
 
-    // 2. البحث عن المستخدم أو إنشاؤه
     let user = await db
       .select()
       .from(schema.users)
@@ -182,7 +232,6 @@ authRouter.post('/auth/telegram', (c) =>
       return c.json({ success: false, error: 'User is not active' }, 403);
     }
 
-    // 3. إنشاء JWT
     const token = await createToken(user.id, c.env);
 
     return c.json({
@@ -213,7 +262,7 @@ authRouter.get('/auth/verify', (c) =>
       return c.json({ success: false, error: 'No token provided' }, 401);
     }
 
-    const token = authHeader.replace('Bearer ', '');
+    const token = authHeader.replace('Bearer ', '').trim();
     const db = getDb({ DB: c.env.DB });
 
     const payload = await verifyToken(token, c.env);
@@ -258,13 +307,15 @@ authRouter.post('/auth/logout', (c) =>
       return c.json({ success: false, error: 'No token provided' }, 401);
     }
 
-    const token = authHeader.replace('Bearer ', '');
+    const token = authHeader.replace('Bearer ', '').trim();
     const payload = await verifyToken(token, c.env);
 
-    const ttl = payload ? payload.exp - Math.floor(Date.now() / 1000) : 86400;
-
-    if (ttl > 0) {
-      console.log(`[Auth] Token blacklisted for ${ttl} seconds`);
+    if (payload) {
+      const ttl = payload.exp - Math.floor(Date.now() / 1000);
+      if (ttl > 0) {
+        // 🛡️ إضافة التوكن للـ Blacklist في Redis للحظر المباشر
+        await blacklistToken(token, ttl, c.env);
+      }
     }
 
     return c.json({ success: true, data: { message: 'Logged out successfully' } });
@@ -285,6 +336,12 @@ authRouter.post('/auth/refresh', (c) =>
     const payload = await verifyToken(body.token, c.env);
     if (!payload) {
       return c.json({ success: false, error: 'Invalid or expired token' }, 401);
+    }
+
+    // 🛡️ إلغاء التوكن القديم لمنع إعادة استخدامه (Token Rotation)
+    const ttl = payload.exp - Math.floor(Date.now() / 1000);
+    if (ttl > 0) {
+      await blacklistToken(body.token, ttl, c.env);
     }
 
     const newToken = await createToken(payload.sub, c.env);

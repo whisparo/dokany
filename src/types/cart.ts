@@ -1,10 +1,11 @@
-//src/types/cart.ts
+// src/types/cart.ts
+
 export interface CartItem {
   id: string;
   productId: string;
   variantId?: string;
   name: string;
-  price: number;
+  price: number; // بالقروش (Cents)
   quantity: number;
   image?: string;
   maxStock?: number;
@@ -22,7 +23,7 @@ export interface CartSyncResponse {
 export interface CartStoreState {
   items: CartItem[];
   totalQuantity: number;
-  totalPrice: number;
+  totalPrice: number; // بالقروش
   isOpen: boolean;
   isSyncing: boolean;
   lastSyncedAt: number | null;
@@ -32,13 +33,13 @@ export interface CartStoreState {
 }
 
 export interface CartStoreActions {
+  setHasHydrated: (state: boolean) => void;
   setIsOpen: (open: boolean) => void;
   toggleCart: () => void;
   addItem: (item: Omit<CartItem, 'id' | 'quantity'> & { id?: string; quantity?: number }) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   clearCart: () => void;
-  setHasHydrated: (state: boolean) => void;
   syncCart: () => Promise<void>;
   retrySync: () => Promise<void>;
   validateStock: () => Promise<void>;

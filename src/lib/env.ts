@@ -1,6 +1,6 @@
 // src/lib/env.ts
 
-import type { D1Database } from '@cloudflare/workers-types';
+import type { D1Database, Queue } from '@cloudflare/workers-types';
 
 export interface Env {
   // Database
@@ -30,6 +30,10 @@ export interface Env {
   UPSTASH_REDIS_REST_TOKEN: string;
   QSTASH_URL: string;
   QSTASH_TOKEN: string;
+
+  // Background Media Worker & Queue Services
+  MEDIA_QUEUE?: Queue<any>;
+  MEDIA_PROCESSOR_URL?: string;
 
   // Application Public URLs
   NEXT_PUBLIC_APP_URL?: string;

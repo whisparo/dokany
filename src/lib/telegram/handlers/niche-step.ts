@@ -7,9 +7,11 @@ import { extractCountryCode, CODE_TO_GEO } from './onboarding-helpers';
 import { saveSession } from '../memory';
 import { getDb } from '@/lib/db';
 
-// توسيع الـ Context لضمان تمرير الـ env من الراوتر الرئيسي
 interface SecureHandlerContext extends HandlerContext {
-  env: { DB: D1Database };
+  env: { 
+    DB: D1Database;
+    NEXT_PUBLIC_APP_URL?: string;
+  };
 }
 
 export async function handleNicheStep(ctx: SecureHandlerContext): Promise<HandlerResult> {
@@ -29,10 +31,8 @@ export async function handleNicheStep(ctx: SecureHandlerContext): Promise<Handle
   let selectedNiche = nicheMap[inputLower];
   const currentStoreName = ctx.session?.storeName || '';
   
-  // فحص هل هو معلق في خطوة انتظار كتابة النيش المخصص
   const isWaitingForCustom = currentStoreName.startsWith('__custom__::');
 
-  // 🎯 حالة الضغط على "تخصص آخر" لأول مرة
   if (input === '📦 تخصص آخر' || input === 'تخصص آخر' || input === 'أخرى' || selectedNiche === 'other') {
     if (!isWaitingForCustom) {
       const nextSession = {
@@ -52,12 +52,10 @@ export async function handleNicheStep(ctx: SecureHandlerContext): Promise<Handle
     }
   }
 
-  // 🎯 حالة إن المستخدم كتب النيش المخصص بإيده
   if (isWaitingForCustom) {
     selectedNiche = input;
   }
 
-  // الحماية من المدخلات العشوائية
   if (!selectedNiche) {
     return {
       reply: '❌ عذراً، يرجى اختيار تخصص مدعوم من الأزرار، أو اختر "تخصص آخر" واكتبه بنفسك:',
@@ -65,17 +63,14 @@ export async function handleNicheStep(ctx: SecureHandlerContext): Promise<Handle
     };
   }
 
-  // استخراج اسم المتجر النظيف
   let realStoreName = isWaitingForCustom
     ? currentStoreName.replace('__custom__::', '')
     : currentStoreName;
 
-  // 🎯 خندق الدفاع الأخير: لو السيشين اتصفر والاسم طالع فاضي، امنعه من كسر قيد الداتابيز
   if (!realStoreName || realStoreName.trim() === '') {
     realStoreName = ctx.session?.name ? `متجر ${ctx.session.name}` : 'متجري الإلكتروني';
   }
 
-  // خروج مبكر آمن في حالة غياب الـ DB من الـ env
   if (!ctx.env?.DB) {
     console.error('❌ [handleNicheStep] Critical Fatal: DB is missing from env');
     return {
@@ -84,11 +79,9 @@ export async function handleNicheStep(ctx: SecureHandlerContext): Promise<Handle
     };
   }
 
-  // إنشاء المتجر الفعلي
   try {
     const merchantName = ctx.session?.name || 'تاجرنا العزيز';
 
-    // ✅ نمرر ctx.env.DB مباشرةً إلى createStore
     const result = await createStore(ctx.env.DB, {
       phone: ctx.session?.phone || '',
       name: ctx.session?.name || '',
@@ -99,16 +92,19 @@ export async function handleNicheStep(ctx: SecureHandlerContext): Promise<Handle
     const countryCode = extractCountryCode(ctx.session?.phone || '');
     const geoInfo = CODE_TO_GEO[countryCode] || { country: 'غير محدد', currency: 'العملة المحلية' };
 
+    const baseUrl = ctx.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || 'https://www.dokany.workers.dev';
+    const storeUrl = result.url || `${baseUrl}/store/${result.storeId}`;
+    const magicDashboardUrl = result.dashboardLink || `${baseUrl}/ar/dashboard?store=${result.storeId}`;
+
     return {
-      // 🎯 تم إزالة سطر رابط المتجر النصي لتنظيف شكل الرسالة وإلغاء المعاينة نهائياً
-      reply: `🎉 مبروك يا ${merchantName}! تم إنشاء متجرك بنجاح وتخصيصه على نشاط [${selectedNiche}].\n\n🏪 اسم المتجر: ${realStoreName}\n🌍 الدولة: ${geoInfo.country}\n🪙 العملة: ${geoInfo.currency}\n\nاضغط على الزر بالأسفل لفتح لوحة التحكم فوراً والبدء في رفع منتجاتك.`,
-      buttons: [
-        [{ text: '🌍 زيارة المتجر', url: result.url }],
-        [{ text: '🚀 افتح لوحة التحكم', url: result.dashboardLink }]
-      ],
+      // 🎯 وضع الروابط نصياً بشكل مباشر أزرق قابل للضغط لضمان عدم اختفائها إطلاقاً
+      reply: `🎉 مبروك يا ${merchantName}! تم إنشاء متجرك بنجاح وتخصيصه على نشاط [${selectedNiche}].\n\n🏪 **اسم المتجر:** ${realStoreName}\n🌍 **الدولة:** ${geoInfo.country}\n🪙 **العملة:** ${geoInfo.currency}\n\n🚀 **رابط دخول لوحة التحكم المباشر:**\n${magicDashboardUrl}\n\n🌍 **رابط المتجر:**\n${storeUrl}`,
+      
+      // 🎯 تثبيت الزر السفلي المربع لوحة التحكم
       persistentButtons: [
-        [{ text: '🚀 لوحة التحكم', value: 'get_dashboard' }]
+        [{ text: '🎛️ لوحة التحكم', value: '🎛️ لوحة التحكم' }]
       ],
+
       session: {
         step: 'completed',
         phone: ctx.session?.phone,

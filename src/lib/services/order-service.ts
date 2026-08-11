@@ -1,12 +1,12 @@
 // src/lib/services/orders-service.ts
 
-// src/services/order.service.ts
-
 import { schema, type D1Transaction } from '@/lib/db';
-import type { NewOrder } from '@/lib/db/schema/orders';
+import type { NewOrder, Order } from '@/lib/db/schema/orders';
+import type { NewOrderItem } from '@/lib/db/schema/order-items';
 import { calculateLineTotal, calculateNetAmount } from '@/lib/db/schema/order-items';
 import type { ProductOptions, OrderItemMetadata } from '@/lib/db/schema/order-items';
 import { SystemError } from '@/lib/errors/types';
+import { sql } from 'drizzle-orm';
 
 export interface RawOrderItemInput {
   productId: string;
@@ -37,7 +37,7 @@ export class OrderService {
   /**
    * 2️⃣ تحضير وحساب قيم عناصر الطلب للتأكد من أنها متوافقة مع شروط الـ DB
    */
-  static prepareOrderItems(items: RawOrderItemInput[]) {
+  static prepareOrderItems(items: RawOrderItemInput[], storeId: string) {
     return items.map((item) => {
       const lineTotal = calculateLineTotal(item.price, item.orderedQty);
       const originalPrice = item.originalPrice || item.price;
@@ -45,6 +45,7 @@ export class OrderService {
       const netAmount = calculateNetAmount(lineTotal, discount, '0');
 
       return {
+        storeId, // 👈 تم إضافة storeId لتطابق NewOrderItem Schema
         productId: item.productId,
         variantSku: item.variantSku,
         productName: item.productName,
@@ -62,7 +63,6 @@ export class OrderService {
       };
     });
   }
-
   /**
    * 3️⃣ التحقق من قيد المبالغ وقسمة الفواصل العائمة (Floating Point Protection)
    */
@@ -90,9 +90,9 @@ export class OrderService {
   }
 
   /**
-   * 4️⃣ حفظ الطلب داخل قاعدة البيانات D1 مع معالجة الأخطاء الاحترافية
+   * 4️⃣ حفظ رأس الطلب (Order Header) داخل قاعدة البيانات D1
    */
-  static async createOrder(orderData: NewOrder, tx: D1Transaction) {
+  static async createOrder(orderData: NewOrder, tx: D1Transaction): Promise<Order> {
     if (!orderData || !orderData.storeId || !orderData.customerId) {
       throw new SystemError({
         code: 'ORD_400',
@@ -102,7 +102,7 @@ export class OrderService {
         retryable: false,
         shouldAlert: false,
         technicalMessage: 'CREATE_ORDER_VALIDATION_FAILED: Missing mandatory fields (storeId or customerId).',
-        metadata: { orderData },
+        metadata: { storeId: orderData.storeId, customerId: orderData.customerId },
       });
     }
 
@@ -111,9 +111,9 @@ export class OrderService {
         .insert(schema.orders)
         .values({
           ...orderData,
-          id: crypto.randomUUID(),
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          id: orderData.id || crypto.randomUUID(),
+          createdAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
         })
         .returning();
 
@@ -152,7 +152,53 @@ export class OrderService {
       });
     }
   }
+
+  /**
+   * 5️⃣ حفظ عناصر الطلب (Order Items) دفعة واحدة داخل قاعدة البيانات
+   */
+  static async createOrderItems(
+    orderId: string,
+    items: Omit<NewOrderItem, 'id' | 'orderId' | 'createdAt' | 'updatedAt'>[],
+    tx: D1Transaction
+  ) {
+    if (!items || items.length === 0) {
+      return [];
+    }
+
+    try {
+      const valuesToInsert = items.map((item) => ({
+        ...item,
+        id: crypto.randomUUID(),
+        orderId,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      }));
+
+      const insertedItems = await tx
+        .insert(schema.orderItems)
+        .values(valuesToInsert)
+        .returning();
+
+      return insertedItems;
+    } catch (error) {
+      throw new SystemError({
+        code: 'ORD_503',
+        userMessage: 'فشل حفظ تفاصيل منتجات الطلب.',
+        category: 'database',
+        severity: 'critical',
+        retryable: true,
+        shouldAlert: true,
+        technicalMessage: `CREATE_ORDER_ITEMS_FAILED: Failed to insert order items for orderId ${orderId}.`,
+        cause: error,
+        metadata: { orderId, itemsCount: items.length, originalError: error instanceof Error ? error.message : String(error) },
+      });
+    }
+  }
 }
 
-// 🟢 Export مباشر لتسهيل الاستخدام بالطريقتين
+// 🟢 Export مباشر لتسهيل الاستخدام
 export const createOrder = OrderService.createOrder;
+export const createOrderItems = OrderService.createOrderItems;
+export const prepareOrderItems = OrderService.prepareOrderItems;
+export const calculateOrderTotals = OrderService.calculateOrderTotals;
+export const generateOrderNumber = OrderService.generateOrderNumber;

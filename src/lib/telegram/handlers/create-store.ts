@@ -7,15 +7,65 @@ import { eq, or } from 'drizzle-orm';
 import { allocateCloudinaryAccount } from '@/lib/services/cloudinary'; 
 import { classifyError } from '@/lib/errors/classifier';
 
-interface CreateStoreInput {
+export interface CreateStoreEnv {
+  DB: D1Database;
+  TELEGRAM_BOT_TOKEN?: string;
+  NEXT_PUBLIC_APP_URL?: string;
+}
+
+export interface CreateStoreInput {
   phone: string;
   name: string;
   storeName: string; 
   telegramUserId?: string | number;
 }
 
-async function generateLoginLink(userId: string, storeId: string): Promise<string> {
-  return `https://www.dokany.workers.dev/dashboard?user=${userId}&store=${storeId}`;
+export interface CreateStoreOutput {
+  url: string;
+  dashboardLink: string;
+  storeId: string;
+  slug: string;
+}
+
+/**
+ * 🔗 توليد رابط الدخول المباشر للوحة التحكم
+ */
+async function generateLoginLink(userId: string, storeId: string, baseUrl: string): Promise<string> {
+  return `${baseUrl}/ar/dashboard?user=${userId}&store=${storeId}`;
+}
+
+/**
+ * 🎛️ تثبيت زر "لوحة التحكم" الثابت بأسفل شات تليجرام (Persistent WebApp Menu Button)
+ */
+async function attachTelegramMenuButton(
+  telegramUserId: string | number,
+  botToken: string,
+  dashboardUrl: string
+): Promise<void> {
+  try {
+    const telegramApiUrl = `https://api.telegram.org/bot${botToken}/setChatMenuButton`;
+    const response = await fetch(telegramApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: telegramUserId,
+        menu_button: {
+          type: 'web_app',
+          text: '🎛️ لوحة التحكم',
+          web_app: { url: dashboardUrl }
+        }
+      })
+    });
+
+    const resData = (await response.json()) as { ok?: boolean; description?: string };
+    if (!resData.ok) {
+      console.warn(`⚠️ [TelegramMenuButton] Non-fatal API response warning: ${resData.description}`);
+    } else {
+      console.log(`✅ [TelegramMenuButton] Persistent dashboard button linked for user: ${telegramUserId}`);
+    }
+  } catch (error) {
+    console.error('❌ [TelegramMenuButton] Background execution error:', error);
+  }
 }
 
 /**
@@ -23,10 +73,13 @@ async function generateLoginLink(userId: string, storeId: string): Promise<strin
  */
 export async function createStore(
   d1Database: D1Database, 
-  data: CreateStoreInput
-): Promise<{ url: string; dashboardLink: string }> {
+  data: CreateStoreInput,
+  env?: Partial<CreateStoreEnv>
+): Promise<CreateStoreOutput> {
   const db = drizzle(d1Database);
   let userId: string;
+
+  const baseUrl = env?.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || 'https://www.dokany.workers.dev';
 
   // 1️⃣ البحث الذكي والآمن عن المستخدم الحالي
   const searchConditions = [];
@@ -62,9 +115,9 @@ export async function createStore(
           .update(users)
           .set({ ...updatePayload, updatedAt: new Date() })
           .where(eq(users.id, existingUser.id));
-        console.log(`✅ [createStore] تم تحديث بيانات المستخدم الحالي بنجاح: ${existingUser.id}`);
+        console.log(`✅ [createStore] Updated user record: ${existingUser.id}`);
       } catch (updateError) {
-        console.error(`❌ [createStore] فشل تحديث بيانات المستخدم ${existingUser.id}:`, updateError);
+        console.error(`❌ [createStore] Failed updating user ${existingUser.id}:`, updateError);
       }
     }
   } else {
@@ -89,27 +142,25 @@ export async function createStore(
       const newUser = insertedUsers[0];
       if (!newUser) throw new Error('BIZ_500: Failed to capture newly created user identity');
       userId = newUser.id;
-      console.log(`✅ [createStore] تم إنشاء مستخدم جديد تماماً: ${userId}`);
+      console.log(`✅ [createStore] Created brand new user: ${userId}`);
     } catch (insertError) {
-      console.error('❌ [createStore] فشل إنشاء المستخدم الجديد:', insertError);
+      console.error('❌ [createStore] Failed creating new user:', insertError);
       throw classifyError(insertError);
     }
   }
 
-  // 2️⃣ [توليد الـ Slug وتنظيف اسم المتجر بذكاء]:
-  // إزالة كلمة "متجر" أو "shop" المتكررة من بداية الاسم لتجنب تكرارها في الـ UI
+  // 2️⃣ تنظيف وتجهيز الـ Slug واسم المتجر
   let cleanStoreName = data.storeName.trim();
   const storePrefixRegex = /^(متجر|shop|store)\s+/i;
   if (storePrefixRegex.test(cleanStoreName)) {
     cleanStoreName = cleanStoreName.replace(storePrefixRegex, '');
   }
 
-  // بناء الـ Slug من الاسم النظيف
   let slugBase = cleanStoreName
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, '-') // استبدال المسافات بشرطات
-    .replace(/[^a-z0-9أ-ي-]/g, ''); // تنظيف من أي رموز غريبة
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9أ-ي-]/g, '');
 
   if (!slugBase || slugBase === '-' || slugBase.length < 2) {
     slugBase = `store-${Math.random().toString(36).slice(2, 7)}`;
@@ -119,7 +170,6 @@ export async function createStore(
     slugBase = 's' + slugBase;
   }
 
-  // فك التشفير احتياطاً لضمان عدم تخزين رموز غريبة في قاعدة البيانات
   const decodedSlug = decodeURIComponent(slugBase);
 
   const existingStore = await db
@@ -135,7 +185,7 @@ export async function createStore(
   // 3️⃣ تخصيص حساب Cloudinary
   const allocatedAccountIndex = await allocateCloudinaryAccount(d1Database);
 
-  // 4️⃣ كائن الـ Theme
+  // 4️⃣ Theme Defaults
   const defaultTheme = {
     colors: {
       primary: '#2563eb',
@@ -151,13 +201,13 @@ export async function createStore(
     fontFamily: 'Cairo, sans-serif',
   };
 
-  // 5️⃣ إنشاء المتجر بالاسم النظيف والـ Slug السليم
+  // 5️⃣ إنشاء المتجر
   const insertedStores = await db
     .insert(stores)
     .values({
       id: crypto.randomUUID(), 
       ownerId: userId,
-      name: cleanStoreName, // 👈 بنسجل الاسم النظيف هنا (بدون كلمة "متجر" المكررة)
+      name: cleanStoreName,
       slug: slug,
       currency: 'EGP',
       country: 'EG',
@@ -180,13 +230,20 @@ export async function createStore(
     );
   }
 
-  console.log(`✅ [createStore] تم إنشاء المتجر بنجاح بالرابط: ${slug}`);
+  console.log(`✅ [createStore] Store successfully deployed with slug: ${slug}`);
 
-  // 6️⃣ روابط الـ Dashboard
-  const dashboardLink = await generateLoginLink(userId, newStore.id);
+  // 6️⃣ إعداد الروابط واستدعاء Menu Button بشكل خلفي دون تعطيل الاستجابة
+  const dashboardLink = await generateLoginLink(userId, newStore.id, baseUrl);
+
+  if (data.telegramUserId && env?.TELEGRAM_BOT_TOKEN) {
+    // تشغيل الفانكشن بشكل مستقل كي لا تؤخر الـ return الرئيسي
+    attachTelegramMenuButton(data.telegramUserId, env.TELEGRAM_BOT_TOKEN, dashboardLink);
+  }
 
   return {
-    url: `https://www.dokany.workers.dev/${slug}`,
+    url: `${baseUrl}/${slug}`,
     dashboardLink,
+    storeId: newStore.id,
+    slug,
   };
 }

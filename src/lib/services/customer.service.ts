@@ -1,10 +1,11 @@
 // src/lib/services/customer.service.ts
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
+import { Redis } from '@upstash/redis';
 import { getDb } from '@/lib/db';
 import { customers, type Customer } from '@/lib/db/schema/customers';
 import type { Env } from '@/lib/env';
-import { SystemError } from '@/lib/errors/types'; // 👈 إضافة الـ SystemError
+import { SystemError } from '@/lib/errors/types';
 
 export interface FindOrCreateCustomerInput {
   storeId?: string;
@@ -13,29 +14,53 @@ export interface FindOrCreateCustomerInput {
   email?: string;
 }
 
+const CUSTOMER_CACHE_TTL_SECONDS = 600; // 10 دقائق
+
 export class CustomerService {
   /**
-   * إيجاد العميل برقم الهاتف، أو إنشائه تلقائياً إذا لم يكن موجوداً
+   * إيجاد العميل برقم الهاتف (مع الكاش)، أو إنشائه تلقائياً إذا لم يكن موجوداً
    */
   static async findOrCreateCustomer(
     env: Env,
     input: FindOrCreateCustomerInput
   ): Promise<Customer> {
-    try {
-      const db = getDb(env as unknown as Parameters<typeof getDb>[0]);
+    const cleanPhone = input.phone.trim();
+    const cacheKey = `cache:customer:phone:${cleanPhone}`;
 
-      // 1. البحث عن عميل موجود برقم الهاتف
+    // 1️⃣ تطبيق الكاش أولاً (Cache-Aside Pattern)
+    if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
+      try {
+        const redis = new Redis({
+          url: env.UPSTASH_REDIS_REST_URL,
+          token: env.UPSTASH_REDIS_REST_TOKEN,
+        });
+
+        const cachedCustomer = await redis.get<Customer>(cacheKey);
+        if (cachedCustomer) {
+          return cachedCustomer;
+        }
+      } catch (cacheError) {
+        console.warn('⚠️ Customer cache fetch failed, falling back to D1:', cacheError);
+      }
+    }
+
+    try {
+      const db = getDb(env);
+
+      // 2️⃣ البحث عن العميل في قاعدة البيانات D1
       const [existingCustomer] = await db
         .select()
         .from(customers)
-        .where(eq(customers.phone, input.phone))
+        .where(eq(customers.phone, cleanPhone))
         .limit(1);
 
       if (existingCustomer) {
+        // حفظ النتيجة في Redis للأداء العالي في الطلبات القادمة
+        await CustomerService.setCache(env, cacheKey, existingCustomer);
         return existingCustomer;
       }
 
-      // 2. إنشاء عميل جديد
+      // 3️⃣ إنشاء عميل جديد إذا لم يوجد
       const newCustomerId = crypto.randomUUID();
       const cleanEmail = input.email && input.email.trim() !== '' ? input.email.trim() : null;
       const cleanName = input.name && input.name.trim() !== '' ? input.name.trim() : null;
@@ -44,19 +69,36 @@ export class CustomerService {
         .insert(customers)
         .values({
           id: newCustomerId,
-          phone: input.phone,
+          phone: cleanPhone,
           email: cleanEmail,
           name: cleanName,
           preferences: {
             language: 'ar',
             notifications: true,
           },
+          createdAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
         })
         .returning();
 
+      if (!newCustomer) {
+        throw new SystemError({
+          code: 'CUST_501',
+          userMessage: 'فشل حفظ بيانات العميل في قاعدة البيانات.',
+          category: 'database',
+          severity: 'critical',
+          retryable: true,
+          shouldAlert: true,
+          technicalMessage: 'CUSTOMER_CREATION_FAILED: Database did not return created customer record.',
+          metadata: { phone: cleanPhone },
+        });
+      }
+
+      // حفظ العميل الجديد في الكاش
+      await CustomerService.setCache(env, cacheKey, newCustomer);
+
       return newCustomer;
     } catch (error) {
-      // 👈 تغليف أخطاء الداتابيز أو إنشاء العميل
       if (error instanceof SystemError) throw error;
 
       throw new SystemError({
@@ -66,10 +108,28 @@ export class CustomerService {
         severity: 'warning',
         retryable: true,
         shouldAlert: true,
-        technicalMessage: `CUSTOMER_CREATION_FAILURE: Failed to find or create customer with phone ${input.phone}.`,
+        technicalMessage: `CUSTOMER_CREATION_FAILURE: Failed to find or create customer with phone ${cleanPhone}.`,
         cause: error,
-        metadata: { phone: input.phone, originalError: String(error) },
+        metadata: { phone: cleanPhone, originalError: error instanceof Error ? error.message : String(error) },
       });
+    }
+  }
+
+  /**
+   * دالة مساعدة لتخزين العميل في Redis
+   */
+  private static async setCache(env: Env, key: string, customerData: Customer): Promise<void> {
+    if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return;
+
+    try {
+      const redis = new Redis({
+        url: env.UPSTASH_REDIS_REST_URL,
+        token: env.UPSTASH_REDIS_REST_TOKEN,
+      });
+
+      await redis.set(key, JSON.stringify(customerData), { ex: CUSTOMER_CACHE_TTL_SECONDS });
+    } catch (error) {
+      console.warn('⚠️ Failed to save customer to Redis cache:', error);
     }
   }
 }

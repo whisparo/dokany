@@ -1,5 +1,4 @@
-// src/app/[locale]/(storefront)/[storeSlug]/page.tsx
-
+//src/app/[locale]/(storefront)/[storeSlug]/page.tsx
 import { StorefrontOrchestrator } from '@/features/storefront-home/orchestrators/storefront-orchestrator';
 import { Hero } from '@/features/storefront-home/components/Hero/Hero';
 import { ProductGrid } from '@/components/shared/ProductGrid/ProductGrid';
@@ -11,19 +10,21 @@ interface StorePageProps {
   searchParams: Promise<{ page?: string; sort?: string; currency?: string }>;
 }
 
-// ⚡ 1. مسحنا force-dynamic وجعلنا الصفحة تعتمد على revalidate الذكي من Next.js
-export const revalidate = 60; 
+export const revalidate = 60;
 
 export default async function StorePage({ params, searchParams }: StorePageProps) {
   const { storeSlug } = await params;
   const sParams = await searchParams;
-
   const decodedStoreSlug = decodeURIComponent(storeSlug);
 
-  const { env } = getCloudflareContext() as unknown as { env: Env };
+  const { env } = await getCloudflareContext();
+  const cfEnv = env as unknown as Env;
 
-  // ⚡ 2. تمرير البيانات (سيتم تخزين النتيجة على الـ Edge لمدة 60 ثانية)
-  const payload = await StorefrontOrchestrator.fetchPagePayload(decodedStoreSlug, env, sParams);
+  const payload = await StorefrontOrchestrator.fetchPagePayload(
+    decodedStoreSlug, 
+    cfEnv, 
+    sParams
+  );
 
   return (
     <div className="w-full flex flex-col">

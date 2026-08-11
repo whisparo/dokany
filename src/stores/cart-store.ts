@@ -1,5 +1,4 @@
 // src/stores/cart-store.ts
-
 import { create } from 'zustand';
 import { persist, devtools } from 'zustand/middleware';
 import type { CartItem, CartSyncResponse, CartStore } from '@/types/cart';
@@ -8,30 +7,50 @@ import type { CartItem, CartSyncResponse, CartStore } from '@/types/cart';
 // 🛠️ Utilities & Helpers
 // ============================================================
 
+/**
+ * إنشاء مفتاح فريد لعنصر السلة (productId + variantId)
+ */
 export const createCartItemKey = (productId: string, variantId?: string): string => {
   return variantId ? `${productId}_${variantId}` : productId;
 };
 
+/**
+ * تنسيق السعر من القروش إلى الجنيه
+ */
 export const formatPrice = (priceInCents: number): string => {
   return `${(priceInCents / 100).toFixed(2)} جنيه`;
 };
 
-const DEBOUNCE_DELAY_MS = 3000;
+// ============================================================
+// ⚙️ Constants
+// ============================================================
+
+const DEBOUNCE_DELAY_MS = 1200; // ⚡ تقليل التأخير لتجربة استخدام أسرع وأمن
 const MAX_SYNC_RETRIES = 3;
 const MAX_QUANTITY = 999;
 
 // ============================================================
-// 🧠 الـ Store المحدث
+// 🧠 Cart Store (Zustand + Persist + DevTools)
 // ============================================================
 
 export const useCartStore = create<CartStore>()(
   devtools(
     persist(
       (set, get) => {
+        // ============================================================
+        // 📌 Private State (Closures)
+        // ============================================================
         let syncTimeoutId: ReturnType<typeof setTimeout> | null = null;
         let activeAbortController: AbortController | null = null;
         let validateAbortController: AbortController | null = null;
 
+        // ============================================================
+        // 🔧 Helper Functions
+        // ============================================================
+
+        /**
+         * حساب الإجماليات (الكمية والسعر)
+         */
         const recalculateTotals = (items: CartItem[]) => {
           const totalQuantity = items.reduce((sum, i) => sum + i.quantity, 0);
           const totalPrice = items.reduce(
@@ -41,15 +60,24 @@ export const useCartStore = create<CartStore>()(
           return { totalQuantity, totalPrice };
         };
 
+        /**
+         * التحقق من صحة بيانات العنصر
+         */
         const validateItem = (item: Partial<CartItem>): boolean => {
           if (!item.productId || !item.name) return false;
           if (typeof item.price !== 'number' || item.price < 0) return false;
-          if (item.quantity !== undefined && (!Number.isInteger(item.quantity) || item.quantity < 1)) {
+          if (
+            item.quantity !== undefined &&
+            (!Number.isInteger(item.quantity) || item.quantity < 1)
+          ) {
             return false;
           }
           return true;
         };
 
+        /**
+         * تشغيل المزامنة مع الخادم (Debounced)
+         */
         const triggerSync = () => {
           if (syncTimeoutId !== null) {
             clearTimeout(syncTimeoutId);
@@ -62,13 +90,18 @@ export const useCartStore = create<CartStore>()(
           syncTimeoutId = setTimeout(() => {
             const currentState = get();
             if (currentState.items.length > 0 && !currentState.isSyncing) {
-              currentState.syncCart();
+              void currentState.syncCart();
             }
             syncTimeoutId = null;
           }, DEBOUNCE_DELAY_MS);
         };
 
+        // ============================================================
+        // 📦 Store State & Actions
+        // ============================================================
+
         return {
+          // State
           items: [],
           totalQuantity: 0,
           totalPrice: 0,
@@ -79,14 +112,23 @@ export const useCartStore = create<CartStore>()(
           lastSyncFailed: false,
           hasHydrated: false,
 
+          // ========================================
+          // 🎛️ Basic Actions
+          // ========================================
+
           setHasHydrated: (state: boolean) => set({ hasHydrated: state }),
           setIsOpen: (open: boolean) => set({ isOpen: open }),
           toggleCart: () => set((state) => ({ isOpen: !state.isOpen })),
 
+          // ========================================
+          // ➕ Add Item to Cart
+          // ========================================
+
           addItem: (newItem) => {
             if (!validateItem(newItem)) return;
 
-            const finalId = newItem.id || createCartItemKey(newItem.productId, newItem.variantId);
+            const finalId =
+              newItem.id || createCartItemKey(newItem.productId, newItem.variantId);
             const { items } = get();
             const quantityToAdd = Math.min(newItem.quantity ?? 1, MAX_QUANTITY);
             const existingIndex = items.findIndex((i) => i.id === finalId);
@@ -129,6 +171,10 @@ export const useCartStore = create<CartStore>()(
             triggerSync();
           },
 
+          // ========================================
+          // 🗑️ Remove Item from Cart
+          // ========================================
+
           removeItem: (id: string) => {
             const { items } = get();
             const updatedItems = items.filter((item) => item.id !== id);
@@ -140,6 +186,10 @@ export const useCartStore = create<CartStore>()(
 
             triggerSync();
           },
+
+          // ========================================
+          // 🔢 Update Item Quantity
+          // ========================================
 
           updateQuantity: (id: string, quantity: number) => {
             if (quantity < 0 || quantity > MAX_QUANTITY) return;
@@ -170,17 +220,25 @@ export const useCartStore = create<CartStore>()(
             triggerSync();
           },
 
+          // ========================================
+          // 🧹 Clear Cart
+          // ========================================
+
           clearCart: () => {
             if (syncTimeoutId !== null) {
               clearTimeout(syncTimeoutId);
               syncTimeoutId = null;
             }
 
-            activeAbortController?.abort();
-            activeAbortController = null;
+            if (activeAbortController) {
+              activeAbortController.abort();
+              activeAbortController = null;
+            }
 
-            validateAbortController?.abort();
-            validateAbortController = null;
+            if (validateAbortController) {
+              validateAbortController.abort();
+              validateAbortController = null;
+            }
 
             set({
               items: [],
@@ -192,13 +250,17 @@ export const useCartStore = create<CartStore>()(
             });
           },
 
+          // ========================================
+          // 🔄 Sync Cart with Server
+          // ========================================
+
           syncCart: async () => {
             const { items } = get();
 
+            // إلغاء أي طلب مزامنة معلق بشكل فوري وآمن
             if (activeAbortController) {
               activeAbortController.abort();
               activeAbortController = null;
-              await new Promise((resolve) => setTimeout(resolve, 0));
             }
 
             if (items.length === 0) {
@@ -210,19 +272,23 @@ export const useCartStore = create<CartStore>()(
               return;
             }
 
-            activeAbortController = new AbortController();
+            const controller = new AbortController();
+            activeAbortController = controller;
             set({ isSyncing: true, syncError: null });
 
             let attempt = 0;
 
             while (attempt < MAX_SYNC_RETRIES) {
               try {
-                const idempotencyKey = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-                  ? crypto.randomUUID()
-                  : Math.random().toString(36).substring(2, 15);
+                const idempotencyKey =
+                  typeof crypto !== 'undefined' &&
+                  typeof crypto.randomUUID === 'function'
+                    ? crypto.randomUUID()
+                    : Math.random().toString(36).substring(2, 15);
 
                 const response = await fetch('/api/cart/sync', {
                   method: 'POST',
+                  credentials: 'include', // ✅ إرسال ملفات الكوكيز والـ Session لحماية الهوية
                   headers: {
                     'Content-Type': 'application/json',
                     'Idempotency-Key': idempotencyKey,
@@ -234,7 +300,7 @@ export const useCartStore = create<CartStore>()(
                       quantity: item.quantity,
                     })),
                   }),
-                  signal: activeAbortController?.signal,
+                  signal: controller.signal,
                 });
 
                 if (!response.ok) throw new Error(`Sync status: ${response.status}`);
@@ -255,13 +321,14 @@ export const useCartStore = create<CartStore>()(
                 activeAbortController = null;
                 return;
               } catch (error) {
-                if ((error as Error).name === 'AbortError') return;
+                if (error instanceof Error && error.name === 'AbortError') return;
 
                 attempt++;
                 if (attempt >= MAX_SYNC_RETRIES) {
+                  const errorMessage = error instanceof Error ? error.message : 'Unknown sync error';
                   set({
                     isSyncing: false,
-                    syncError: (error as Error).message,
+                    syncError: errorMessage,
                     lastSyncFailed: true,
                   });
                   activeAbortController = null;
@@ -274,21 +341,31 @@ export const useCartStore = create<CartStore>()(
             }
           },
 
+          // ========================================
+          // 🔁 Retry Sync
+          // ========================================
+
           retrySync: async () => {
             set({ syncError: null, lastSyncFailed: false });
             await get().syncCart();
           },
+
+          // ========================================
+          // ✅ Validate Stock Before Checkout
+          // ========================================
 
           validateStock: async () => {
             const { items } = get();
             if (items.length === 0) return;
 
             if (validateAbortController) validateAbortController.abort();
-            validateAbortController = new AbortController();
+            const controller = new AbortController();
+            validateAbortController = controller;
 
             try {
               const response = await fetch('/api/cart/validate', {
                 method: 'POST',
+                credentials: 'include', // ✅ حماية الهوية والجلسة
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   items: items.map((i) => ({
@@ -298,7 +375,7 @@ export const useCartStore = create<CartStore>()(
                     quantity: i.quantity,
                   })),
                 }),
-                signal: validateAbortController.signal,
+                signal: controller.signal,
               });
 
               if (!response.ok) throw new Error('Stock validation failed');
@@ -307,7 +384,6 @@ export const useCartStore = create<CartStore>()(
                 validated: Array<{ id: string; maxStock: number; currentPrice?: number }>;
               };
 
-              // ✅ الحل: نحدد نوع المصفوفة المعادة من الـ map لتشمل null صراحة، ثم نفلترها بأمان
               const mappedItems: (CartItem | null)[] = items.map((item) => {
                 const validation = validated.find((v) => v.id === item.id);
                 if (!validation) return null;
@@ -315,17 +391,14 @@ export const useCartStore = create<CartStore>()(
                 const newQuantity = Math.min(item.quantity, validation.maxStock);
                 if (newQuantity <= 0) return null;
 
-                const updatedItem: CartItem = {
+                return {
                   ...item,
                   quantity: newQuantity,
                   maxStock: validation.maxStock,
                   price: validation.currentPrice ?? item.price,
                 };
-
-                return updatedItem;
               });
 
-              // ✅ الفلترة لتنقية المصفوفة من الـ null لتصبح CartItem[] صريحة
               const updatedItems: CartItem[] = mappedItems.filter(
                 (item): item is CartItem => item !== null
               );
@@ -335,12 +408,16 @@ export const useCartStore = create<CartStore>()(
                 ...recalculateTotals(updatedItems),
               });
             } catch (error) {
-              if ((error as Error).name === 'AbortError') return;
+              if (error instanceof Error && error.name === 'AbortError') return;
               console.error('[Cart] Stock validation error:', error);
             } finally {
               validateAbortController = null;
             }
           },
+
+          // ========================================
+          // 🔍 Utility Getters
+          // ========================================
 
           getItemById: (id: string) => get().items.find((item) => item.id === id),
           getItemCount: () => get().items.length,
@@ -365,13 +442,20 @@ export const useCartStore = create<CartStore>()(
 );
 
 // ============================================================
-// 🎯 Selectors
+// 🎯 Selectors (Optimized for Performance)
 // ============================================================
 
-export const useCartItems = () => useCartStore((s) => (s.hasHydrated ? s.items : []));
-export const useCartTotal = () => useCartStore((s) => (s.hasHydrated ? s.totalPrice : 0));
-export const useCartCount = () => useCartStore((s) => (s.hasHydrated ? s.totalQuantity : 0));
+export const useCartItems = () =>
+  useCartStore((s) => (s.hasHydrated ? s.items : []));
+
+export const useCartTotal = () =>
+  useCartStore((s) => (s.hasHydrated ? s.totalPrice : 0));
+
+export const useCartCount = () =>
+  useCartStore((s) => (s.hasHydrated ? s.totalQuantity : 0));
+
 export const useIsCartReady = () => useCartStore((s) => s.hasHydrated);
+
 export const useCartSyncState = () =>
   useCartStore((s) => ({
     isSyncing: s.isSyncing,

@@ -1,67 +1,36 @@
-// src/app/page.tsx
+'use client';
 
-export const dynamic = 'force-static';
+import { useState, useEffect } from 'react';
+import { QuickProductSheet } from '@/features/store-editor/components/sheets/QuickProductSheet';
 
-export default function RootHomePage() {
+export default function TestPage() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) return null;
+
   return (
-    <div
-      style={{
-        backgroundColor: '#0a0a0a',
-        color: '#ffffff',
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        padding: '20px',
-        textAlign: 'center',
-      }}
-    >
-      <div
-        style={{
-          backgroundColor: '#141414',
-          border: '1px solid #262626',
-          borderRadius: '16px',
-          padding: '40px',
-          maxWidth: '500px',
-          width: '100%',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-        }}
-      >
-        <div style={{ fontSize: '48px', marginBottom: '20px' }}>🚀</div>
-        <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '10px', color: '#3b82f6' }}>
-          Dokany Engine
-        </h1>
-        <p style={{ color: '#a3a3a3', fontSize: '15px', lineHeight: '1.6', marginBottom: '25px' }}>
-          البنية التحتية للمشروع تعمل الآن بنجاح على الـ{' '}
-          <span style={{ color: '#10b981', fontWeight: '600' }}>Cloudflare Edge Runtime</span>. جميع البوابات والمحركات مأمنة وجاهزة.
-        </p>
-
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px',
-            textAlign: 'left',
-            backgroundColor: '#050505',
-            padding: '15px',
-            borderRadius: '8px',
-            fontSize: '13px',
-            fontFamily: 'monospace',
-            color: '#cbd5e1',
-            border: '1px solid #1f1f1f',
-          }}
+    <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-slate-50">
+      <div className="text-center space-y-4">
+        <h1 className="text-2xl font-bold">اختبار Quick Product Sheet 🚀</h1>
+        
+        <button
+          onClick={() => setIsOpen(true)}
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md font-medium cursor-pointer"
         >
-          <div>🟢 Core Infrastructure: Active</div>
-          <div>🟢 Edge Routing: 100% OK</div>
-          <div>🔒 Auth Gateway: Armed</div>
-        </div>
-
-        <p style={{ marginTop: '20px', fontSize: '12px', color: '#525252' }}>
-          Dokany Repository • Production Environment
-        </p>
+          تجربة فتح الـ Sheet
+        </button>
       </div>
-    </div>
+
+      <QuickProductSheet
+        storeId="test-store-123"
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+      />
+    </main>
   );
 }

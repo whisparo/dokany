@@ -1,10 +1,10 @@
-
-import { sqliteTable, text, integer, index, uniqueIndex, check } from 'drizzle-orm/sqlite-core';
+// src/lib/db/schema/auth.ts
+import { sqliteTable, text, integer, index, uniqueIndex, check, foreignKey } from 'drizzle-orm/sqlite-core';
 import { sql, type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 import { users } from './users';
 
 // ============================================================================
-// 1. جدول الجلسات (Session) - متوافق مع معايير Better Auth الفطرية
+// 1. جدول الجلسات (Session)
 // ============================================================================
 export const sessions = sqliteTable(
   'session',
@@ -14,12 +14,19 @@ export const sessions = sqliteTable(
     token: text('token').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
+    userId: text('user_id').notNull(), // ✅ إزالة .references
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),
     tokenFamily: text('token_family').notNull(),
   },
   (table) => [
+    // ✅ العلاقة الخارجية الصارمة
+    foreignKey({ 
+      columns: [table.userId], 
+      foreignColumns: [users.id], 
+      name: 'session_user_id_fkey' 
+    }).onDelete('cascade').onUpdate('cascade'),
+
     uniqueIndex('session_token_unique').on(table.token),
     index('session_expires_at_idx').on(table.expiresAt),
     index('session_token_family_idx').on(table.tokenFamily),
@@ -30,7 +37,7 @@ export const sessions = sqliteTable(
 );
 
 // ============================================================================
-// 2. جدول الحسابات الخارجية (Account) - متوافق مع Better Auth
+// 2. جدول الحسابات الخارجية (Account)
 // ============================================================================
 export const accounts = sqliteTable(
   'account',
@@ -38,7 +45,7 @@ export const accounts = sqliteTable(
     id: text('id').primaryKey(),
     accountId: text('account_id').notNull(),
     providerId: text('provider_id').notNull(),
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
+    userId: text('user_id').notNull(), // ✅ إزالة .references
     accessToken: text('access_token'),
     refreshToken: text('refresh_token'),
     idToken: text('id_token'),
@@ -50,6 +57,13 @@ export const accounts = sqliteTable(
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
   },
   (table) => [
+    // ✅ العلاقة الخارجية الصارمة
+    foreignKey({ 
+      columns: [table.userId], 
+      foreignColumns: [users.id], 
+      name: 'account_user_id_fkey' 
+    }).onDelete('cascade').onUpdate('cascade'),
+
     index('account_user_provider_idx').on(table.userId, table.providerId),
     index('account_provider_idx').on(table.providerId),
     uniqueIndex('account_provider_account_unique').on(table.providerId, table.accountId),
@@ -59,7 +73,7 @@ export const accounts = sqliteTable(
 );
 
 // ============================================================================
-// 3. جدول التحقق (Verification) - متوافق مع Better Auth
+// 3. جدول التحقق (Verification)
 // ============================================================================
 export const verifications = sqliteTable(
   'verification',

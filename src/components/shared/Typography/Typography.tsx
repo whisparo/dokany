@@ -5,7 +5,7 @@ import {
   type ElementType, 
   type ReactNode, 
   type HTMLAttributes,
-  type ElementRef
+  type ComponentRef
 } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -20,8 +20,10 @@ export type TypographyVariant =
   | 'h4'
   | 'h5'
   | 'h6'
+  | 'p'
   | 'body1'
   | 'body2'
+  | 'body-sm'
   | 'caption'
   | 'overline'
   | 'gradient';
@@ -118,8 +120,10 @@ const variantClasses: Record<TypographyVariant, string> = {
   h4: 'text-xl font-semibold tracking-tight first:mt-0',
   h5: 'text-lg font-semibold first:mt-0',
   h6: 'text-base font-semibold first:mt-0',
+  p: 'text-base leading-7',
   body1: 'text-base leading-7',
   body2: 'text-sm leading-6',
+  'body-sm': 'text-sm leading-5',
   caption: 'text-xs leading-5 text-muted-foreground',
   overline: 'text-xs uppercase tracking-wider',
   gradient: 'text-4xl font-extrabold bg-gradient-to-r from-primary-500 via-accent-500 to-secondary-500 bg-clip-text text-transparent dark:from-primary-400 dark:via-accent-400 dark:to-secondary-400',
@@ -132,8 +136,10 @@ const variantMapping: Record<TypographyVariant, ElementType> = {
   h4: 'h4',
   h5: 'h5',
   h6: 'h6',
+  p: 'p',
   body1: 'p',
   body2: 'p',
+  'body-sm': 'p',
   caption: 'span',
   overline: 'span',
   gradient: 'h1',
@@ -246,19 +252,17 @@ const TypographyComponent = forwardRef<HTMLElement, TypographyProps>(
       className
     );
 
-    // تجميع الـ Inline Styles الآمنة
     const combinedStyle = {
       ...style,
       ...(customColor ? { color: customColor } : {}),
       ...(opacity !== undefined ? { opacity } : {}),
     };
 
-    // التكنيك النظيف: إجبار الـ Element على التعامل كـ Tag صريح لحل عقدة الـ DOM Types
     const Tag = Component as 'p';
 
     return (
       <Tag
-        ref={ref as React.Ref<HTMLParagraphElement>} // كاستينج دقيق ونقي متوافق مع الـ Tag الافتراضي
+        ref={ref as React.Ref<HTMLParagraphElement>}
         className={classes}
         style={combinedStyle}
         {...props}
@@ -271,9 +275,8 @@ const TypographyComponent = forwardRef<HTMLElement, TypographyProps>(
 
 TypographyComponent.displayName = 'Typography';
 
-// التصدير السحري لتغيير نوع الـ Ref والـ Props ديناميكياً حسب الـ Tag المستخدم من برا
 export const Typography = TypographyComponent as <E extends ElementType = 'p'>(
-  props: TypographyProps & { as?: E } & { ref?: React.Ref<React.ComponentRef<E>> }
+  props: TypographyProps & { as?: E } & { ref?: React.Ref<ComponentRef<E>> }
 ) => ReactNode;
 
 export default Typography;

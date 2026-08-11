@@ -16,7 +16,7 @@ import { authRouter } from './routes/auth';
 import { telegramRouter } from './routes/telegram';
 import { cronRouter } from './routes/cron';
 import { errorsRouter } from './routes/errors';
-
+import { cartRouter } from './routes/cart';
 // 🏛️ الاستيرادات المعتمدة والدقيقة للمشروع
 import { classifyError } from '@/lib/errors/classifier';
 import { sendErrorToTelegram, createTestErrorForNotifier } from '@/lib/errors/notifier';
@@ -170,6 +170,7 @@ app.route('/api', authRouter);
 app.route('/api', telegramRouter);
 app.route('/api', cronRouter);
 app.route('/api', errorsRouter);
+app.route('/api', cartRouter);
 
 // 🎯 2. Pass-through Fallback: أي مسار غير معرف في Hono يروح لـ Next.js مباشرة
 app.all('*', async (c) => {

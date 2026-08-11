@@ -6,7 +6,7 @@ import { sql, type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 // 📋 1. جدول المستخدمين الرئيسي (user)
 // ============================================
 export const users = sqliteTable(
-  'user', // ✅ تم تحويله للمفرد ليطابق معايير Better Auth تلقائياً
+  'user', // ✅ Better Auth expects singular 'user'
   {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
@@ -29,12 +29,11 @@ export const users = sqliteTable(
     role: text('role').notNull().default('merchant'),
     authMethod: text('auth_method').notNull().default('telegram'),
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
-    deletedBy: text('deleted_by'), // ربط حلقي آمن أسفل الجدول
+    deletedBy: text('deleted_by'),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
   },
   (table) => [
-    // ✅ تم التعديل هنا لتجنب أي Deprecated Errors في إصدارات Drizzle الجديدة
     foreignKey({
       name: 'user_deleted_by_fkey',
       columns: [table.deletedBy] as const,
@@ -86,47 +85,7 @@ export const userStats = sqliteTable(
 );
 
 // ============================================
-// 🎫 3. جدول الجلسات (session) - متوافق مع Better Auth
-// ============================================
-export const sessions = sqliteTable(
-  'session', // ✅ تم تحويله للمفرد
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id').notNull(),
-    token: text('token').notNull(),
-    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
-    ipAddress: text('ip_address'),
-    userAgent: text('user_agent'),
-    
-    // حقولك المخصصة الممتازة للـ Rotation والحماية
-    tokenFamily: text('token_family').notNull(),
-    deviceFingerprint: text('device_fingerprint'),
-    refreshExpiresAt: integer('refresh_expires_at', { mode: 'timestamp' }).notNull(),
-    isRevoked: integer('is_revoked', { mode: 'boolean' }).notNull().default(false),
-    revokedAt: integer('revoked_at', { mode: 'timestamp' }),
-    revokedReason: text('revoked_reason'),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
-    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
-  },
-  (table) => [
-    foreignKey({ 
-      name: 'session_user_id_fkey',
-      columns: [table.userId] as const, 
-      foreignColumns: [users.id] as const 
-    }).onDelete('cascade').onUpdate('cascade'),
-    uniqueIndex('session_token_unique').on(table.token),
-    check('chk_session_revoke_reason', sql`${table.revokedReason} IN ('user_logout', 'security_breach', 'admin_revoke', 'expired', 'token_rotation')`),
-    check('chk_revoked_consistency', sql`(${table.isRevoked} = 0 OR ${table.revokedAt} IS NOT NULL)`),
-    check('chk_refresh_expires_gt_expires', sql`${table.refreshExpiresAt} > ${table.expiresAt}`),
-    index('session_user_id_idx').on(table.userId),
-    index('session_token_family_idx').on(table.tokenFamily),
-    index('session_user_token_family_idx').on(table.userId, table.tokenFamily),
-    index('session_expires_at_idx').on(table.expiresAt),
-  ]
-);
-
-// ============================================
-// 📝 4. جدول روابط السحر (magic_tokens)
+// 📝 3. جدول روابط السحر (magic_tokens)
 // ============================================
 export const magicTokens = sqliteTable(
   'magic_tokens',
@@ -151,7 +110,7 @@ export const magicTokens = sqliteTable(
 );
 
 // ============================================
-// 🔐 5. جدول تغييرات كلمات المرور (password_history)
+// 🔐 4. جدول تغييرات كلمات المرور (password_history)
 // ============================================
 export const passwordHistory = sqliteTable(
   'password_history',
@@ -176,70 +135,13 @@ export const passwordHistory = sqliteTable(
 );
 
 // ============================================
-// 🔗 6. جدول الحسابات الخارجية (account) - متوافق مع Better Auth
-// ============================================
-export const accounts = sqliteTable(
-  'account', // ✅ تم تحويله للمفرد
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
-    accountId: text('account_id').notNull(),
-    providerId: text('provider_id').notNull(),
-    accessToken: text('access_token'),
-    refreshToken: text('refresh_token'),
-    accessTokenExpiresAt: integer('access_token_expires_at', { mode: 'timestamp' }),
-    refreshTokenExpiresAt: integer('refresh_expires_at', { mode: 'timestamp' }),
-    scope: text('scope'),
-    idToken: text('id_token'),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
-    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
-  },
-  (table) => [
-    index('account_user_id_idx').on(table.userId),
-    uniqueIndex('account_provider_account_idx').on(table.providerId, table.accountId),
-  ]
-);
-
-// ============================================
-// ✅ 7. جدول التحقق (verification) - متوافق مع Better Auth
-// ============================================
-export const verifications = sqliteTable(
-  'verification', // ✅ تم تحويله للمفرد
-  {
-    id: text('id').primaryKey(),
-    identifier: text('identifier').notNull(),
-    value: text('value').notNull(),
-    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
-    updatedAt: integer('updated_at', { mode: 'timestamp' }),
-  },
-  (table) => [
-    uniqueIndex('verification_identifier_value_unique').on(table.identifier, table.value),
-    index('verification_expires_at_idx').on(table.expiresAt),
-    index('verification_identifier_idx').on(table.identifier),
-  ]
-);
-
-// ============================================
-// 📦 أنواع TypeScript النظيفة والقياسية
+// 📦 أنواع TypeScript
 // ============================================
 export type User = InferSelectModel<typeof users>;
 export type NewUser = InferInsertModel<typeof users>;
-
 export type UserStats = InferSelectModel<typeof userStats>;
 export type NewUserStats = InferInsertModel<typeof userStats>;
-
-export type Session = InferSelectModel<typeof sessions>;
-export type NewSession = InferInsertModel<typeof sessions>;
-
 export type MagicToken = InferSelectModel<typeof magicTokens>;
 export type NewMagicToken = InferInsertModel<typeof magicTokens>;
-
 export type PasswordHistory = InferSelectModel<typeof passwordHistory>;
 export type NewPasswordHistory = InferInsertModel<typeof passwordHistory>;
-
-export type Account = InferSelectModel<typeof accounts>;
-export type NewAccount = InferInsertModel<typeof accounts>;
-
-export type Verification = InferSelectModel<typeof verifications>;
-export type NewVerification = InferInsertModel<typeof verifications>;

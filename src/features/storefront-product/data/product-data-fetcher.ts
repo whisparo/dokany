@@ -1,6 +1,4 @@
 // src/features/storefront-product/data/product-data-fetcher.ts
-
-import { unstable_cache } from 'next/cache';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, and, isNull, ne } from 'drizzle-orm';
 import { products } from '@/lib/db/schema';
@@ -26,9 +24,8 @@ export function mapRawProducts(dbProducts: any[]): Product[] {
         imageUrls = [];
       }
     }
-
     const mainImage = p.imageSrc || (imageUrls.length > 0 ? imageUrls[0] : '/images/default-product.png');
-
+    
     return {
       id: p.id,
       storeId: p.storeId,
@@ -68,64 +65,59 @@ export function mapRawProducts(dbProducts: any[]): Product[] {
   });
 }
 
-// 📦 جلب منتج واحد بالـ Slug
-export const getProductData = unstable_cache(
-  async (storeId: string, slug: string, env: Env): Promise<Product | null> => {
-    if (!storeId || !slug) throw new Error('[getProductData] storeId and slug are required');
-    
-    const db = getDb(env);
-    const decodedSlug = decodeURIComponent(slug);
-
-    const p = await db
-      .select()
-      .from(products)
-      .where(
-        and(
-          eq(products.storeId, storeId),
-          eq(products.slug, decodedSlug),
-          isNull(products.deletedAt)
-        )
+// ✅ Plain async function - NO unstable_cache
+export async function getProductData(
+  storeId: string,
+  slug: string,
+  env: Env
+): Promise<Product | null> {
+  if (!storeId || !slug) throw new Error('[getProductData] storeId and slug are required');
+  
+  const db = getDb(env);
+  const decodedSlug = decodeURIComponent(slug);
+  
+  const p = await db
+    .select()
+    .from(products)
+    .where(
+      and(
+        eq(products.storeId, storeId),
+        eq(products.slug, decodedSlug),
+        isNull(products.deletedAt)
       )
-      .get();
+    )
+    .get();
+  
+  if (!p) return null;
+  return mapRawProducts([p])[0];
+}
 
-    if (!p) return null;
-    return mapRawProducts([p])[0];
-  },
-  ['product-by-slug'],
-  { revalidate: 60, tags: ['product'] }
-);
-
-// 🔗 جلب المنتجات ذات الصلة (Related Products)
-export const getRelatedProductsData = unstable_cache(
-  async (
-    storeId: string,
-    categoryId: string | null,
-    currentProductId: string,
-    env: Env,
-    limit: number = 4
-  ): Promise<Product[]> => {
-    const db = getDb(env);
-
-    // إذا وُجد قسم يجلب منه، وإلا يجلب أحدث منتجات المتجر ما عدا الحالي
-    const conditions = [
-      eq(products.storeId, storeId),
-      ne(products.id, currentProductId),
-      isNull(products.deletedAt),
-    ];
-
-    if (categoryId) {
-      conditions.push(eq(products.categoryId, categoryId));
-    }
-
-    const dbProducts = await db
-      .select()
-      .from(products)
-      .where(and(...conditions))
-      .limit(limit)
-      .all();
-
-    return mapRawProducts(dbProducts);
-  },
-  ['related-products-data'],
-  { revalidate: 60, tags: ['product'] }
-);
+// ✅ Plain async function - NO unstable_cache
+export async function getRelatedProductsData(
+  storeId: string,
+  categoryId: string | null,
+  currentProductId: string,
+  env: Env,
+  limit: number = 4
+): Promise<Product[]> {
+  const db = getDb(env);
+  
+  const conditions = [
+    eq(products.storeId, storeId),
+    ne(products.id, currentProductId),
+    isNull(products.deletedAt),
+  ];
+  
+  if (categoryId) {
+    conditions.push(eq(products.categoryId, categoryId));
+  }
+  
+  const dbProducts = await db
+    .select()
+    .from(products)
+    .where(and(...conditions))
+    .limit(limit)
+    .all();
+  
+  return mapRawProducts(dbProducts);
+}

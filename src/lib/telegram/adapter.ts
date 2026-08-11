@@ -1,6 +1,6 @@
 // src/lib/telegram/adapter.ts
 
-import type { ButtonItem, OnboardingSession, HandlerContext } from './types';
+import type { ButtonItem, OnboardingSession } from './types';
 import { getSession, saveSession } from './memory';
 import { handleOnboarding, type SecureHandlerContext } from './handlers/onboarding-flow';
 import { getDb } from '@/lib/db';
@@ -30,7 +30,7 @@ export interface TelegramContext {
   externalId: string;
   message: string;
   contact?: { phone_number: string };
-  telegramUserId?: number; // 🎯 تعديل النوع إلى number ليتوافق تماماً مع HandlerContext
+  telegramUserId?: number;
 }
 
 // ============================================================
@@ -55,7 +55,7 @@ export function telegramToContext(update: TelegramUpdate): TelegramContext | nul
     externalId: String(chat.id),
     message: text,
     contact: contact ? { phone_number: contact.phone_number } : undefined,
-    telegramUserId: fromUser?.id, // 🎯 الحفاظ عليه كـ number كما هو متوقع في Types
+    telegramUserId: fromUser?.id,
   };
 }
 
@@ -100,13 +100,38 @@ export async function handleTelegramUpdate(
       await saveSession(db, ctx.platform, ctx.externalId, updatedSession);
     }
 
-    // 5️⃣ إرسال الرسالة والأزرار للمستخدم
+    // 🎯 5️⃣ معالجة أمر إخفاء الكيبورد فوراً لمنع تعارضه مع أزرار الـ Inline التالية
+    if (result.removeKeyboard) {
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: ctx.externalId,
+          text: '🔄 جاري التحديث...',
+          reply_markup: { remove_keyboard: true },
+        }),
+      }).then(res => res.json()).then(async (data) => {
+        if (data.ok && data.result?.message_id) {
+          await fetch(`https://api.telegram.org/bot${botToken}/deleteMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: ctx.externalId,
+              message_id: data.result.message_id,
+            }),
+          });
+        }
+      }).catch(() => {});
+    }
+
+    // 6️⃣ إرسال الرسالة والأزرار للمستخدم
     if (result.reply) {
       await sendTelegramMessage(
         botToken,
         ctx.externalId,
         result.reply,
-        result.buttons as ButtonRows
+        result.buttons as ButtonRows,
+        result.persistentButtons as ButtonRows
       );
     }
   } catch (error) {
@@ -120,7 +145,7 @@ export async function handleTelegramUpdate(
 }
 
 /**
- * إرسال رسالة إلى تليجرام مع دعم إعداد الأزرار التفاعلية
+ * إرسال رسالة إلى تليجرام مع دعم إعداد الأزرار التفاعلية والكيبورد الثابت
  */
 export async function sendTelegramMessage(
   botToken: string,
@@ -162,32 +187,51 @@ export async function sendTelegramMessage(
  * بناء هيكل الأزرار المخصص لـ Telegram API
  */
 function buildReplyMarkup(buttons?: ButtonRows, persistentButtons?: ButtonRows) {
+  // 🎯 1. الأزرار الدائمة الثابتة أسفل الشات (مثل زر لوحة التحكم الثابت)
   if (persistentButtons && Array.isArray(persistentButtons) && persistentButtons.length > 0) {
     return {
       keyboard: (persistentButtons as ButtonItem[][]).map((row) =>
-        row.map((btn) => ({ text: btn.text }))
+        row.map((btn) => {
+          if (btn.type === 'web_app' && btn.url) {
+            return { text: btn.text, web_app: { url: btn.url } };
+          }
+          return { text: btn.text };
+        })
       ),
       resize_keyboard: true,
-      one_time_keyboard: false,
+      one_time_keyboard: false, // 💡 يضمن عدم اختفاء الزر حتى عند الضغط عليه أو إرسال /start
     };
   }
 
+  // 🎯 2. حالة عدم وجود أزرار
   if (!buttons || (Array.isArray(buttons) && buttons.length === 0)) {
-    return { remove_keyboard: true };
+    return undefined;
   }
 
+  // 🎯 3. بناء الأزرار التفاعلية العادية
   if (Array.isArray(buttons)) {
     if (buttons.length > 0 && Array.isArray(buttons[0])) {
       const grid = buttons as ButtonItem[][];
 
-      if (grid.length === 1 && grid[0].length === 1 && grid[0][0]?.callback_data === 'share_contact') {
+      // زر مشاركة رقم الهاتف (Reply Keyboard)
+      const hasContactInGrid = grid.some((row) =>
+        row.some((b) => b.type === 'contact' || b.callback_data === 'share_contact')
+      );
+
+      if (hasContactInGrid) {
         return {
-          keyboard: [[{ text: grid[0][0].text, request_contact: true }]],
+          keyboard: grid.map((row) =>
+            row.map((btn) => ({
+              text: btn.text,
+              request_contact: true,
+            }))
+          ),
           resize_keyboard: true,
-          one_time_keyboard: true,
+          one_time_keyboard: true, // 💡 يختفي بمجرد مشاركة الهاتف
         };
       }
 
+      // أزرار الـ Inline العادية (مثل زر الرجوع ورابط الدخول)
       return {
         inline_keyboard: grid.map((row) =>
           row.map((btn) => {
@@ -202,14 +246,14 @@ function buildReplyMarkup(buttons?: ButtonRows, persistentButtons?: ButtonRows) 
     }
 
     const flatList = buttons as ButtonItem[];
-    const hasContact = flatList.some((b) => b.type === 'contact');
+    const hasContact = flatList.some((b) => b.type === 'contact' || b.callback_data === 'share_contact');
 
     if (hasContact) {
       return {
         keyboard: [
           flatList.map((b) => ({
             text: b.text,
-            request_contact: b.type === 'contact' ? true : undefined,
+            request_contact: true,
           })),
         ],
         resize_keyboard: true,

@@ -42,9 +42,9 @@ export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<Handle
     };
     await saveSession(db, ctx.platform, ctx.externalId, nextSession);
     
-    // إذا كان المدخل الحالي هو الاسم (وليس رقم هاتف)، دعه يمر كـ Name مباشرة دون إظهار رسالة خطأ الهاتف!
     return {
       reply: `✅ تم تأكيد رقم هاتفك مسبقاً.\n\n👋 يرجى الآن إدخال اسمك الشخصي (اسم التاجر):`,
+      removeKeyboard: true, // 🎯 إزالة أزرار رقم الهاتف السابقة
       buttons: [[{ text: '🔙 رجوع', value: 'رجوع' }]], 
       session: nextSession,
     };
@@ -121,6 +121,7 @@ export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<Handle
 
   return {
     reply: `✅ تم تفعيل وتأكيد رقم هاتفك بنجاح (${phone}).\n\n👋 يرجى الآن إدخال اسمك الشخصي (اسم التاجر):`,
+    removeKeyboard: true, // 🎯 إخفاء لوحة مفاتيح مشاركة رقم الهاتف فور نجاح الالتقاط
     buttons: [[{ text: '🔙 رجوع', value: 'رجوع' }]], 
     session: nextSession,
   };

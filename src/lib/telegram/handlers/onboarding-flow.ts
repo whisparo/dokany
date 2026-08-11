@@ -17,7 +17,10 @@ const STEPS = ['phone', 'name', 'store', 'email', 'niche'] as const;
 type OnboardingStep = (typeof STEPS)[number];
 
 export interface SecureHandlerContext extends HandlerContext {
-  env: { DB: D1Database }; 
+  env: { 
+    DB: D1Database;
+    NEXT_PUBLIC_APP_URL?: string;
+  }; 
 }
 
 // 🎯 دالة مساعدة موحدة للبحث عن المستخدم بأي معرف تليجرام
@@ -35,24 +38,32 @@ async function findUserByTelegram(db: ReturnType<typeof getDb>, telegramUserId: 
 export async function handleOnboarding(ctx: SecureHandlerContext): Promise<HandlerResult> {
   const db = getDb(ctx.env);
 
-  // 🎯 جلب فوري للمستخدم من قاعدة البيانات لتأمين القرارات
+  // 🎯 جلب فوري للمستخدم من قاعدة البيانات
   const dbUser = ctx.telegramUserId 
     ? await findUserByTelegram(db, ctx.telegramUserId)
     : null;
 
-  // 1️⃣ لو الحساب مكتمل، تأكد أولاً إنه موجود في الداتابيز فعلياً
+  const msg = ctx.message ? ctx.message.trim() : '';
+
+  // 🎯 التقاط الضغط على زرار الكيبورد السفلي "🎛️ لوحة التحكم" في أي وقت
+  if (msg === '🎛️ لوحة التحكم' || msg === 'لوحة التحكم' || msg === 'get_dashboard') {
+    if (dbUser) {
+      return handleGetDashboard(ctx, dbUser);
+    }
+  }
+
+  // 1️⃣ لو الحساب مكتمل، تأكد أولاً أنه موجود في الداتابيز فعلياً
   if (ctx.session?.step === 'completed') {
     if (dbUser) {
       return handleGetDashboard(ctx, dbUser);
     } else {
-      // لو الجلسة بتقول completed بس المستخدم مش موجود في الداتابيز، امسح الجلسة ووجّه للبدء
       await deleteSession(db, ctx.platform, ctx.externalId);
       ctx.session = { step: 'phone' };
     }
   }
 
   // 2️⃣ البداية الذكية المحصنة مع /start
-  if (ctx.message === '/start') {
+  if (msg === '/start') {
     if (dbUser) {
       // أ) فحص وجود متجر قائم
       const existingStore = await db.query.stores.findFirst({ where: eq(stores.ownerId, dbUser.id) });
@@ -66,7 +77,8 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
       if (!dbUser.name || dbUser.name.trim() === '') {
         ctx.session = { step: 'name', phone: dbUser.phoneNumber || undefined };
         await saveSession(db, ctx.platform, ctx.externalId, ctx.session);
-        return handleNameStep(ctx);
+        const nameRes = await handleNameStep(ctx);
+        return { ...nameRes, removeKeyboard: true };
       }
 
       if (!dbUser.email || dbUser.email.trim() === '') {
@@ -94,18 +106,13 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     return {
       reply:
         '🚀 مرحباً بك في منصة دكاني! المنصة الأسرع لإنشاء متجرك الإلكتروني وإدارته بالكامل عبر تيليجرام.\n\nلبدء إنشاء متجرك في أقل من دقيقة، يرجى مشاركة رقم هاتفك عبر الزر بالأسفل أو إرساله مباشرة:',
-      buttons: [[{ text: '📱 مشاركة رقم الهاتف', callback_data: 'share_contact' }]],
+      buttons: [[{ text: '📱 مشاركة رقم الهاتف', type: 'contact', callback_data: 'share_contact' }]],
       session: { step: 'phone' },
     };
   }
 
-  // 3️⃣ تأمين الـ Contact المباشر القادم من زر التليجرام
+  // 3️⃣ توجيه الـ Contact القادم من زر التليجرام لـ handlePhoneStep
   if (ctx.contact) {
-    if (dbUser && dbUser.phoneNumber) {
-      console.log('⚡ [Onboarding Contact Bypass] Phone already exists in DB. Redirecting to name.');
-      ctx.session = { ...ctx.session, step: 'name', phone: dbUser.phoneNumber };
-      return handleNameStep(ctx);
-    }
     ctx.session = { ...ctx.session, step: 'phone' };
     return handlePhoneStep(ctx);
   }
@@ -181,13 +188,13 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
   }
 
   const step = currentStep;
-  const msg = ctx.message ? ctx.message.trim() : '';
 
   if (msg === 'رجوع') return handleBack(ctx, step);
   if (msg === 'إلغاء') {
     await deleteSession(db, ctx.platform, ctx.externalId);
     return {
       reply: '❌ تم إلغاء عملية التسجيل بنجاح. يمكنك البدء من جديد في أي وقت بإرسال /start.',
+      removeKeyboard: true,
       buttons: [],
     };
   }
@@ -205,11 +212,11 @@ export async function handleOnboarding(ctx: SecureHandlerContext): Promise<Handl
     case 'email': return handleEmailStep(ctx); 
     case 'niche': return handleNicheStep(ctx);
     default:
-      return { reply: '❌ حدث خطأ في حالة التسجيل. أرسل /start للبدء من جديد.' };
+      return { reply: '❌ حدث خطأ في حالة التسجيل. أرسل /start للبدء من جديد.', removeKeyboard: true };
   }
 }
 
-// 🎯 تحسين دالة الدخول وتمرير الـ User والـ Store المجلوبين مسبقاً لتوفير استعلامات قاعدة البيانات
+// 🎯 معالج واجهة لوحة التحكم للتاجر المسجل المكتمل
 export async function handleGetDashboard(
   ctx: SecureHandlerContext, 
   passedUser?: any, 
@@ -220,11 +227,10 @@ export async function handleGetDashboard(
   const user = passedUser || (ctx.telegramUserId ? await findUserByTelegram(db, ctx.telegramUserId) : null);
 
   if (!user) {
-    // 🎯 الحل الذهبي: لو مش موجود في الداتابيز، حوله لطلب الهاتف بدل إظهار رسالة خطأ صلبة
     ctx.session = { step: 'phone' };
     return {
       reply: '🚀 أهلاً بك في دكاني! يبدو أنك لم تُكمل إنشاء متجرك بعد.\n\nمن فضلك شاركنا رقم هاتفك للبدء:',
-      buttons: [[{ text: '📱 مشاركة رقم الهاتف', callback_data: 'share_contact' }]],
+      buttons: [[{ text: '📱 مشاركة رقم الهاتف', type: 'contact', callback_data: 'share_contact' }]],
     };
   }
 
@@ -233,16 +239,34 @@ export async function handleGetDashboard(
   });
 
   if (!store) {
-    // لو سجل بياناته بس لسه ما كملش المتجر
     ctx.session = { step: 'store', phone: user.phoneNumber || undefined, name: user.name };
     return handleStoreStep(ctx);
   }
 
-  const loginLink = `https://www.dokany.workers.dev/dashboard?user=${user.id}&store=${store.id}`;
+  // 🎯 تجهيز الروابط والماجيك لينك المباشر
+  const baseUrl = ctx.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || 'https://www.dokany.workers.dev';
+  const storeUrl = (store as any).url || `${baseUrl}/store/${store.id}`;
+  const magicDashboardUrl = (store as any).dashboardLink || `${baseUrl}/ar/dashboard?store=${store.id}`;
 
   return {
-    reply: `🔗 أهلاً بك مجدداً! تم تجهيز رابط الدخول الخاص بك لمتجر "${store.name}":`,
-    buttons: [[{ text: '🚀 افتح لوحة التحكم', url: loginLink }]],
+    // 🎯 تم إضافة روابط النص المباشرة هنا جوه الرسالة النصية نفسها
+    reply: `🔗 أهلاً بك مجدداً يا ${user.name || 'تاجرنا العزيز'}! 👋\n\nتم تجهيز متجرك "${store.name}".\n\n🚀 **رابط لوحة التحكم المباشر:**\n${magicDashboardUrl}\n\n🌍 **رابط متجرك:**\n${storeUrl}`,
+    
+    // 🎯 الأزرار الشفافة تظل موجودة كـ خيار إضافي
+    buttons: [
+      [{ text: '🌍 زيارة المتجر', url: storeUrl }],
+      [{ text: '🎛️ دخول لوحة التحكم', url: magicDashboardUrl }]
+    ],
+
+    persistentButtons: [
+      [{ text: '🎛️ لوحة التحكم', value: '🎛️ لوحة التحكم' }]
+    ],
+    
+    session: {
+      step: 'completed',
+      phone: user.phoneNumber || undefined,
+      name: user.name,
+    }
   };
 }
 
@@ -252,7 +276,7 @@ async function handleBack(ctx: SecureHandlerContext, currentStep: string): Promi
 
   if (idx <= 0) {
     await deleteSession(db, ctx.platform, ctx.externalId);
-    return { reply: '❌ تم إلغاء عملية التسجيل.' };
+    return { reply: '❌ تم إلغاء عملية التسجيل.', removeKeyboard: true };
   }
 
   const prevStep = STEPS[idx - 1];
@@ -297,7 +321,7 @@ async function handleBack(ctx: SecureHandlerContext, currentStep: string): Promi
     const { phone, ...rest } = updatedSession;
     return {
       reply: '🚀 يرجى مشاركة رقم هاتفك عبر الزر بالأسفل أو إرساله مباشرة لبدء إنشاء المتجر:',
-      buttons: [[{ text: '📱 مشاركة رقم الهاتف', callback_data: 'share_contact' }]],
+      buttons: [[{ text: '📱 مشاركة رقم الهاتف', type: 'contact', callback_data: 'share_contact' }]],
       session: rest,
     };
   }

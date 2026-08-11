@@ -30,7 +30,8 @@ export interface CheckoutFormSubmission {
     email?: string;
   };
   shippingAddress: ShippingAddress;
-  items: Parameters<typeof OrderService.prepareOrderItems>[0];
+  // 🟢 تمرير [0] للـ items فقط ليأخذ RawOrderItemInput[]
+  items: Parameters<typeof OrderService.prepareOrderItems>[0]; 
   shippingCost: number;
   discountAmount?: number;
   taxAmount?: number;
@@ -76,8 +77,8 @@ export async function handleCheckoutSubmit(
       email: payload.customer.email,
     });
 
-    // 📦 4. تحضير العناصر وحساب الإجماليات
-    const preparedItems = OrderService.prepareOrderItems(payload.items);
+    // 📦 4. تحضير العناصر وحساب الإجماليات (🟢 تم تمرير storeId كمعامل ثانٍ)
+    const preparedItems = OrderService.prepareOrderItems(payload.items, storeId);
 
     if (!preparedItems || preparedItems.length === 0) {
       return { success: false, error: 'سلة الشراء فارغة' };
@@ -138,7 +139,7 @@ export async function handleCheckoutSubmit(
   } catch (err: unknown) {
     console.error('Checkout Submission Error:', err);
 
-    // 🛠️ 6. معالجة موحدة لكل أنواع الأخطاء (Rate Limit, SystemError, الخ) عبر handleActionError
+    // 🛠️ 6. معالجة موحدة لكل أنواع الأخطاء عبر handleActionError
     return {
       success: false,
       error: handleActionError(err),

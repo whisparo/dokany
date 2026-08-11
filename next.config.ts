@@ -9,6 +9,13 @@ const bundleAnalyzer = withBundleAnalyzer({
 });
 
 const nextConfig: NextConfig = {
+  // 🌐 السماح للشبكة المحلية بالاتصال بـ Dev Server بدون حظر Cross-Origin
+  allowedDevOrigins: [
+    '192.168.1.13',
+    'localhost',
+    '127.0.0.1',
+  ],
+
   // ❌ تم إزالة output: 'standalone' لمنع التعارض مع @opennextjs/cloudflare
 
   // 1. تفعيل الضغط التلقائي للـ Output (Gzip / Brotli)

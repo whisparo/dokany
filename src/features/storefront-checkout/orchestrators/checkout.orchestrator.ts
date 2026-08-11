@@ -1,4 +1,4 @@
-// src/lib/orchestrators/checkout.orchestrator.ts
+//src/features/storefront-checkout/orchestrators/checkout.orchestrator.ts
 
 import { getCheckoutRawData } from '@/features/storefront-checkout/data/checkout-data-fetcher';
 import { adaptCheckoutPage } from '@/features/storefront-checkout/adapters/checkout-page.adapter';
@@ -7,25 +7,31 @@ import type { CheckoutPayload } from '@/features/storefront-checkout/adapters/ch
 // 🔗 استيراد الـ Guards والجداول والأنواع من الـ Schema مباشرة
 import { idempotency } from '@/lib/idempotency';
 import { getDb } from '@/lib/db';
-import { orders } from '@/lib/db/schema/orders'; 
-import type { ShippingAddress } from '@/lib/db/schema/orders'; // ✅ المصدر الأصلي والوحيد للنوع
+import { orders } from '@/lib/db/schema/orders';
+import type { ShippingAddress } from '@/lib/db/schema/orders';
 import { orderItems } from '@/lib/db/schema/order-items';
 import type { ProductOptions, OrderItemMetadata } from '@/lib/db/schema/order-items';
+
+// 🚀 الإضافات الحرجة: خصم المخزون + تحديث الإحصائيات
+import { updateStock } from '@/lib/services/inventory-service';
+import {
+  updateStoreStatsAfterOrder,
+  updateCustomerStats,
+  updateProductStatsBatch,
+} from '@/lib/services/store-stats';
 
 import type { Env } from '@/lib/env';
 
 /**
  * 1. جلب بيانات صفحة الدفع (Query - Safe)
- * ✅ إضافة env كمعامل
  */
 export async function getCheckoutData(
   storeId: string,
-  env: Env, // ✅ إضافة env
+  env: Env,
   customerId?: string,
   selectedShippingId?: string,
   userCurrency: string = 'EGP'
 ): Promise<CheckoutPayload | null> {
-  // ✅ تمرير env إلى getCheckoutRawData
   const rawData = await getCheckoutRawData(storeId, env, customerId);
   if (!rawData) return null;
 
@@ -34,7 +40,7 @@ export async function getCheckoutData(
 
 /**
  * 2. تنفيذ عملية الشراء الفعلية (Mutation - Critical)
- * متوافقة بالكامل مع الـ Check Constraints لجدول الـ orders
+ * ✅ الآن: طلب + عناصر + خصم مخزون + إحصائيات في ACID Transaction واحد
  */
 export async function processCheckout(
   env: Env & Record<string, unknown>,
@@ -51,11 +57,11 @@ export async function processCheckout(
     currency?: string;
     subtotal: string;
     shippingCost: string;
-    taxAmount: string;  // ✅ أضفنا هذا الحقل لتلبية قيد chk_order_total_calculation
-    discount: string;   // ✅ أضفنا هذا الحقل لتلبية قيد chk_order_total_calculation
+    taxAmount: string;
+    discount: string;
     total: string;
-    paymentMethod?: string; // ✅ اختياري لتلبية قيد chk_payment_method_required
-    shippingMethod?: string; // ✅ اختياري لتلبية قيد chk_shipping_method
+    paymentMethod?: string;
+    shippingMethod?: string;
   },
   itemsInput: {
     productId: string;
@@ -78,8 +84,7 @@ export async function processCheckout(
     const db = getDb(env);
 
     return await db.transaction(async (tx) => {
-      
-      // 🛑 الخطوة أ: إنشاء الطلب الرئيسي (Parent Order)
+      // 🛑 الخطوة أ: إنشاء الطلب الرئيسي
       const [newOrder] = await tx
         .insert(orders)
         .values({
@@ -94,8 +99,8 @@ export async function processCheckout(
           currency: orderInput.currency || 'EGP',
           subtotal: orderInput.subtotal,
           shippingCost: orderInput.shippingCost,
-          taxAmount: orderInput.taxAmount,   // ✅ تمريرها للـ DB
-          discount: orderInput.discount,     // ✅ تمريرها للـ DB
+          taxAmount: orderInput.taxAmount,
+          discount: orderInput.discount,
           total: orderInput.total,
           status: 'pending',
           paymentStatus: 'pending',
@@ -104,31 +109,67 @@ export async function processCheckout(
         })
         .returning();
 
-      // 🛑 الخطوة ب: إدراج عناصر الطلب دفعة واحدة (Bulk Insert Items)
-      await tx
-        .insert(orderItems)
-        .values(
-          itemsInput.map((item) => ({
-            orderId: newOrder.id,
-            productId: item.productId,
-            storeId: orderInput.storeId,
-            variantSku: item.variantSku,
-            productName: item.productName,
-            productSku: item.productSku,
-            productSlug: item.productSlug || null,
-            productImage: item.productImage || null,
-            productOptions: item.productOptions || {},
-            orderedQty: item.orderedQty,
-            price: item.price,
-            lineTotal: item.lineTotal,
-            originalPrice: item.originalPrice,
-            discount: item.discount || '0',
-            netAmount: item.netAmount,
-            status: 'pending',
-            fulfillmentStatus: 'unfulfilled',
-            metadata: item.metadata || {},
-          }))
+      // 🛑 الخطوة ب: إدراج عناصر الطلب (Bulk Insert)
+      await tx.insert(orderItems).values(
+        itemsInput.map((item) => ({
+          orderId: newOrder.id,
+          productId: item.productId,
+          storeId: orderInput.storeId,
+          variantSku: item.variantSku,
+          productName: item.productName,
+          productSku: item.productSku,
+          productSlug: item.productSlug || null,
+          productImage: item.productImage || null,
+          productOptions: item.productOptions || {},
+          orderedQty: item.orderedQty,
+          price: item.price,
+          lineTotal: item.lineTotal,
+          originalPrice: item.originalPrice,
+          discount: item.discount || '0',
+          netAmount: item.netAmount,
+          status: 'pending',
+          fulfillmentStatus: 'unfulfilled',
+          metadata: item.metadata || {},
+        }))
+      );
+
+      // 🚀 الخطوة ج: خصم المخزون داخل نفس الـ Transaction (ACID)
+      // لو منتج نفد، الـ transaction كلها هتتراجع والطلب مش هيتعمل
+      await updateStock(
+        itemsInput.map((item) => ({
+          productId: item.productId,
+          quantity: item.orderedQty,
+        })),
+        tx
+      );
+
+      // 🚀 الخطوة د: تحديث إحصائيات المتجر (الإيرادات + عدد الطلبات)
+      await updateStoreStatsAfterOrder(
+        env,
+        orderInput.storeId,
+        orderInput.total,
+        tx
+      );
+
+      // 🚀 الخطوة هـ: تحديث إحصائيات العميل (إجمالي المشتريات + عدد الطلبات)
+      if (orderInput.customerId) {
+        await updateCustomerStats(
+          env,
+          orderInput.customerId,
+          orderInput.total,
+          tx
         );
+      }
+
+      // 🚀 الخطوة و: تحديث عدادات مبيعات المنتجات
+      await updateProductStatsBatch(
+        env,
+        itemsInput.map((item) => ({
+          productId: item.productId,
+          quantity: item.orderedQty,
+        })),
+        tx
+      );
 
       return {
         success: true,

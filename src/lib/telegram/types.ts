@@ -77,6 +77,8 @@ export interface HandlerResult {
   buttons?: ButtonRow[];
   /** أزرار دائمة (تظهر في كل رسالة) */
   persistentButtons?: ButtonRow[];
+  /** 🎯 إخفاء/إزالة لوحة المفاتيح الحالية (ReplyKeyboard) من شات تيليجرام */
+  removeKeyboard?: boolean;
   /** تحديث جزئي للجلسة (إذا لزم الأمر) */
   session?: Partial<OnboardingSession>;
   /** إجراء إضافي (مثل 'create_store') */

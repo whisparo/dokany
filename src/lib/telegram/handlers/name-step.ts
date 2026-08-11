@@ -84,7 +84,7 @@ export async function handleNameStep(ctx: SecureHandlerContext): Promise<Handler
 
   // 4️⃣ الرد والانتقال
   return {
-    reply: `🎯 تشرفنا بك يا مهندس ${name}.\n\n🏪 الآن، ما هو الاسم الذي تحب أن تطلقه على متجرك؟ (مثال: متجر موضة):`,
+    reply: `🎯 تشرفنا بك يا أ/ ${name}.\n\n🏪 الآن، ما هو الاسم الذي تحب أن تطلقه على متجرك؟ (مثال: متجر موضة):`,
     buttons: [[{ text: '🔙 رجوع', value: 'رجوع' }]],
     session: nextSession,
   };

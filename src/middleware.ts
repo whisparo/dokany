@@ -3,7 +3,7 @@
 /**
  * ============================================================
  * 🛡️ Middleware الموحد (Unified Middleware for Cloudflare Edge)
- * الإصدار: 5.0 (أمان متكامل + Distributed Rate Limiter via Worker)
+ * الإصدار: 5.2 (إصلاحات أمنية + تحسينات الأداء والأنواع)
  * ============================================================
  */
 
@@ -32,10 +32,10 @@ const i18nMiddleware = createMiddleware({
 // 🛡️ المسارات المحمية وقواعد الوصول
 // ============================================================
 const PROTECTED_PATTERNS = [
-  /^\/(ar|en)?\/?dashboard(\/.*)?$/,
-  /^\/(ar|en)?\/?admin(\/.*)?$/,
+  /^\/(ar|en)?\/dashboard(\/.*)?$/,
+  /^\/(ar|en)?\/admin(\/.*)?$/,
 ];
-const AUTH_PATTERNS = [/^\/(ar|en)?\/?auth(\/.*)?$/];
+const AUTH_PATTERNS = [/^\/(ar|en)?\/auth(\/.*)?$/];
 
 // ============================================================
 // 🧠 دالة التحقق من JWT (Edge-compatible)
@@ -45,6 +45,7 @@ interface JWTPayload {
   store_id?: string;
   role?: string;
   exp?: number;
+  [key: string]: unknown;
 }
 
 async function verifyJWT(
@@ -53,10 +54,12 @@ async function verifyJWT(
 ): Promise<{ valid: boolean; payload?: JWTPayload }> {
   try {
     const encoder = new TextEncoder();
-    const { payload } = await jwtVerify(token, encoder.encode(secret), {
-      issuer: 'dokany.com',
-      audience: 'dokany-api',
-    });
+    const { payload } = await jwtVerify(token, encoder.encode(secret));
+
+    if (payload.exp && payload.exp < Date.now() / 1000) {
+      return { valid: false };
+    }
+
     return { valid: true, payload: payload as JWTPayload };
   } catch {
     return { valid: false };
@@ -86,37 +89,41 @@ export default async function middleware(request: NextRequest) {
     request.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
     '127.0.0.1';
 
-  // 3️⃣ Rate Limiting موزع عبر Cloudflare Worker لمسارات الـ Auth والـ Checkout
+  // 3️⃣ Rate Limiting موزع لمسارات الـ Auth والـ Checkout
   const isAuthRoute = AUTH_PATTERNS.some((pattern) => pattern.test(pathname));
   const isCheckoutRoute = pathname.includes('/checkout');
 
   if (isAuthRoute || isCheckoutRoute) {
-    const action = isAuthRoute ? 'login' : 'checkout';
+    try {
+      const action = isAuthRoute ? 'login' : 'checkout';
 
-    const rlResult = await checkRateLimit({
-      action,
-      ip: clientIp,
-    });
+      const rlResult = await checkRateLimit({
+        action,
+        ip: clientIp,
+      });
 
-    if (!rlResult.allowed) {
-      return new NextResponse(
-        JSON.stringify({
-          error: 'Too many requests. Please try again later.',
-          retryAfter: rlResult.retryAfter || 60,
-          layer: rlResult.layer || 'global',
-        }),
-        {
-          status: 429,
-          headers: {
-            'Content-Type': 'application/json',
-            'Retry-After': String(rlResult.retryAfter || 60),
-            'X-RateLimit-Limit': String(rlResult.limit),
-            'X-RateLimit-Remaining': String(rlResult.remaining),
-            'X-RateLimit-Reset': String(rlResult.resetAt),
-            'x-correlation-id': correlationId,
-          },
-        }
-      );
+      if (!rlResult.allowed) {
+        return new NextResponse(
+          JSON.stringify({
+            error: 'Too many requests. Please try again later.',
+            retryAfter: rlResult.retryAfter || 60,
+            layer: rlResult.layer || 'global',
+          }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'Retry-After': String(rlResult.retryAfter || 60),
+              'X-RateLimit-Limit': String(rlResult.limit ?? 0),
+              'X-RateLimit-Remaining': String(rlResult.remaining ?? 0),
+              'X-RateLimit-Reset': String(rlResult.resetAt ?? Date.now()),
+              'x-correlation-id': correlationId,
+            },
+          }
+        );
+      }
+    } catch (error) {
+      console.error('⚠️ Rate limiter failed, allowing request (Fail-Open):', error);
     }
   }
 
@@ -178,7 +185,7 @@ export default async function middleware(request: NextRequest) {
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
 
-  // 1️⃣1️⃣ ضبط سياسة التخزين المؤقت
+  // 1️⃣1️⃣ ضبط سياسة التخزين المؤقت (Cache-Control)
   if (pathname.includes('/dashboard') || pathname.includes('/admin')) {
     response.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
   } else {

@@ -10,7 +10,10 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { Redis } from '@upstash/redis';
 import { checkRateLimit, buildRateLimitKey } from '@/lib/rate-limit';
 
-// ✅ تعريف البيئة بشكل صريح
+// ============================================================
+// 🔒 تعريف البيئة المدعومة بشكل صارم
+// ============================================================
+
 export interface AuthEnv {
   DB: D1Database;
   UPSTASH_REDIS_REST_URL?: string;
@@ -35,15 +38,109 @@ interface PinInput {
   pin: string;
 }
 
+interface AuthUserResult {
+  id: string;
+  name: string;
+  email: string;
+  image?: string;
+}
+
+// ============================================================
+// 🔐 Web Crypto PBKDF2 Helpers (Edge-Native & Fast)
+// ============================================================
+
+/**
+  توليد Hash آمن للـ PIN باستخدام PBKDF2 بدلاً من bcrypt
+ */
+export async function hashPin(pin: string, providedSalt?: Uint8Array<ArrayBuffer>): Promise<string> {
+  const encoder = new TextEncoder();
+  // تحديد النوع صراحة ليكون Uint8Array<ArrayBuffer>
+  const salt: Uint8Array<ArrayBuffer> = providedSalt || globalThis.crypto.getRandomValues(new Uint8Array(16));
+
+  const keyMaterial = await globalThis.crypto.subtle.importKey(
+    'raw',
+    encoder.encode(pin),
+    'PBKDF2',
+    false,
+    ['deriveBits', 'deriveKey']
+  );
+
+  const derivedKey = await globalThis.crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: salt, // أصبح الآن متوافقاً تماماً مع BufferSource
+      iterations: 100000,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    256
+  );
+
+  const saltHex = Array.from(salt)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  const hashHex = Array.from(new Uint8Array(derivedKey))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  return `pbkdf2:${saltHex}:${hashHex}`;
+}
+
+/**
+ * التحقق من صحة الـ PIN بشكل آمن ومقاوم للـ Timing Attacks في بيئة Edge
+ */
+async function verifyPin(pin: string, storedHash: string): Promise<boolean> {
+  if (!storedHash) return false;
+
+  if (storedHash.startsWith('pbkdf2:')) {
+    const parts = storedHash.split(':');
+    if (parts.length !== 3) return false;
+
+    const [, saltHex, originalHashHex] = parts;
+    const saltMatch = saltHex.match(/.{1,2}/g);
+    if (!saltMatch) return false;
+
+    // تحويل البيانات صراحة لـ Uint8Array<ArrayBuffer>
+    const salt = new Uint8Array(new ArrayBuffer(saltMatch.length));
+    saltMatch.forEach((byte, i) => {
+      salt[i] = parseInt(byte, 16);
+    });
+
+    const computedHash = await hashPin(pin, salt);
+    const computedHashHex = computedHash.split(':')[2];
+
+    if (computedHashHex.length !== originalHashHex.length) return false;
+
+    const encoder = new TextEncoder();
+    const computedBuf = encoder.encode(computedHashHex);
+    const originalBuf = encoder.encode(originalHashHex);
+
+    const cryptoKey = await globalThis.crypto.subtle.importKey(
+      'raw',
+      computedBuf,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify', 'sign']
+    );
+
+    return await globalThis.crypto.subtle.verify('HMAC', cryptoKey, computedBuf, originalBuf);
+  }
+
+  return false;
+}
+
 // ============================================================
 // 🔐 دوال التحقق من تليجرام (مُؤمنة ضد Timing Attacks)
 // ============================================================
 
-async function verifyTelegramHash(data: Record<string, string | undefined>, botToken: string): Promise<boolean> {
+async function verifyTelegramHash(
+  data: Record<string, string | undefined>,
+  botToken: string
+): Promise<boolean> {
   if (!data.hash || !data.auth_date) return false;
 
   const authDate = parseInt(data.auth_date, 10);
-  // صلاحية الـ Hash هي 24 ساعة فقط
+  // صلاحية الـ Hash هي 24 ساعة فقط (86400 ثانية)
   if (isNaN(authDate) || Math.floor(Date.now() / 1000) - authDate > 86400) return false;
 
   const checkData: Record<string, string> = {};
@@ -54,10 +151,10 @@ async function verifyTelegramHash(data: Record<string, string | undefined>, botT
   });
 
   const sortedKeys = Object.keys(checkData).sort();
-  const dataString = sortedKeys.map(k => `${k}=${checkData[k]}`).join('\n');
+  const dataString = sortedKeys.map((k) => `${k}=${checkData[k]}`).join('\n');
   const encoder = new TextEncoder();
 
-  // 1. حساب Secret Key
+  // 1. حساب Secret Key عبر Web Crypto API المتوافق مع Edge
   const secretKeyBuffer = await globalThis.crypto.subtle.digest(
     'SHA-256',
     encoder.encode(botToken)
@@ -71,15 +168,16 @@ async function verifyTelegramHash(data: Record<string, string | undefined>, botT
     ['verify', 'sign']
   );
 
-  // 2. تحويل الـ Received Hash إلى ArrayBuffer لمقارنتها ذرياً
+  // 2. تحويل الـ Received Hash إلى Uint8Array لمقارنتها ذرياً
   const hashHex = data.hash;
   if (hashHex.length !== 64) return false;
-  
-  const receivedSignature = new Uint8Array(
-    hashHex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []
-  );
 
-  // 3. استخدام Web Crypto verify لمنع الـ Timing Attacks
+  const byteMatches = hashHex.match(/.{1,2}/g);
+  if (!byteMatches) return false;
+
+  const receivedSignature = new Uint8Array(byteMatches.map((byte) => parseInt(byte, 16)));
+
+  // 3. استخدام Web Crypto verify لمنع Timing Attacks
   return await globalThis.crypto.subtle.verify(
     'HMAC',
     cryptoKey,
@@ -128,7 +226,7 @@ export function createAuth(env: AuthEnv) {
             last_name: { type: 'string', required: false },
             photo_url: { type: 'string', required: false },
           },
-          async verify({ input }: { input: TelegramInput }) {
+          async verify({ input }: { input: TelegramInput }): Promise<AuthUserResult | null> {
             const botToken = env.TELEGRAM_BOT_TOKEN;
             if (!botToken) return null;
 
@@ -156,21 +254,27 @@ export function createAuth(env: AuthEnv) {
             let finalUser = user;
 
             if (!finalUser) {
-              const fullName = `${input.first_name || ''} ${input.last_name || ''}`.trim() || input.username || 'مستخدم تليجرام';
+              const fullName =
+                `${input.first_name || ''} ${input.last_name || ''}`.trim() ||
+                input.username ||
+                'مستخدم تليجرام';
 
-              const newUser = await localDb.insert(users).values({
-                id: crypto.randomUUID(),
-                name: fullName,
-                image: input.photo_url || null,
-                telegramId: input.telegramId,
-                telegramUsername: input.username || null,
-                telegramChatId: input.telegramId,
-                authMethod: 'telegram',
-                status: 'active',
-                isVerified: true,
-                emailVerified: false,
-                role: 'merchant',
-              }).returning();
+              const newUser = await localDb
+                .insert(users)
+                .values({
+                  id: crypto.randomUUID(),
+                  name: fullName,
+                  image: input.photo_url || null,
+                  telegramId: input.telegramId,
+                  telegramUsername: input.username || null,
+                  telegramChatId: input.telegramId,
+                  authMethod: 'telegram',
+                  status: 'active',
+                  isVerified: true,
+                  emailVerified: false,
+                  role: 'merchant',
+                })
+                .returning();
 
               finalUser = newUser[0];
             } else {
@@ -197,7 +301,7 @@ export function createAuth(env: AuthEnv) {
       },
 
       // ============================================================
-      // 2. مزود Backup PIN (مُصنع خصيصاً مع Rate Limiting حارم)
+      // 2. مزود Backup PIN (مع حماية Rate Limiting و Web Crypto)
       // ============================================================
       {
         id: 'pin',
@@ -208,8 +312,8 @@ export function createAuth(env: AuthEnv) {
             phone: { type: 'string', required: true },
             pin: { type: 'string', required: true },
           },
-          async verify({ input }: { input: PinInput }) {
-            // ✅ حماية ضد الـ Brute Force بالـ Redis إذا كان متوفراً
+          async verify({ input }: { input: PinInput }): Promise<AuthUserResult | null> {
+            // ✅ حماية ضد Brute Force بـ Upstash Redis إذا أتيحت المتغيرات
             if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
               const redis = new Redis({
                 url: env.UPSTASH_REDIS_REST_URL,
@@ -233,13 +337,9 @@ export function createAuth(env: AuthEnv) {
               return null;
             }
 
-            const bcrypt = await import('bcrypt-ts');
-            try {
-              const isValid = await bcrypt.compare(input.pin, user.backupPin);
-              if (!isValid) return null;
-            } catch {
-              return null;
-            }
+            // ✅ التحقق التوافق التام مع Edge باستخدام Web Crypto PBKDF2
+            const isValid = await verifyPin(input.pin, user.backupPin);
+            if (!isValid) return null;
 
             return {
               id: user.id,
