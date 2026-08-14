@@ -1,20 +1,28 @@
 // src/components/storefront/Checkout/ShippingOptions.tsx
+
 'use client';
 
 import { Truck, Check } from 'lucide-react';
 import { Typography } from '@/components/shared/Typography';
 import type { CheckoutPayload } from './Checkout.adapter';
+import type { CheckoutTheme } from './Checkout.theme';
 
 interface ShippingOptionsProps {
   options: CheckoutPayload['shippingOptions'];
   selectedId: string;
   currency: string;
   onChange: (id: string) => void;
-  theme: any;
+  theme: CheckoutTheme;
 }
 
-export function ShippingOptions({ options, selectedId, currency, onChange, theme }: ShippingOptionsProps) {
-  if (options.length === 0) return null;
+export function ShippingOptions({ 
+  options, 
+  selectedId, 
+  currency, 
+  onChange, 
+  theme 
+}: ShippingOptionsProps) {
+  if (!options || options.length === 0) return null;
 
   return (
     <div className={theme.shippingSection}>
@@ -24,14 +32,21 @@ export function ShippingOptions({ options, selectedId, currency, onChange, theme
       <div className={theme.optionsGrid} role="radiogroup" aria-label="خيارات الشحن">
         {options.map((option) => {
           const isSelected = selectedId === option.id;
-          
-          const optionPriceFormatted = option.price === 0 
-            ? 'مجاني' 
-            : new Intl.NumberFormat('ar-EG', {
+
+          // ✅ معالجة آمنة لتنسيق السعر لتجنب أخطاء Invalid Currency Code
+          let optionPriceFormatted = 'مجاني';
+          if (option.price > 0) {
+            try {
+              optionPriceFormatted = new Intl.NumberFormat('ar-EG', {
                 style: 'currency',
-                currency: currency,
+                currency: currency || 'EGP',
                 minimumFractionDigits: 0,
               }).format(option.price / 100);
+            } catch {
+              // Fallback في حالة وجود رمز عملة غير مدعوم
+              optionPriceFormatted = `${option.price / 100} ${currency}`;
+            }
+          }
 
           return (
             <button
@@ -39,18 +54,11 @@ export function ShippingOptions({ options, selectedId, currency, onChange, theme
               type="button"
               role="radio"
               aria-checked={isSelected}
-              tabIndex={0}
               className={theme.optionCard(isSelected)}
               onClick={() => onChange(option.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onChange(option.id);
-                }
-              }}
             >
               <div className="flex items-start gap-3 flex-1 text-start">
-                <Truck className="h-5 w-5 mt-0.5 text-muted-foreground" aria-hidden="true" />
+                <Truck className="h-5 w-5 mt-0.5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
                 <div>
                   <Typography variant="body2" weight="medium" className="text-foreground">
                     {option.name}
@@ -62,7 +70,7 @@ export function ShippingOptions({ options, selectedId, currency, onChange, theme
                   )}
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-col items-end gap-2 flex-shrink-0">
                 <Typography variant="body2" weight="bold" className="text-foreground">
                   {optionPriceFormatted}
                 </Typography>

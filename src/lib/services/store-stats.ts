@@ -26,11 +26,12 @@ async function invalidateStatsCache(env: Env, keys: string[]) {
 
 /**
  * تحديث إحصائيات المتجر الإجمالية بعد إنشاء أو تعديل طلب
+ * @param orderTotalAmountالمبلغ بالهللات/السنتات (Integer Cents)
  */
 export async function updateStoreStatsAfterOrder(
   env: Env,
   storeId: string,
-  orderTotal: string,
+  orderTotalAmount: number,
   tx?: D1Transaction
 ) {
   const db = getDb(env);
@@ -40,8 +41,8 @@ export async function updateStoreStatsAfterOrder(
     const result = await client
       .update(schema.storeStats)
       .set({
-        totalRevenue: sql`CAST(COALESCE(${schema.storeStats.totalRevenue}, '0') AS REAL) + CAST(${orderTotal} AS REAL)`,
-        totalOrders: sql`${schema.storeStats.totalOrders} + 1`,
+        totalRevenue: sql`COALESCE(${schema.storeStats.totalRevenue}, 0) + ${orderTotalAmount}`,
+        totalOrders: sql`COALESCE(${schema.storeStats.totalOrders}, 0) + 1`,
       })
       .where(eq(schema.storeStats.storeId, storeId))
       .returning({ id: schema.storeStats.id });
@@ -50,7 +51,7 @@ export async function updateStoreStatsAfterOrder(
       await client.insert(schema.storeStats).values({
         id: crypto.randomUUID(),
         storeId,
-        totalRevenue: orderTotal,
+        totalRevenue: orderTotalAmount,
         totalOrders: 1,
         totalCustomers: 0,
       });
@@ -68,30 +69,32 @@ export async function updateStoreStatsAfterOrder(
       shouldAlert: true,
       technicalMessage: `STORE_STATS_FAILURE: Failed to update stats for store ${storeId}.`,
       cause: error,
-      metadata: { storeId, orderTotal, originalError: error instanceof Error ? error.message : String(error) },
+      metadata: { storeId, orderTotalAmount, originalError: error instanceof Error ? error.message : String(error) },
     });
   }
 }
 
 /**
  * تحديث سجلات الشراء الخاصة بالعميل
+ * @param orderTotalAmount المبلغ بالهللات/السنتات (Integer Cents)
  */
 export async function updateCustomerStats(
   env: Env,
   customerId: string,
-  orderTotal: string,
+  orderTotalAmount: number,
   tx?: D1Transaction
 ) {
   const db = getDb(env);
   const client = tx || db;
+  const now = new Date();
 
   try {
     const result = await client
       .update(schema.customerStats)
       .set({
-        totalSpent: sql`CAST(COALESCE(${schema.customerStats.totalSpent}, '0') AS REAL) + CAST(${orderTotal} AS REAL)`,
-        ordersCount: sql`${schema.customerStats.ordersCount} + 1`,
-        lastOrderAt: sql`CURRENT_TIMESTAMP`,
+        totalSpent: sql`COALESCE(${schema.customerStats.totalSpent}, 0) + ${orderTotalAmount}`,
+        ordersCount: sql`COALESCE(${schema.customerStats.ordersCount}, 0) + 1`,
+        lastOrderAt: now,
       })
       .where(eq(schema.customerStats.customerId, customerId))
       .returning({ id: schema.customerStats.id });
@@ -100,9 +103,9 @@ export async function updateCustomerStats(
       await client.insert(schema.customerStats).values({
         id: crypto.randomUUID(),
         customerId,
-        totalSpent: orderTotal,
+        totalSpent: orderTotalAmount,
         ordersCount: 1,
-        lastOrderAt: new Date(),
+        lastOrderAt: now,
       });
     }
 
@@ -118,13 +121,13 @@ export async function updateCustomerStats(
       shouldAlert: true,
       technicalMessage: `CUSTOMER_STATS_FAILURE: Failed to update stats for customer ${customerId}.`,
       cause: error,
-      metadata: { customerId, orderTotal, originalError: error instanceof Error ? error.message : String(error) },
+      metadata: { customerId, orderTotalAmount, originalError: error instanceof Error ? error.message : String(error) },
     });
   }
 }
 
 /**
- * تحديث كميات المبيعات الإجمالية للجمود والمنتجات المشتراة في دُفعة واحدة (Batch)
+ * تحديث كميات المبيعات الإجمالية للمنتجات المشتراة في دُفعة واحدة (Batch)
  */
 export async function updateProductStatsBatch(
   env: Env,
@@ -142,7 +145,7 @@ export async function updateProductStatsBatch(
       const result = await client
         .update(schema.productStats)
         .set({
-          salesCount: sql`${schema.productStats.salesCount} + ${item.quantity}`,
+          salesCount: sql`COALESCE(${schema.productStats.salesCount}, 0) + ${item.quantity}`,
         })
         .where(eq(schema.productStats.productId, item.productId))
         .returning({ id: schema.productStats.id });

@@ -163,7 +163,7 @@ export async function createStore(
     .replace(/[^a-z0-9أ-ي-]/g, '');
 
   if (!slugBase || slugBase === '-' || slugBase.length < 2) {
-    slugBase = `store-${Math.random().toString(36).slice(2, 7)}`;
+    slugBase = `store-${crypto.randomUUID().slice(0, 5)}`;
   }
 
   if (slugBase.startsWith('-')) {
@@ -179,13 +179,13 @@ export async function createStore(
     .get();
 
   const slug = existingStore
-    ? `${decodedSlug}-${Math.random().toString(36).slice(2, 6)}`
+    ? `${decodedSlug}-${crypto.randomUUID().slice(0, 4)}`
     : decodedSlug;
 
   // 3️⃣ تخصيص حساب Cloudinary
   const allocatedAccountIndex = await allocateCloudinaryAccount(d1Database);
 
-  // 4️⃣ Theme Defaults
+  // 4️⃣ Theme Defaults (كائن جافاسكريبت عادي وليس String)
   const defaultTheme = {
     colors: {
       primary: '#2563eb',
@@ -201,26 +201,30 @@ export async function createStore(
     fontFamily: 'Cairo, sans-serif',
   };
 
+  const now = new Date();
+
   // 5️⃣ إنشاء المتجر
+  const storeToInsert: typeof stores.$inferInsert = {
+    id: crypto.randomUUID(), 
+    ownerId: userId,
+    name: cleanStoreName,
+    slug: slug,
+    currency: 'EGP',
+    country: 'EG',
+    paymentGateway: 'cash', 
+    templateVersion: 'v1',
+    cloudinaryAccountIndex: allocatedAccountIndex, 
+    theme: defaultTheme, // Drizzle يتكفل بعمل الـ Serialization لكونه mode: 'json'
+    isActive: true,
+    isVerified: false,
+    isFeatured: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+
   const insertedStores = await db
     .insert(stores)
-    .values({
-      id: crypto.randomUUID(), 
-      ownerId: userId,
-      name: cleanStoreName,
-      slug: slug,
-      currency: 'EGP',
-      country: 'EG',
-      paymentGateway: 'cash', 
-      templateVersion: 'v1',
-      cloudinaryAccountIndex: allocatedAccountIndex, 
-      theme: JSON.stringify(defaultTheme), 
-      isActive: true,
-      isVerified: false,
-      isFeatured: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })
+    .values(storeToInsert)
     .returning();
 
   const newStore = insertedStores[0];
@@ -232,11 +236,10 @@ export async function createStore(
 
   console.log(`✅ [createStore] Store successfully deployed with slug: ${slug}`);
 
-  // 6️⃣ إعداد الروابط واستدعاء Menu Button بشكل خلفي دون تعطيل الاستجابة
+  // 6️⃣ إعداد الروابط واستدعاء Menu Button بشكل خلفي
   const dashboardLink = await generateLoginLink(userId, newStore.id, baseUrl);
 
   if (data.telegramUserId && env?.TELEGRAM_BOT_TOKEN) {
-    // تشغيل الفانكشن بشكل مستقل كي لا تؤخر الـ return الرئيسي
     attachTelegramMenuButton(data.telegramUserId, env.TELEGRAM_BOT_TOKEN, dashboardLink);
   }
 

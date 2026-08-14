@@ -1,36 +1,27 @@
 // src/worker/routes/products.ts
 
 import { Hono } from 'hono';
-import { eq, and, ilike, sql, desc, isNull } from 'drizzle-orm';
+import { eq, and, desc, isNull, like, gte, lte, count } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Env } from '@/lib/env';
 import { getDb } from '@/lib/db/db';
 import * as schema from '@/lib/db/schema';
+import { safeExecute } from '@/lib/errors/safe-executor';
+import { SystemError } from '@/lib/errors/types';
 import type { ProductImage, ProductVariant, NewProduct } from '@/lib/db/schema/products';
+import { createProductSchema, updateProductSchema } from '@/lib/validations/product';
+import { requireAuth, type AuthVariables } from '@/workers/middleware/auth';
 
-/**
- * 🔒 Hono Context Variables Shape
- */
-type Variables = {
-  user?: {
-    id: string;
-    email: string;
-  };
-  storeId?: string;
-};
+export const productsRouter = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
-export const productsRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
+/* ============================================================================
+ * 🧹 HELPERS & UTILS
+ * ============================================================================ */
 
-/**
- * 🧹 Helper: sanitize string from potential HTML tags
- */
 function sanitizeString(val: string): string {
   return val.replace(/<[^>]*>?/gm, '').trim();
 }
 
-/**
- * 🏷️ Helper: slug generation supporting Arabic & English
- */
 function generateSlug(text: string): string {
   const cleaned = text
     .trim()
@@ -42,116 +33,155 @@ function generateSlug(text: string): string {
   return cleaned || `product-${Date.now()}`;
 }
 
+/**
+ * جلب المتجر والتأكد من وجوده + فحص الملكية (Anti-IDOR)
+ */
+async function getStoreBySlugOrThrow(
+  db: ReturnType<typeof getDb>,
+  slug: string,
+  path: string,
+  requiredOwnerId?: string
+) {
+  const store = await db
+    .select({ id: schema.stores.id, ownerId: schema.stores.ownerId })
+    .from(schema.stores)
+    .where(and(eq(schema.stores.slug, slug), isNull(schema.stores.deletedAt)))
+    .get();
+
+  if (!store) {
+    throw new SystemError({
+      code: 'STORE_NOT_FOUND',
+      userMessage: 'المتجر المطلوب غير موجود.',
+      technicalMessage: `Store with slug '${slug}' not found or deleted.`,
+      category: 'business',
+      severity: 'info',
+      retryable: false,
+      shouldAlert: false,
+      context: { storeId: slug, path, extras: { storeSlug: slug } },
+    });
+  }
+
+  if (requiredOwnerId && store.ownerId !== requiredOwnerId) {
+    throw new SystemError({
+      code: 'FORBIDDEN',
+      userMessage: 'ليس لديك صلاحية لإجراء تغييرات على منتجات هذا المتجر.',
+      technicalMessage: `User '${requiredOwnerId}' attempted unauthorized operation on store '${store.id}' owned by '${store.ownerId}'.`,
+      category: 'security',
+      severity: 'warning',
+      retryable: false,
+      shouldAlert: true,
+      context: { storeId: store.id, path, userId: requiredOwnerId },
+    });
+  }
+
+  return store;
+}
+
+/**
+ * التحقق من ملكية التصنيف للمتجر الحالي
+ */
+async function validateCategoryOwnership(
+  db: ReturnType<typeof getDb>,
+  categoryId: string,
+  storeId: string,
+  path: string
+) {
+  const category = await db
+    .select({ id: schema.categories.id })
+    .from(schema.categories)
+    .where(
+      and(
+        eq(schema.categories.id, categoryId),
+        eq(schema.categories.storeId, storeId),
+        isNull(schema.categories.deletedAt)
+      )
+    )
+    .get();
+
+  if (!category) {
+    throw new SystemError({
+      code: 'CATEGORY_NOT_FOUND',
+      userMessage: 'التصنيف المختار غير موجود أو لا ينتمي لهذا المتجر.',
+      technicalMessage: `Category '${categoryId}' invalid or does not belong to store '${storeId}'.`,
+      category: 'validation',
+      severity: 'info',
+      retryable: false,
+      shouldAlert: false,
+      context: { storeId, path },
+    });
+  }
+}
+
 /* ============================================================================
- * 🛠️ ZOD VALIDATION SCHEMAS (مطابقة تماماً لـ Schema الجدول)
+ * 🛠️ QUERY VALIDATION SCHEMAS
  * ============================================================================ */
-
-const ProductImageSchema: z.ZodType<ProductImage> = z.object({
-  url: z.string().url(),
-  alt: z.string().optional(),
-  isPrimary: z.boolean().optional(),
-  order: z.number().int().nonnegative().optional(),
-});
-
-const ProductVariantSchema: z.ZodType<ProductVariant> = z.object({
-  name: z.string().min(1, 'اسم المتغير مطلوب'),
-  options: z.array(z.string()).default([]),
-});
 
 const ProductQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
   search: z.string().optional().transform((val) => (val ? sanitizeString(val) : undefined)),
-  categoryId: z.string().uuid().optional(),
+  categoryId: z.string().optional(),
   minPrice: z.coerce.number().min(0).optional(),
   maxPrice: z.coerce.number().min(0).optional(),
 });
-
-const CreateProductSchema = z.object({
-  name: z.string().min(1, 'اسم المنتج مطلوب').transform(sanitizeString),
-  price: z.union([z.number(), z.string()]).transform((val) => {
-    const num = Number(val);
-    if (isNaN(num) || num < 0) throw new Error('السعر يجب أن يكون رقماً موجباً');
-    return String(num);
-  }),
-  compareAtPrice: z
-    .union([z.number(), z.string()])
-    .optional()
-    .nullable()
-    .transform((val) => (val !== undefined && val !== null ? String(val) : null)),
-  description: z.string().optional().nullable().transform((val) => (val ? sanitizeString(val) : null)),
-  shortDescription: z.string().optional().nullable().transform((val) => (val ? sanitizeString(val) : null)),
-  categoryId: z.string().uuid().optional().nullable(),
-  stock: z.number().int().nonnegative().default(0),
-  sku: z.string().optional().nullable(),
-  barcode: z.string().optional().nullable(),
-  images: z.array(ProductImageSchema).default([]),
-  variants: z.array(ProductVariantSchema).default([]),
-  isPublished: z.boolean().default(false),
-  isFeatured: z.boolean().default(false),
-  haggleEnabled: z.boolean().default(false),
-  minPrice: z
-    .union([z.number(), z.string()])
-    .optional()
-    .nullable()
-    .transform((val) => (val !== undefined && val !== null ? String(val) : null)),
-});
-
-const UpdateProductSchema = CreateProductSchema.partial();
 
 /* ============================================================================
  * 🌐 ROUTES IMPLEMENTATION
  * ============================================================================ */
 
 /**
- * GET /api/store/:slug/products
- * جلب منتجات متجر معين (عام للعملاء والواجهة)
+ * 🟢 GET /api/store/:slug/products (Public - only published products)
  */
-productsRouter.get('/store/:slug/products', async (c) => {
-  try {
+productsRouter.get('/store/:slug/products', (c) =>
+  safeExecute(async () => {
     const slug = c.req.param('slug');
     const queryResult = ProductQuerySchema.safeParse(c.req.query());
 
     if (!queryResult.success) {
-      return c.json({ success: false, error: 'مدخلات الاستعلام غير صالحة', details: queryResult.error.format() }, 400);
+      throw new SystemError({
+        code: 'QUERY_VALIDATION_ERROR',
+        userMessage: 'مدخلات الاستعلام غير صالحة.',
+        technicalMessage: JSON.stringify(queryResult.error.format()),
+        category: 'validation',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        context: { storeId: slug || 'unknown', path: c.req.path },
+      });
     }
 
     const { limit, offset, search, categoryId, minPrice, maxPrice } = queryResult.data;
     const db = getDb({ DB: c.env.DB });
-
-    const store = await db
-      .select({ id: schema.stores.id })
-      .from(schema.stores)
-      .where(eq(schema.stores.slug, slug))
-      .get();
-
-    if (!store) {
-      return c.json({ success: false, error: 'المتجر غير موجود' }, 404);
-    }
+    const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
 
     const conditions = [
       eq(schema.products.storeId, store.id),
       isNull(schema.products.deletedAt),
+      eq(schema.products.isPublished, true),
     ];
 
-    if (search) conditions.push(ilike(schema.products.name, `%${search}%`));
-    if (categoryId) conditions.push(eq(schema.products.categoryId, categoryId));
-
+    if (search) {
+      conditions.push(like(schema.products.name, `%${search}%`));
+    }
+    if (categoryId) {
+      conditions.push(eq(schema.products.categoryId, categoryId));
+    }
     if (minPrice !== undefined) {
-      conditions.push(sql`CAST(${schema.products.price} AS REAL) >= ${minPrice}`);
+      conditions.push(gte(schema.products.price, minPrice));
     }
     if (maxPrice !== undefined) {
-      conditions.push(sql`CAST(${schema.products.price} AS REAL) <= ${maxPrice}`);
+      conditions.push(lte(schema.products.price, maxPrice));
     }
 
     const whereClause = and(...conditions);
 
     const countResult = await db
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: count() })
       .from(schema.products)
-      .where(whereClause);
+      .where(whereClause)
+      .get();
 
-    const total = countResult[0]?.count ?? 0;
+    const total = Number(countResult?.count ?? 0);
 
     const products = await db
       .select()
@@ -161,37 +191,29 @@ productsRouter.get('/store/:slug/products', async (c) => {
       .limit(limit)
       .offset(offset);
 
-    return c.json({
-      success: true,
-      data: {
-        products,
-        pagination: { limit, offset, total, hasMore: offset + limit < total },
+    return c.json(
+      {
+        success: true,
+        data: {
+          products,
+          pagination: { limit, offset, total, hasMore: offset + limit < total },
+        },
       },
-    });
-  } catch (error) {
-    console.error('Error fetching products:', error);
-    return c.json({ success: false, error: 'فشل في جلب المنتجات' }, 500);
-  }
-});
+      200
+    );
+  })
+);
 
 /**
- * GET /api/store/:slug/products/:productSlug
- * جلب منتج مفرد عبر Slug
+ * 🟢 GET /api/store/:slug/products/:productSlug (Public - only published)
  */
-productsRouter.get('/store/:slug/products/:productSlug', async (c) => {
-  try {
+productsRouter.get('/store/:slug/products/:productSlug', (c) =>
+  safeExecute(async () => {
     const slug = c.req.param('slug');
     const productSlug = c.req.param('productSlug');
 
     const db = getDb({ DB: c.env.DB });
-
-    const store = await db
-      .select({ id: schema.stores.id })
-      .from(schema.stores)
-      .where(eq(schema.stores.slug, slug))
-      .get();
-
-    if (!store) return c.json({ success: false, error: 'المتجر غير موجود' }, 404);
+    const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
 
     const product = await db
       .select()
@@ -200,46 +222,62 @@ productsRouter.get('/store/:slug/products/:productSlug', async (c) => {
         and(
           eq(schema.products.slug, productSlug),
           eq(schema.products.storeId, store.id),
+          eq(schema.products.isPublished, true),
           isNull(schema.products.deletedAt)
         )
       )
       .get();
 
-    if (!product) return c.json({ success: false, error: 'المنتج غير موجود' }, 404);
+    if (!product) {
+      throw new SystemError({
+        code: 'PRODUCT_NOT_FOUND',
+        userMessage: 'المنتج المطلوب غير موجود.',
+        technicalMessage: `Product '${productSlug}' not found in store '${store.id}'.`,
+        category: 'business',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        context: { storeId: store.id, path: c.req.path },
+      });
+    }
 
-    return c.json({ success: true, data: product });
-  } catch (error) {
-    console.error('Error fetching product:', error);
-    return c.json({ success: false, error: 'فشل في جلب البيانات' }, 500);
-  }
-});
+    return c.json({ success: true, data: product }, 200);
+  })
+);
 
 /**
- * POST /api/store/:slug/products
- * إنشاء منتج جديد
+ * 🟡 POST /api/store/:slug/products (Protected & Anti-IDOR)
  */
-productsRouter.post('/store/:slug/products', async (c) => {
-  try {
+productsRouter.post('/store/:slug/products', requireAuth, (c) =>
+  safeExecute(async () => {
     const slug = c.req.param('slug');
+    const userId = c.get('userId');
     const rawBody = await c.req.json().catch(() => null);
 
-    const validation = CreateProductSchema.safeParse(rawBody);
+    const validation = createProductSchema.safeParse(rawBody);
     if (!validation.success) {
-      return c.json({ success: false, error: 'بيانات المنتج غير صالحة', details: validation.error.format() }, 400);
+      throw new SystemError({
+        code: 'CREATE_PRODUCT_VALIDATION_ERROR',
+        userMessage: validation.error.issues[0]?.message || 'بيانات المنتج غير صالحة.',
+        technicalMessage: JSON.stringify(validation.error.format()),
+        category: 'validation',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        context: { storeId: slug || 'unknown', path: c.req.path, userId },
+      });
     }
 
     const body = validation.data;
     const db = getDb({ DB: c.env.DB });
+    const store = await getStoreBySlugOrThrow(db, slug, c.req.path, userId);
 
-    const store = await db
-      .select({ id: schema.stores.id })
-      .from(schema.stores)
-      .where(eq(schema.stores.slug, slug))
-      .get();
+    // 🛡️ فحص ملكية التصنيف لو تم تمريره
+    if (body.categoryId) {
+      await validateCategoryOwnership(db, body.categoryId, store.id, c.req.path);
+    }
 
-    if (!store) return c.json({ success: false, error: 'المتجر غير موجود' }, 404);
-
-    const slugified = generateSlug(body.name);
+    const slugified = body.slug || generateSlug(body.name);
 
     const existingSlug = await db
       .select({ id: schema.products.id })
@@ -254,7 +292,16 @@ productsRouter.post('/store/:slug/products', async (c) => {
       .get();
 
     if (existingSlug) {
-      return c.json({ success: false, error: 'منتج بنفس هذا الاسم موجود بالفعل' }, 409);
+      throw new SystemError({
+        code: 'PRODUCT_SLUG_ALREADY_EXISTS',
+        userMessage: 'منتج بنفس هذا الاسم أو الـ slug موجود بالفعل.',
+        technicalMessage: `Product slug '${slugified}' collision in store '${store.id}'.`,
+        category: 'business',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        context: { storeId: store.id, path: c.req.path, userId },
+      });
     }
 
     const insertPayload: NewProduct = {
@@ -263,61 +310,65 @@ productsRouter.post('/store/:slug/products', async (c) => {
       name: body.name,
       slug: slugified,
       price: body.price,
-      compareAtPrice: body.compareAtPrice,
-      description: body.description,
-      shortDescription: body.shortDescription,
-      categoryId: body.categoryId,
+      compareAtPrice: body.compareAtPrice ?? null,
+      cost: body.cost ?? null,
+      description: body.description ?? null,
+      shortDescription: body.shortDescription ?? null,
+      categoryId: body.categoryId ?? null,
       stock: body.stock,
-      sku: body.sku,
-      barcode: body.barcode,
+      sku: body.sku ?? null,
+      barcode: body.barcode ?? null,
       images: body.images as ProductImage[],
       variants: body.variants as ProductVariant[],
       isPublished: body.isPublished,
       isFeatured: body.isFeatured,
       haggleEnabled: body.haggleEnabled,
-      minPrice: body.minPrice,
+      minPrice: body.minPrice ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
-    const newProduct = await db
-      .insert(schema.products)
-      .values(insertPayload)
-      .returning();
+    const newProduct = await db.insert(schema.products).values(insertPayload).returning();
 
     return c.json({ success: true, data: newProduct[0] }, 201);
-  } catch (error) {
-    console.error('Error creating product:', error);
-    return c.json({ success: false, error: 'فشل في إنشاء المنتج' }, 500);
-  }
-});
+  })
+);
 
 /**
- * PUT /api/store/:slug/products/:id
- * تحديث منتج موجود
+ * 🟡 PUT /api/store/:slug/products/:id (Protected & Anti-IDOR)
  */
-productsRouter.put('/store/:slug/products/:id', async (c) => {
-  try {
+productsRouter.put('/store/:slug/products/:id', requireAuth, (c) =>
+  safeExecute(async () => {
     const slug = c.req.param('slug');
     const id = c.req.param('id');
+    const userId = c.get('userId');
     const rawBody = await c.req.json().catch(() => null);
 
-    const validation = UpdateProductSchema.safeParse(rawBody);
+    const validation = updateProductSchema.safeParse(rawBody);
     if (!validation.success) {
-      return c.json({ success: false, error: 'بيانات التحديث غير صالحة', details: validation.error.format() }, 400);
+      throw new SystemError({
+        code: 'UPDATE_PRODUCT_VALIDATION_ERROR',
+        userMessage: validation.error.issues[0]?.message || 'بيانات التحديث غير صالحة.',
+        technicalMessage: JSON.stringify(validation.error.issues),
+        category: 'validation',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        context: { storeId: slug || 'unknown', path: c.req.path, userId },
+      });
     }
 
     const body = validation.data;
     const db = getDb({ DB: c.env.DB });
+    const store = await getStoreBySlugOrThrow(db, slug, c.req.path, userId);
 
-    const store = await db
-      .select({ id: schema.stores.id })
-      .from(schema.stores)
-      .where(eq(schema.stores.slug, slug))
-      .get();
-
-    if (!store) return c.json({ success: false, error: 'المتجر غير موجود' }, 404);
+    // 🛡️ فحص ملكية التصنيف الجديد لو تم تحديثه
+    if (body.categoryId) {
+      await validateCategoryOwnership(db, body.categoryId, store.id, c.req.path);
+    }
 
     const existing = await db
-      .select({ id: schema.products.id })
+      .select({ id: schema.products.id, slug: schema.products.slug })
       .from(schema.products)
       .where(
         and(
@@ -329,19 +380,57 @@ productsRouter.put('/store/:slug/products/:id', async (c) => {
       .get();
 
     if (!existing) {
-      return c.json({ success: false, error: 'المنتج غير موجود أو لا تملك صلاحية تعديله' }, 404);
+      throw new SystemError({
+        code: 'PRODUCT_NOT_FOUND',
+        userMessage: 'المنتج غير موجود أو لا تملك صلاحية تعديله.',
+        technicalMessage: `Product '${id}' not found for store '${store.id}'.`,
+        category: 'business',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        context: { storeId: store.id, path: c.req.path, userId },
+      });
     }
 
-    const updates: Partial<NewProduct> = {
-      updatedAt: new Date(),
-    };
+    const updates: Partial<NewProduct> = { updatedAt: new Date() };
 
     if (body.name !== undefined) {
+      const newSlug = body.slug || generateSlug(body.name);
+
+      if (newSlug !== existing.slug) {
+        const slugCollision = await db
+          .select({ id: schema.products.id })
+          .from(schema.products)
+          .where(
+            and(
+              eq(schema.products.storeId, store.id),
+              eq(schema.products.slug, newSlug),
+              isNull(schema.products.deletedAt)
+            )
+          )
+          .get();
+
+        if (slugCollision) {
+          throw new SystemError({
+            code: 'PRODUCT_SLUG_ALREADY_EXISTS',
+            userMessage: 'اسم المنتج الجديد يتعارض مع منتج آخر موجود مسبقاً.',
+            technicalMessage: `Update slug collision '${newSlug}' in store '${store.id}'.`,
+            category: 'business',
+            severity: 'info',
+            retryable: false,
+            shouldAlert: false,
+            context: { storeId: store.id, path: c.req.path, userId },
+          });
+        }
+      }
+
       updates.name = body.name;
-      updates.slug = generateSlug(body.name);
+      updates.slug = newSlug;
     }
+
     if (body.price !== undefined) updates.price = body.price;
     if (body.compareAtPrice !== undefined) updates.compareAtPrice = body.compareAtPrice;
+    if (body.cost !== undefined) updates.cost = body.cost;
     if (body.description !== undefined) updates.description = body.description;
     if (body.shortDescription !== undefined) updates.shortDescription = body.shortDescription;
     if (body.categoryId !== undefined) updates.categoryId = body.categoryId;
@@ -355,37 +444,34 @@ productsRouter.put('/store/:slug/products/:id', async (c) => {
     if (body.haggleEnabled !== undefined) updates.haggleEnabled = body.haggleEnabled;
     if (body.minPrice !== undefined) updates.minPrice = body.minPrice;
 
+    // 🛡️ التحديث محصن بـ (id + storeId + deletedAt)
     const updated = await db
       .update(schema.products)
       .set(updates)
-      .where(eq(schema.products.id, id))
+      .where(
+        and(
+          eq(schema.products.id, id),
+          eq(schema.products.storeId, store.id),
+          isNull(schema.products.deletedAt)
+        )
+      )
       .returning();
 
-    return c.json({ success: true, data: updated[0] });
-  } catch (error) {
-    console.error('Error updating product:', error);
-    return c.json({ success: false, error: 'فشل في تعديل المنتج' }, 500);
-  }
-});
+    return c.json({ success: true, data: updated[0] }, 200);
+  })
+);
 
 /**
- * DELETE /api/store/:slug/products/:id
- * حذف منتج (Soft Delete)
+ * 🔴 DELETE /api/store/:slug/products/:id (Protected & Anti-IDOR)
  */
-productsRouter.delete('/store/:slug/products/:id', async (c) => {
-  try {
+productsRouter.delete('/store/:slug/products/:id', requireAuth, (c) =>
+  safeExecute(async () => {
     const slug = c.req.param('slug');
     const id = c.req.param('id');
+    const userId = c.get('userId');
 
     const db = getDb({ DB: c.env.DB });
-
-    const store = await db
-      .select({ id: schema.stores.id })
-      .from(schema.stores)
-      .where(eq(schema.stores.slug, slug))
-      .get();
-
-    if (!store) return c.json({ success: false, error: 'المتجر غير موجود' }, 404);
+    const store = await getStoreBySlugOrThrow(db, slug, c.req.path, userId);
 
     const product = await db
       .select({ id: schema.products.id })
@@ -400,17 +486,33 @@ productsRouter.delete('/store/:slug/products/:id', async (c) => {
       .get();
 
     if (!product) {
-      return c.json({ success: false, error: 'المنتج غير موجود أو لا تملك صلاحية حذفه' }, 404);
+      throw new SystemError({
+        code: 'PRODUCT_NOT_FOUND',
+        userMessage: 'المنتج غير موجود أو لا تملك صلاحية حذفه.',
+        technicalMessage: `Product '${id}' not found for store '${store.id}'.`,
+        category: 'business',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        context: { storeId: store.id, path: c.req.path, userId },
+      });
     }
 
+    const now = new Date();
+    // 🛡️ الحذف محصن بـ (id + storeId)
     await db
       .update(schema.products)
-      .set({ deletedAt: new Date() })
-      .where(eq(schema.products.id, id));
+      .set({
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(schema.products.id, id),
+          eq(schema.products.storeId, store.id)
+        )
+      );
 
-    return c.json({ success: true, data: { message: 'تم حذف المنتج بنجاح' } });
-  } catch (error) {
-    console.error('Error deleting product:', error);
-    return c.json({ success: false, error: 'فشل في حذف المنتج' }, 500);
-  }
-});
+    return c.json({ success: true, data: { message: 'تم حذف المنتج بنجاح' } }, 200);
+  })
+);

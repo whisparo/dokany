@@ -1,15 +1,15 @@
 // src/lib/db/schema/index.ts
 /**
- * نقطة التصدير المركزية لجميع جداول وأنواع قاعدة بيانات دكاني.
+ * نقطة التصدير المركزية لجميع جداول وأنواع وعلاقات قاعدة بيانات دكاني.
  *
  * هذا الملف هو الوحيد الذي يجب استيراده في باقي أجزاء التطبيق.
- * مثال: import { stores, products, type Store } from '@/lib/db/schema';
+ * مثال: import { stores, products, storesRelations, type Store } from '@/lib/db/schema';
  */
 
 // ============================================
 // 🔐 BETTER AUTH & USERS
 // ============================================
-export { sessions, accounts } from './auth';
+export { sessions, accounts, verifications } from './auth';
 export type {
   Session,
   NewSession,
@@ -19,19 +19,29 @@ export type {
   NewVerification,
 } from './auth';
 
-export { users } from './users';
-export type { User, NewUser } from './users';
+// ✅ إضافة userStats و باقي تصديرات ملف users.ts
+export { users, userStats, magicTokens, passwordHistory } from './users';
+export type { 
+  User, 
+  NewUser, 
+  UserStats, 
+  NewUserStats,
+  MagicToken,
+  NewMagicToken,
+  PasswordHistory,
+  NewPasswordHistory
+} from './users';
 
 // ============================================
 // 🏪 STORES
 // ============================================
-export { stores, storeStats } from './stores';  // ✅ أضف storeStats
+export { stores, storeStats } from './stores';
 export type { Store, NewStore, StoreStat, NewStoreStat } from './stores';
 
 // ============================================
 // 🛍️ CUSTOMERS
 // ============================================
-export { customers, customerStats, customerWallets } from './customers';  // ✅ أضف customerStats و customerWallets
+export { customers, customerStats, customerWallets } from './customers';
 export type {
   Customer,
   NewCustomer,
@@ -50,10 +60,13 @@ export type { Category, NewCategory } from './categories';
 // ============================================
 // 📦 PRODUCTS
 // ============================================
-export { products } from './products';
-export type { Product, NewProduct } from './products';
-export { productStats } from './products';
-export type { ProductStat, NewProductStat } from './products';
+export { products, productStats } from './products';
+export type {
+  Product,
+  NewProduct,
+  ProductStat,
+  NewProductStat,
+} from './products';
 
 // ============================================
 // 🖼️ MEDIA
@@ -162,3 +175,8 @@ export type { Review, NewReview } from './reviews';
 // ============================================
 export { idempotency } from './idempotency';
 export type { Idempotency, NewIdempotency } from './idempotency';
+
+// ============================================
+// 🔗 RELATIONS
+// ============================================
+export * from './relations';

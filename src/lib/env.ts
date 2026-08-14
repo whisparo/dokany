@@ -40,3 +40,24 @@ export interface Env {
   // Application Public URLs
   NEXT_PUBLIC_APP_URL?: string;
 }
+
+/* ============================================================================
+ * 🛡️ HONO CONTEXT & AUTH TYPES
+ * ============================================================================ */
+
+export interface UserContext {
+  id: string;
+  email?: string;
+  name?: string;
+  role?: string;
+  [key: string]: unknown;
+}
+
+export interface AppEnv {
+  Bindings: Env;
+  Variables: {
+    user?: UserContext;
+    userId?: string;  // 👈 إضافة للـ Typesafety
+    storeId?: string; // 👈 إضافة للـ Typesafety
+  };
+}

@@ -17,7 +17,7 @@ import { customers } from './customers';
 import { users } from './users';
 
 // ============================================
-// 🎯 أنواع TypeScript للـ Enums (Strict Types)
+// 🎯 أنواع TypeScript للـ Enums
 // ============================================
 
 export type HaggleStatus = 
@@ -34,7 +34,7 @@ export type HaggleStrategy =
   | 'middle_ground';
 
 // ============================================
-// 📝 أنواع مساعدة ومصمتة للـ JSON fields
+// 📝 أنواع مساعدة للـ JSON fields
 // ============================================
 export type CounterOffer = {
   from: 'customer' | 'bot';
@@ -51,23 +51,25 @@ export type CounterOffer = {
 export const haggleSessions = sqliteTable(
   'haggle_sessions',
   {
-    // ✅ UUID يُولَّد في كود التطبيق
-    id: text('id').primaryKey(), 
+    // ✅ UUID يُولَّد تلقائياً
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()), 
     
     sessionCode: text('session_code').notNull(),
 
-    // المعرفات (سيتم ربط العلاقات الخارجية بالأسفل بشكل مستقل)
+    // المعرفات
     storeId: text('store_id').notNull(),
     productId: text('product_id').notNull(),
-    customerId: text('customer_id'),
+    customerId: text('customer_id'), // يمكن أن يكون Null للزوار
 
-    // الأسعار والمبالغ مخزنة كنصوص لحماية الدقة العشرية للعملات
+    // الأسعار والمبالغ (Formatted strictly as "123.45")
     originalPrice: text('original_price').notNull(),
     minAllowedPrice: text('min_allowed_price').notNull(),
     currentOffer: text('current_offer').notNull(),
 
-    // ✅ مصفوفات عروض المساومة مخزنة كـ JSON text مع توثيق TypeScript الذكي
-    counterOffers: text('counter_offers')
+    // ✅ مصفوفات عروض المساومة كـ JSON
+    counterOffers: text('counter_offers', { mode: 'json' })
       .$type<CounterOffer[]>()
       .notNull()
       .default(sql`'[]'`),
@@ -75,28 +77,30 @@ export const haggleSessions = sqliteTable(
     roundsCount: integer('rounds_count').notNull().default(0),
     maxRounds: integer('max_rounds').notNull().default(5),
 
-    status: text('status').notNull().default('active'),
+    status: text('status').$type<HaggleStatus>().notNull().default('active'),
     finalPrice: text('final_price'),
 
-    // ✅ فك الـ Circular Dependency بذكاء عبر الحفظ كـ text مباشر
+    // ✅ فك الـ Circular Dependency
     orderId: text('order_id'),
     discountAmount: text('discount_amount').notNull().default('0'),
 
-    strategyUsed: text('strategy_used'),
+    strategyUsed: text('strategy_used').$type<HaggleStrategy>(),
 
-    // فترات الصلاحية والنشاط
-    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    // فترات الصلاحية والنشاط (محددة صراحة بـ timestamp_ms)
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
 
-    // ✅ الحوكمة والـ Soft Delete لاتساق النظام
-    deletedAt: integer('deleted_at', { mode: 'timestamp' }),
+    // ✅ الحوكمة والـ Soft Delete
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
     deletedBy: text('deleted_by'),
     
-    createdAt: integer('created_at', { mode: 'timestamp' })
+    // ⏱️ التواقيت الموحدة بالميلي ثانية
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
-    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .default(sql`(unixepoch() * 1000)`),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`)
+      .$onUpdate(() => new Date()),
   },
   (table) => [
     // ============================================
@@ -136,23 +140,30 @@ export const haggleSessions = sqliteTable(
     index('haggle_store_idx').on(table.storeId),
     index('haggle_product_idx').on(table.productId),
     index('haggle_customer_idx').on(table.customerId),
-    index('haggle_order_idx').on(table.orderId),
+    
+    // تحسين فهرس الطلبات باستبعاد الـ Nulls
+    index('haggle_order_idx')
+      .on(table.orderId)
+      .where(sql`${table.orderId} IS NOT NULL`),
+      
     index('haggle_expires_idx').on(table.expiresAt),
     
-    // فهرس مركب سريع جداً للاستعلام عن الجلسات الحية النشطة
+    // فهرس مركب للاستعلام عن الجلسات الحية النشطة
     index('haggle_active_status_idx')
       .on(table.storeId, table.status)
       .where(sql`${table.status} = 'active' AND ${table.deletedAt} IS NULL`),
 
-    // تحسين فهرس الـ Soft Delete للـ Admin Trash Queries
+    // فهرس Soft Delete
     index('haggle_deleted_idx')
       .on(table.deletedAt)
       .where(sql`${table.deletedAt} IS NOT NULL`),
 
-    // ✅ قيد صارم: يمنع فتح أكتر من جلسة حية أو عرض متبادل لنفس العميل على نفس المنتج
+    // ✅ قيد فريد يمنع تكرار الجلسات النشطة لنفس العميل المسجل على نفس المنتج
     uniqueIndex('haggle_active_unique_idx')
       .on(table.customerId, table.productId)
-      .where(sql`${table.status} IN ('active', 'counter_offered') AND ${table.deletedAt} IS NULL`),
+      .where(
+        sql`${table.customerId} IS NOT NULL AND ${table.status} IN ('active', 'counter_offered') AND ${table.deletedAt} IS NULL`
+      ),
 
     // ============================================
     // 🛡️ القيود المنطقية الصارمة (Check Constraints)
@@ -160,41 +171,33 @@ export const haggleSessions = sqliteTable(
     check('chk_haggle_status', sql`${table.status} IN ('active', 'counter_offered', 'accepted', 'rejected', 'expired', 'cancelled')`),
     check('chk_haggle_strategy', sql`${table.strategyUsed} IS NULL OR ${table.strategyUsed} IN ('aggressive', 'friendly', 'middle_ground')`),
     
-    // منع الرموز الفارغة
     check('chk_session_code_format', sql`length(${table.sessionCode}) > 0`),
 
-    // تأمين قيود الـ CAST والعمليات الحسابية للمبالغ المالية
+    // التحقق المالي
     check('chk_min_price', sql`CAST(${table.minAllowedPrice} AS REAL) > 0.0`),
     check('chk_original_price', sql`CAST(${table.originalPrice} AS REAL) >= CAST(${table.minAllowedPrice} AS REAL)`),
     check('chk_discount', sql`CAST(${table.discountAmount} AS REAL) >= 0.0`),
     
-    // ألا يتخطى الخصم المسموح به الفرق بين السعر الأصلي والحد الأدنى
     check(
       'chk_discount_limit',
       sql`CAST(${table.discountAmount} AS REAL) <= (CAST(${table.originalPrice} AS REAL) - CAST(${table.minAllowedPrice} AS REAL))`
     ),
     
-    // قيود السعر النهائي بعد موافقة الطرفين
     check('chk_final_price_upper', sql`${table.finalPrice} IS NULL OR CAST(${table.finalPrice} AS REAL) <= CAST(${table.originalPrice} AS REAL)`),
     check('chk_final_price_lower', sql`${table.finalPrice} IS NULL OR CAST(${table.finalPrice} AS REAL) >= CAST(${table.minAllowedPrice} AS REAL)`),
     
-    // منطق الـ Rounds والعدادات
+    // منطق العدادات والتاريخ
     check('chk_rounds', sql`${table.roundsCount} <= ${table.maxRounds} AND ${table.roundsCount} >= 0`),
     check('chk_max_rounds', sql`${table.maxRounds} > 0`),
+    check('chk_expires_after_created', sql`${table.expiresAt} > ${table.createdAt}`),
 
-    // ✅ تعديل هندسي لحماية قيد الصلاحية: مقارنة الـ expiresAt بوقت الإدخال الحقيقي لضمان سلامة الـ Default values
-    check(
-      'chk_expires_after_created',
-      sql`${table.expiresAt} > CAST(strftime('%s', 'now') * 1000 AS INTEGER)`
-    ),
-
-    // ✅ فكرتك الممتازة: إلزامية وجود استراتيجية في حال تم الحسم (قبول أو رفض الجلسة)
+    // إلزامية وجود استراتيجية عند إنهاء الجلسة
     check(
       'chk_strategy_required',
       sql`(${table.status} NOT IN ('accepted', 'rejected') OR ${table.strategyUsed} IS NOT NULL)`
     ),
 
-    // التحقق من حوكمة الحذف المنطقي
+    // اتساق Soft Delete
     check(
       'chk_haggle_deleted_consistency',
       sql`(${table.deletedAt} IS NULL OR ${table.deletedBy} IS NOT NULL)`

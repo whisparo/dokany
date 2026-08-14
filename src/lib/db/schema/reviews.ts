@@ -40,7 +40,7 @@ export const reviews = sqliteTable(
   {
     id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
 
-    // 🔗 العلاقات الأساسية (مرنة وبدون ربط صلب لتفادي الـ Locks في الـ D1)
+    // 🔗 العلاقات الأساسية
     productId: text('product_id').notNull(),
     storeId: text('store_id').notNull(),
     customerId: text('customer_id'),
@@ -55,11 +55,11 @@ export const reviews = sqliteTable(
     title: text('title'),
     comment: text('comment').notNull(),
     
-    // 🎨 الميديا والـ Arrays (مخزنة كـ JSON مع الحفاظ على الأداء)
+    // 🎨 الميديا والـ Arrays (JSON)
     pros: text('pros', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
     cons: text('cons', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
     images: text('images', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
-    videos: text('videos', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`), // دعم الفيديوهات بشكل أصيل
+    videos: text('videos', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
 
     // ⭐ التقييم (1-5)
     rating: integer('rating').notNull(),
@@ -68,7 +68,7 @@ export const reviews = sqliteTable(
     status: text('status').notNull().default('published'),
     language: text('language').notNull().default('ar'),
 
-    // 👍 التصويت والـ Engagement
+    // 👍 التصويت
     helpfulCount: integer('helpful_count').notNull().default(0),
     notHelpfulCount: integer('not_helpful_count').notNull().default(0),
 
@@ -94,9 +94,7 @@ export const reviews = sqliteTable(
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
   },
   (table) => [
-    // ============================================
-    // 🗝️ الفهارس الفريدة لمنع التكرار وسوء الاستخدام
-    // ============================================
+    // 🗝️ الفهارس الفريدة
     uniqueIndex('reviews_customer_product_unique')
       .on(table.customerId, table.productId)
       .where(sql`customer_id IS NOT NULL AND deleted_at IS NULL`),
@@ -105,9 +103,7 @@ export const reviews = sqliteTable(
       .on(table.orderId, table.productId)
       .where(sql`order_id IS NOT NULL AND deleted_at IS NULL`),
 
-    // ============================================
-    // ⚡ فهارس الأداء (D1 Tenant Isolation & Analytics)
-    // ============================================
+    // ⚡ فهارس الأداء
     index('reviews_product_idx').on(table.productId),
     index('reviews_store_idx').on(table.storeId),
     index('reviews_customer_idx').on(table.customerId).where(sql`customer_id IS NOT NULL`),
@@ -138,9 +134,7 @@ export const reviews = sqliteTable(
       .on(table.storeId, table.rating)
       .where(sql`status = 'published' AND deleted_at IS NULL`),
 
-    // ============================================
-    // 🛡️ القيود المنطقية المتوافقة مع SQLite Engine
-    // ============================================
+    // 🛡️ القيود المنطقية
     check('chk_rating_range', sql`${table.rating} BETWEEN 1 AND 5`),
     check('chk_review_status', sql`${table.status} IN ('pending', 'published', 'hidden', 'reported', 'deleted')`),
     check('chk_language', sql`${table.language} IN ('ar', 'en', 'fr', 'es')`),
@@ -148,7 +142,6 @@ export const reviews = sqliteTable(
     check('chk_comment_length', sql`length(${table.comment}) BETWEEN 1 AND 5000`),
     check('chk_reply_length', sql`${table.reply} IS NULL OR length(${table.reply}) <= 2000`),
     
-    // قيود مصفوفات الميديا والـ JSON
     check('chk_images_limit', sql`json_array_length(${table.images}) <= 10`),
     check('chk_videos_limit', sql`json_array_length(${table.videos}) <= 2`), 
     check('chk_pros_limit', sql`json_array_length(${table.pros}) <= 10`),
@@ -166,18 +159,15 @@ export const reviews = sqliteTable(
 );
 
 // ============================================
-// 📚 أنواع TypeScript الصريحة لـ Drizzle
+// 📚 أنواع TypeScript الصريحة
 // ============================================
 export type Review = InferSelectModel<typeof reviews>;
 export type NewReview = InferInsertModel<typeof reviews>;
 
 // ============================================
-// 🛠️ الدوال المساعدة (Drizzle Native & Edge Ready)
+// 🛠️ الدوال المساعدة
 // ============================================
 
-/**
- * ✅ حساب متوسط التقييم لمنتج بشكل آمن
- */
 export async function getAverageRating(
   d1Database: D1Database,
   productId: string
@@ -205,9 +195,6 @@ export async function getAverageRating(
   };
 }
 
-/**
- * ✅ حساب متوسط التقييم لمتجر كامل (Tenant Isolation Analytics)
- */
 export async function getStoreAverageRating(
   d1Database: D1Database,
   storeId: string
@@ -235,9 +222,6 @@ export async function getStoreAverageRating(
   };
 }
 
-/**
- * ✅ جلب مراجعات منتج مع الـ Pagination والـ Sorting الآلي
- */
 export async function getProductReviews(
   d1Database: D1Database,
   productId: string,
@@ -259,20 +243,20 @@ export async function getProductReviews(
     isNull(reviews.deletedAt)
   );
 
-  const reviewsList = await db
-    .select()
-    .from(reviews)
-    .where(baseConditions)
-    .orderBy(orderClause)
-    .limit(limit)
-    .offset(offset)
-    .all();
-
-  const totalCount = await db
-    .select({ count: count(reviews.id) })
-    .from(reviews)
-    .where(baseConditions)
-    .get();
+  // تنفيذ الاستعلامين بالتوازي لتسريع الاستجابة على الـ Edge
+  const [reviewsList, totalCount] = await Promise.all([
+    db.select()
+      .from(reviews)
+      .where(baseConditions)
+      .orderBy(orderClause)
+      .limit(limit)
+      .offset(offset)
+      .all(),
+    db.select({ count: count(reviews.id) })
+      .from(reviews)
+      .where(baseConditions)
+      .get()
+  ]);
 
   return {
     reviews: reviewsList,
@@ -280,9 +264,6 @@ export async function getProductReviews(
   };
 }
 
-/**
- * ✅ التحقق من أحقية العميل في كتابة المراجعة (تفادي الـ Fake Reviews)
- */
 export async function canWriteReview(
   d1Database: D1Database,
   customerId: string,
@@ -309,9 +290,6 @@ export async function canWriteReview(
   return { canWrite: true };
 }
 
-/**
- * ✅ التصويت على مراجعة (Helpful / Not Helpful)
- */
 export async function voteReview(
   d1Database: D1Database,
   reviewId: string,
@@ -320,8 +298,8 @@ export async function voteReview(
   const db = drizzle(d1Database);
   
   const updateFields = vote === 'helpful' 
-    ? { helpfulCount: sql`${reviews.helpfulCount} + 1` }
-    : { notHelpfulCount: sql`${reviews.notHelpfulCount} + 1` };
+    ? { helpfulCount: sql`${reviews.helpfulCount} + 1`, updatedAt: new Date() }
+    : { notHelpfulCount: sql`${reviews.notHelpfulCount} + 1`, updatedAt: new Date() };
 
   const result = await db
     .update(reviews)
@@ -338,9 +316,6 @@ export async function voteReview(
   return result;
 }
 
-/**
- * ✅ رد التاجر الرسمي على مراجعة العميل
- */
 export async function replyToReview(
   d1Database: D1Database,
   reviewId: string,
@@ -369,9 +344,6 @@ export async function replyToReview(
   return result;
 }
 
-/**
- * ✅ التبليغ عن مراجعة مسيئة مع ميزة الإخفاء التلقائي بعد 5 بلاغات
- */
 export async function reportReview(
   d1Database: D1Database,
   reviewId: string
@@ -397,9 +369,6 @@ export async function reportReview(
   return result;
 }
 
-/**
- * ✅ التحكم الإداري بالمراجعات (الموافقة، الرفض، الحجب)
- */
 export async function moderateReview(
   d1Database: D1Database,
   reviewId: string,
@@ -433,9 +402,6 @@ export async function moderateReview(
   return result;
 }
 
-/**
- * ✅ حساب مصفوفة توزيع النجوم لعرضها على شكل الرسم البياني
- */
 export async function getRatingDistribution(
   d1Database: D1Database,
   productId: string
@@ -466,9 +432,6 @@ export async function getRatingDistribution(
   return distribution;
 }
 
-/**
- * ✅ كشف ومراقبة المراجعات ذات الـ Spam Score العالي
- */
 export async function detectSpamReviews(d1Database: D1Database): Promise<Review[]> {
   const db = drizzle(d1Database);
 

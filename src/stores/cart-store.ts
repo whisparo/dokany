@@ -1,6 +1,7 @@
 // src/stores/cart-store.ts
 import { create } from 'zustand';
 import { persist, devtools } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 import type { CartItem, CartSyncResponse, CartStore } from '@/types/cart';
 
 // ============================================================
@@ -25,9 +26,10 @@ export const formatPrice = (priceInCents: number): string => {
 // ⚙️ Constants
 // ============================================================
 
-const DEBOUNCE_DELAY_MS = 1200; // ⚡ تقليل التأخير لتجربة استخدام أسرع وأمن
+const DEBOUNCE_DELAY_MS = 1200;
 const MAX_SYNC_RETRIES = 3;
 const MAX_QUANTITY = 999;
+const HYDRATION_SYNC_DELAY_MS = 500; // ✅ تأخير قصير قبل الـ sync بعد الـ hydration
 
 // ============================================================
 // 🧠 Cart Store (Zustand + Persist + DevTools)
@@ -43,6 +45,7 @@ export const useCartStore = create<CartStore>()(
         let syncTimeoutId: ReturnType<typeof setTimeout> | null = null;
         let activeAbortController: AbortController | null = null;
         let validateAbortController: AbortController | null = null;
+        let hydrationSyncTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
         // ============================================================
         // 🔧 Helper Functions
@@ -116,7 +119,27 @@ export const useCartStore = create<CartStore>()(
           // 🎛️ Basic Actions
           // ========================================
 
-          setHasHydrated: (state: boolean) => set({ hasHydrated: state }),
+          setHasHydrated: (state: boolean) => {
+            set({ hasHydrated: state });
+
+            // ✅ مزامنة تلقائية بعد اكتمال الـ Hydration
+            if (state === true) {
+              if (hydrationSyncTimeoutId !== null) {
+                clearTimeout(hydrationSyncTimeoutId);
+                hydrationSyncTimeoutId = null;
+              }
+
+              hydrationSyncTimeoutId = setTimeout(() => {
+                const currentState = get();
+                if (currentState.items.length > 0 && !currentState.isSyncing) {
+                  console.log('[Cart] 🔄 Auto-sync after hydration...');
+                  void currentState.syncCart();
+                }
+                hydrationSyncTimeoutId = null;
+              }, HYDRATION_SYNC_DELAY_MS);
+            }
+          },
+
           setIsOpen: (open: boolean) => set({ isOpen: open }),
           toggleCart: () => set((state) => ({ isOpen: !state.isOpen })),
 
@@ -240,6 +263,11 @@ export const useCartStore = create<CartStore>()(
               validateAbortController = null;
             }
 
+            if (hydrationSyncTimeoutId !== null) {
+              clearTimeout(hydrationSyncTimeoutId);
+              hydrationSyncTimeoutId = null;
+            }
+
             set({
               items: [],
               totalQuantity: 0,
@@ -255,15 +283,13 @@ export const useCartStore = create<CartStore>()(
           // ========================================
 
           syncCart: async () => {
-            const { items } = get();
-
-            // إلغاء أي طلب مزامنة معلق بشكل فوري وآمن
             if (activeAbortController) {
               activeAbortController.abort();
               activeAbortController = null;
             }
 
-            if (items.length === 0) {
+            // فحص مبدئي
+            if (get().items.length === 0) {
               set({
                 isSyncing: false,
                 lastSyncedAt: Date.now(),
@@ -280,6 +306,18 @@ export const useCartStore = create<CartStore>()(
 
             while (attempt < MAX_SYNC_RETRIES) {
               try {
+                // ✅ جلب أحدث العناصر المحدثة في الـ Store قبل كل محاولة إرسال
+                const currentItems = get().items;
+                if (currentItems.length === 0) {
+                  set({
+                    isSyncing: false,
+                    lastSyncedAt: Date.now(),
+                    syncError: null,
+                  });
+                  activeAbortController = null;
+                  return;
+                }
+
                 const idempotencyKey =
                   typeof crypto !== 'undefined' &&
                   typeof crypto.randomUUID === 'function'
@@ -288,13 +326,13 @@ export const useCartStore = create<CartStore>()(
 
                 const response = await fetch('/api/cart/sync', {
                   method: 'POST',
-                  credentials: 'include', // ✅ إرسال ملفات الكوكيز والـ Session لحماية الهوية
+                  credentials: 'include',
                   headers: {
                     'Content-Type': 'application/json',
                     'Idempotency-Key': idempotencyKey,
                   },
                   body: JSON.stringify({
-                    items: items.map((item) => ({
+                    items: currentItems.map((item) => ({
                       productId: item.productId,
                       variantId: item.variantId,
                       quantity: item.quantity,
@@ -365,7 +403,7 @@ export const useCartStore = create<CartStore>()(
             try {
               const response = await fetch('/api/cart/validate', {
                 method: 'POST',
-                credentials: 'include', // ✅ حماية الهوية والجلسة
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   items: items.map((i) => ({
@@ -456,9 +494,12 @@ export const useCartCount = () =>
 
 export const useIsCartReady = () => useCartStore((s) => s.hasHydrated);
 
+// ✅ تم الاستعانة بـ useShallow لتجنب الـ unnecessary re-renders عند استرجاع كائن
 export const useCartSyncState = () =>
-  useCartStore((s) => ({
-    isSyncing: s.isSyncing,
-    syncError: s.syncError,
-    lastSyncFailed: s.lastSyncFailed,
-  }));
+  useCartStore(
+    useShallow((s) => ({
+      isSyncing: s.isSyncing,
+      syncError: s.syncError,
+      lastSyncFailed: s.lastSyncFailed,
+    }))
+  );

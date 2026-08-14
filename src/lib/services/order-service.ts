@@ -3,10 +3,8 @@
 import { schema, type D1Transaction } from '@/lib/db';
 import type { NewOrder, Order } from '@/lib/db/schema/orders';
 import type { NewOrderItem } from '@/lib/db/schema/order-items';
-import { calculateLineTotal, calculateNetAmount } from '@/lib/db/schema/order-items';
 import type { ProductOptions, OrderItemMetadata } from '@/lib/db/schema/order-items';
 import { SystemError } from '@/lib/errors/types';
-import { sql } from 'drizzle-orm';
 
 export interface RawOrderItemInput {
   productId: string;
@@ -17,20 +15,20 @@ export interface RawOrderItemInput {
   productImage?: string;
   productOptions?: ProductOptions;
   orderedQty: number;
-  price: string;
-  originalPrice?: string;
-  discount?: string;
+  /** السعر بالقرش/Cents لتفادي أخطاء التقريب */
+  price: number;
+  originalPrice?: number;
+  discount?: number;
   metadata?: OrderItemMetadata;
 }
 
 export class OrderService {
   /**
-   * 1️⃣ توليد رقم طلب فريد وإنساني (Human-readable Order Number)
+   * 1️⃣ توليد رقم طلب فريد وإنساني آمن آلياً
    */
   static generateOrderNumber(): string {
     const prefix = 'ORD';
     
-    // توليد قيم عشوائية آمنة بطول 4 بايت بدل Math.random()
     const array = new Uint32Array(1);
     crypto.getRandomValues(array);
     const randomPart = array[0].toString(36).substring(0, 5).toUpperCase();
@@ -40,17 +38,19 @@ export class OrderService {
   }
 
   /**
-   * 2️⃣ تحضير وحساب قيم عناصر الطلب للتأكد من أنها متوافقة مع شروط الـ DB
+   * 2️⃣ تحضير وحساب قيم عناصر الطلب بالأعداد الصحيحة (Cents)
    */
   static prepareOrderItems(items: RawOrderItemInput[], storeId: string) {
     return items.map((item) => {
-      const lineTotal = calculateLineTotal(item.price, item.orderedQty);
-      const originalPrice = item.originalPrice || item.price;
-      const discount = item.discount || '0';
-      const netAmount = calculateNetAmount(lineTotal, discount, '0');
+      const price = Math.round(item.price);
+      const originalPrice = item.originalPrice !== undefined ? Math.round(item.originalPrice) : price;
+      const discount = item.discount !== undefined ? Math.round(item.discount) : 0;
+      
+      const lineTotal = price * item.orderedQty;
+      const netAmount = Math.max(0, lineTotal - discount);
 
       return {
-        storeId, // 👈 تم إضافة storeId لتطابق NewOrderItem Schema
+        storeId,
         productId: item.productId,
         variantSku: item.variantSku,
         productName: item.productName,
@@ -59,7 +59,7 @@ export class OrderService {
         productImage: item.productImage,
         productOptions: item.productOptions || {},
         orderedQty: item.orderedQty,
-        price: item.price,
+        price,
         lineTotal,
         originalPrice,
         discount,
@@ -68,8 +68,9 @@ export class OrderService {
       };
     });
   }
+
   /**
-   * 3️⃣ التحقق من قيد المبالغ وقسمة الفواصل العائمة (Floating Point Protection)
+   * 3️⃣ حساب إجماليات الطلب بدقة بالقرش (Integer / Cents)
    */
   static calculateOrderTotals(params: {
     subtotal: number;
@@ -77,25 +78,24 @@ export class OrderService {
     taxAmount?: number;
     discount?: number;
   }) {
-    const subtotal = params.subtotal;
-    const shippingCost = params.shippingCost;
-    const taxAmount = params.taxAmount || 0;
-    const discount = params.discount || 0;
+    const subtotal = Math.round(params.subtotal);
+    const shippingCost = Math.round(params.shippingCost);
+    const taxAmount = Math.round(params.taxAmount || 0);
+    const discount = Math.round(params.discount || 0);
 
-    const totalRaw = subtotal + shippingCost + taxAmount - discount;
-    const totalRounded = Math.round((totalRaw + Number.EPSILON) * 100) / 100;
+    const total = Math.max(0, subtotal + shippingCost + taxAmount - discount);
 
     return {
-      subtotal: subtotal.toFixed(2),
-      shippingCost: shippingCost.toFixed(2),
-      taxAmount: taxAmount.toFixed(2),
-      discount: discount.toFixed(2),
-      total: totalRounded.toFixed(2),
+      subtotal,
+      shippingCost,
+      taxAmount,
+      discount,
+      total,
     };
   }
 
   /**
-   * 4️⃣ حفظ رأس الطلب (Order Header) داخل قاعدة البيانات D1
+   * 4️⃣ حفظ رأس الطلب (Order Header)
    */
   static async createOrder(orderData: NewOrder, tx: D1Transaction): Promise<Order> {
     if (!orderData || !orderData.storeId || !orderData.customerId) {
@@ -112,13 +112,14 @@ export class OrderService {
     }
 
     try {
+      const now = new Date();
       const [order] = await tx
         .insert(schema.orders)
         .values({
           ...orderData,
           id: orderData.id || crypto.randomUUID(),
-          createdAt: sql`CURRENT_TIMESTAMP`,
-          updatedAt: sql`CURRENT_TIMESTAMP`,
+          createdAt: orderData.createdAt || now,
+          updatedAt: orderData.updatedAt || now,
         })
         .returning();
 
@@ -159,7 +160,7 @@ export class OrderService {
   }
 
   /**
-   * 5️⃣ حفظ عناصر الطلب (Order Items) دفعة واحدة داخل قاعدة البيانات
+   * 5️⃣ حفظ عناصر الطلب (Order Items)
    */
   static async createOrderItems(
     orderId: string,
@@ -171,12 +172,13 @@ export class OrderService {
     }
 
     try {
+      const now = new Date();
       const valuesToInsert = items.map((item) => ({
         ...item,
         id: crypto.randomUUID(),
         orderId,
-        createdAt: sql`CURRENT_TIMESTAMP`,
-        updatedAt: sql`CURRENT_TIMESTAMP`,
+        createdAt: now,
+        updatedAt: now,
       }));
 
       const insertedItems = await tx
@@ -201,7 +203,6 @@ export class OrderService {
   }
 }
 
-// 🟢 Export مباشر لتسهيل الاستخدام
 export const createOrder = OrderService.createOrder;
 export const createOrderItems = OrderService.createOrderItems;
 export const prepareOrderItems = OrderService.prepareOrderItems;

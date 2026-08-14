@@ -2,19 +2,20 @@
 
 'use client';
 
-import { useRef, useState } from 'react';
-import { uploadToCloudinary } from '@/lib/services/cloudinary';
+import { useRef, useState, useEffect } from 'react';
 import { useEditorStore } from '../../../store/useEditorStore';
 import { generateUUID } from '@/lib/utils/id';
 import { Typography } from '@/components/shared/Typography';
 import { X, Video, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useQuickUpload } from '../../../hooks/useQuickUpload';
 
 interface QuickProductVideoUploaderProps {
   videoUrl: string | null;
   onVideoChange: (url: string | null) => void;
   onError: (error: string | null) => void;
   disabled?: boolean;
+  storeId?: string; // ✅ معرف المتجر للحصول على التوقيع
 }
 
 export function QuickProductVideoUploader({
@@ -22,26 +23,51 @@ export function QuickProductVideoUploader({
   onVideoChange,
   onError,
   disabled = false,
+  storeId,
 }: QuickProductVideoUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const tempPreviewUrlRef = useRef<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const { startUpload, updateUploadProgress, completeUpload, failUpload } = useEditorStore();
+  const { startUpload, completeUpload, failUpload } = useEditorStore();
+
+  // ✅ استخدام Hook المحدث مع storeId
+  const { uploadWithPreview, progress, error: uploadError, reset } = useQuickUpload({
+    storeId,
+    entityType: 'product_image',
+  });
+
+  // ✅ مزامنة حالة التحميل مع الـ Hook
+  useEffect(() => {
+    setIsUploading(!uploadError && progress > 0 && progress < 100);
+  }, [progress, uploadError]);
+
+  // ✅ إخطار المكون الأب بأخطاء الرفع فقط عند تغير الخطأ
+  useEffect(() => {
+    if (uploadError) {
+      onError(uploadError);
+    }
+  }, [uploadError, onError]);
 
   /**
    * ✅ فحص مدة الفيديو في المتصفح قبل الرفع
-   * بيوفر bandwidth لأننا بنرفض الفيديوهات الطويلة قبل الرفع
    */
   const checkVideoDuration = (file: File): Promise<number> => {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
       video.preload = 'metadata';
+
+      const objectUrl = URL.createObjectURL(file);
+
       video.onloadedmetadata = () => {
-        window.URL.revokeObjectURL(video.src);
+        URL.revokeObjectURL(objectUrl);
         resolve(video.duration);
       };
-      video.onerror = () => reject(new Error('فشل قراءة ملف الفيديو'));
-      video.src = URL.createObjectURL(file);
+
+      video.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('فشل قراءة ملف الفيديو'));
+      };
+
+      video.src = objectUrl;
     });
   };
 
@@ -61,7 +87,7 @@ export function QuickProductVideoUploader({
       return;
     }
 
-    // ✅ تحقق من المدة (حد 10 ثوانٍ + هامش بسيط)
+    // ✅ تحقق من المدة (حد 10 ثوانٍ)
     try {
       const duration = await checkVideoDuration(file);
       if (duration > 10.5) {
@@ -73,45 +99,54 @@ export function QuickProductVideoUploader({
       return;
     }
 
-    setIsUploading(true);
+    // ✅ إعادة تعيين حالة الخطأ السابقة
+    reset();
     onError(null);
 
     const uploadId = generateUUID();
-    const tempPreviewUrl = URL.createObjectURL(file);
-    tempPreviewUrlRef.current = tempPreviewUrl;
+    const objectUrl = URL.createObjectURL(file);
 
-    // ✅ Optimistic UI: إضافة الرفع فوراً
-    startUpload(uploadId, tempPreviewUrl, {
+    // ✅ Optimistic UI
+    startUpload(uploadId, objectUrl, {
       mediaType: 'video',
       size: file.size,
       mimeType: file.type,
     });
 
     try {
-      // ✅ رفع إلى Cloudinary مع progress tracking
-      const cloudinaryUrl = await uploadToCloudinary(file, (progress) => {
-        updateUploadProgress(uploadId, progress);
-      });
+      // ✅ استخدام الـ Hook للرفع مع التوقيع
+      const { result, preview } = await uploadWithPreview(file);
 
-      // ✅ تحديث الحالة
-      onVideoChange(cloudinaryUrl);
-      completeUpload(uploadId, cloudinaryUrl);
-      setIsUploading(false);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'فشل رفع الفيديو';
+      if (!result) {
+        throw new Error(uploadError || 'فشل رفع الفيديو');
+      }
+
+      // ✅ تحديث الحالة بنجاح
+      onVideoChange(result.url);
+      completeUpload(uploadId, result.url);
+
+      // ✅ تنظيف الرابط المؤقت بعد نجاح الرفع
+      if (preview) {
+        URL.revokeObjectURL(preview);
+      }
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'فشل رفع الفيديو';
       onError(errorMessage);
       failUpload(uploadId, errorMessage);
-      setIsUploading(false);
     } finally {
-      // ✅ تنظيف الـ preview URL (بعد ما نخلص استخدامه)
-      if (tempPreviewUrlRef.current) {
-        URL.revokeObjectURL(tempPreviewUrlRef.current);
-        tempPreviewUrlRef.current = null;
-      }
+      setIsUploading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     }
+  };
+
+  // ✅ إعادة تعيين حالة الخطأ عند إزالة الفيديو
+  const handleRemoveVideo = () => {
+    onVideoChange(null);
+    onError(null);
+    reset();
   };
 
   return (
@@ -121,12 +156,12 @@ export function QuickProductVideoUploader({
       </label>
       <div
         className={cn(
-          "relative border-2 border-dashed rounded-xl p-4 transition-all",
+          'relative border-2 border-dashed rounded-xl p-4 transition-all',
           videoUrl
-            ? "border-green-400 dark:border-green-600 bg-green-50/50 dark:bg-green-950/20"
+            ? 'border-green-400 dark:border-green-600 bg-green-50/50 dark:bg-green-950/20'
             : isUploading
-            ? "border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/20"
-            : "border-slate-300 dark:border-slate-700 hover:border-primary/50"
+            ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/20'
+            : 'border-slate-300 dark:border-slate-700 hover:border-primary/50'
         )}
       >
         {videoUrl ? (
@@ -138,13 +173,10 @@ export function QuickProductVideoUploader({
             />
             <button
               type="button"
-              onClick={() => {
-                onVideoChange(null);
-                onError(null);
-              }}
+              onClick={handleRemoveVideo}
               className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors z-10"
               aria-label="إزالة الفيديو"
-              disabled={disabled}
+              disabled={disabled || isUploading}
             >
               <X className="w-4 h-4" />
             </button>
@@ -161,12 +193,25 @@ export function QuickProductVideoUploader({
                 <Video className="w-6 h-6 text-purple-600" />
               )}
             </div>
-            <Typography variant="body-sm" className="text-center text-muted-foreground">
-              {isUploading ? 'جاري رفع الفيديو...' : 'اضغط لرفع فيديو للمنتج'}
+            <Typography
+              variant="body-sm"
+              className="text-center text-muted-foreground"
+            >
+              {isUploading
+                ? `جاري رفع الفيديو... ${progress}%`
+                : 'اضغط لرفع فيديو للمنتج'}
             </Typography>
             <Typography variant="caption" className="text-muted-foreground/70">
               MP4, WebM (حد أقصى 10 ثوانٍ / 20MB)
             </Typography>
+            {isUploading && progress > 0 && progress < 100 && (
+              <div className="w-full max-w-xs h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-purple-600 transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            )}
           </label>
         )}
         <input

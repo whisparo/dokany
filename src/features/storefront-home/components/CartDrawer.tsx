@@ -1,8 +1,14 @@
 // src/components/storefront/CartDrawer.tsx
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import { useCartStore } from '@/stores/cart-store';
+import React, { useEffect } from 'react';
+import { 
+  useCartStore, 
+  useCartItems, 
+  useCartTotal, 
+  useCartCount, 
+  useIsCartReady 
+} from '@/stores/cart-store';
 import { useRouter, useParams } from 'next/navigation';
 import { CartSheet } from './CartSheet';
 
@@ -10,45 +16,44 @@ export function CartDrawer() {
   const router = useRouter();
   const params = useParams();
 
-  // ⚡ منع الـ Hydration Mismatch عبر التأكد من تحميل الكلاينت أولاً
-  const [hasMounted, setHasMounted] = useState(false);
+  // ⚡ استخدام جاهزية الـ Store للـ Hydration بدلاً من local state يدوي
+  const isReady = useIsCartReady();
 
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
-
+  // 🎯 استدعاء الـ Actions والـ Selectors المجهزة والمحسنة للأداء
   const isOpen = useCartStore((state) => state.isOpen);
   const setIsOpen = useCartStore((state) => state.setIsOpen);
-  const items = useCartStore((state) => state.items);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
 
-  const totalPrice = items.reduce((total, item) => total + item.price * item.quantity, 0);
-  const totalItemsCount = items.reduce((total, item) => total + item.quantity, 0);
+  // 🚀 استخدام المخرجات المحسنة مسبقاً لمنع العمليات الحسابية المكررة في كل Re-render
+  const items = useCartItems();
+  const totalPrice = useCartTotal();
+  const totalItemsCount = useCartCount();
 
-  // قفل السكرول في الخلفية عند فتح السلة
+  // 🔒 قفل السكرول في الخلفية عند فتح السلة بأمان
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      document.documentElement.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
-    }
+    if (!isOpen) return;
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalDocOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
     return () => {
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalDocOverflow;
     };
   }, [isOpen]);
 
-  // ⛔ عدم رندرة أي شيء إلا بعد اكتمال الـ Mount في الكلاينت
-  if (!hasMounted || !isOpen) return null;
+  // ⛔ عدم رندرة أي شيء إلا بعد اكتمال الـ Hydration وفتح السلة
+  if (!isReady || !isOpen) return null;
 
   const handleCheckout = () => {
     setIsOpen(false);
-    
+
     let storeSlug = (params?.storeSlug || params?.slug || params?.store) as string;
-    
+
     if (!storeSlug && typeof window !== 'undefined') {
       const pathParts = window.location.pathname.split('/').filter(Boolean);
       if (pathParts[0] && pathParts[0] !== 'checkout') {
@@ -65,12 +70,12 @@ export function CartDrawer() {
 
   return (
     <div className="fixed inset-0 z-[100] flex justify-end font-sans">
-      <div 
+      <div
         className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300"
         onClick={() => setIsOpen(false)}
       />
 
-      <CartSheet 
+      <CartSheet
         items={items}
         totalPrice={totalPrice}
         totalItemsCount={totalItemsCount}

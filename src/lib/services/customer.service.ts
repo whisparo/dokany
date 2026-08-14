@@ -1,13 +1,13 @@
 // src/lib/services/customer.service.ts
 
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { Redis } from '@upstash/redis';
 import { getDb } from '@/lib/db';
 import { customers, type Customer } from '@/lib/db/schema/customers';
+import type { Env } from '@/lib/env';
 import { SystemError } from '@/lib/errors/types';
 
 export interface FindOrCreateCustomerInput {
-  storeId?: string;
   name: string;
   phone: string;
   email?: string;
@@ -20,7 +20,7 @@ export class CustomerService {
    * إيجاد العميل برقم الهاتف (مع الكاش)، أو إنشائه تلقائياً إذا لم يكن موجوداً
    */
   static async findOrCreateCustomer(
-    env: CloudflareEnv,
+    env: Env,
     input: FindOrCreateCustomerInput
   ): Promise<Customer> {
     const cleanPhone = input.phone.trim();
@@ -46,7 +46,7 @@ export class CustomerService {
     try {
       const db = getDb(env);
 
-      // 2️⃣ البحث عن العميل في قاعدة البيانات D1
+      // 2️⃣ البحث عن العميل في قاعدة البيانات D1 (Global Customer Record)
       const [existingCustomer] = await db
         .select()
         .from(customers)
@@ -63,6 +63,7 @@ export class CustomerService {
       const newCustomerId = crypto.randomUUID();
       const cleanEmail = input.email && input.email.trim() !== '' ? input.email.trim() : null;
       const cleanName = input.name && input.name.trim() !== '' ? input.name.trim() : null;
+      const now = new Date();
 
       const [newCustomer] = await db
         .insert(customers)
@@ -75,8 +76,8 @@ export class CustomerService {
             language: 'ar',
             notifications: true,
           },
-          createdAt: sql`CURRENT_TIMESTAMP`,
-          updatedAt: sql`CURRENT_TIMESTAMP`,
+          createdAt: now,
+          updatedAt: now,
         })
         .returning();
 
@@ -117,7 +118,7 @@ export class CustomerService {
   /**
    * دالة مساعدة لتخزين العميل في Redis
    */
-  private static async setCache(env: CloudflareEnv, key: string, customerData: Customer): Promise<void> {
+  private static async setCache(env: Env, key: string, customerData: Customer): Promise<void> {
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return;
 
     try {
@@ -126,7 +127,8 @@ export class CustomerService {
         token: env.UPSTASH_REDIS_REST_TOKEN,
       });
 
-      await redis.set(key, JSON.stringify(customerData), { ex: CUSTOMER_CACHE_TTL_SECONDS });
+      // تمرير الكائن مباشرة لأن Upstash يقوم بعمل serialization تلقائياً
+      await redis.set(key, customerData, { ex: CUSTOMER_CACHE_TTL_SECONDS });
     } catch (error) {
       console.warn('⚠️ Failed to save customer to Redis cache:', error);
     }

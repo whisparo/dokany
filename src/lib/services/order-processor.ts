@@ -38,8 +38,12 @@ export async function processOrder(
       try {
         const db = getDb(env);
 
+        // تحويل المبلغ المالي إلى رقم صحيح (Cents)
+        const totalAmountCents = typeof orderData.total === 'string'
+          ? parseInt(orderData.total, 10)
+          : Number(orderData.total);
+
         return await db.transaction(async (tx) => {
-          // 1️⃣ تحضير وحساب عناصر الطلب
           // 1️⃣ تحضير وحساب عناصر الطلب
           const preparedItems = prepareOrderItems(orderData.rawItems, orderData.storeId);
 
@@ -57,12 +61,12 @@ export async function processOrder(
           }));
           await updateStock(stockItems, tx);
 
-          // 5️⃣ تحديث إحصائيات المتجر والـ Redis Cache
-          await updateStoreStatsAfterOrder(env, orderData.storeId, orderData.total, tx);
+          // 5️⃣ تحديث إحصائيات المتجر (سجل الداتابيز فقط)
+          await updateStoreStatsAfterOrder(env, orderData.storeId, totalAmountCents, tx);
 
           // 6️⃣ تحديث إحصائيات العميل إن وجد
           if (orderData.customerId) {
-            await updateCustomerStats(env, orderData.customerId, orderData.total, tx);
+            await updateCustomerStats(env, orderData.customerId, totalAmountCents, tx);
           }
 
           // 7️⃣ تحديث إحصائيات مبيعات المنتجات المشتراة

@@ -2,10 +2,10 @@
 import { relations } from 'drizzle-orm';
 
 import { users } from './users';
-import { customers } from './customers';
-import { stores } from './stores';
+import { customers, customerStats, customerWallets } from './customers';
+import { stores, storeStats } from './stores';
 import { categories } from './categories';
-import { products } from './products';
+import { products, productStats } from './products';
 import { addresses } from './addresses';
 import { cartItems } from './cart-items';
 import { orders } from './orders';
@@ -25,7 +25,7 @@ import { media } from './media';
 // ============================================
 // 🔐 BETTER AUTH – علاقات المصادقة
 // ============================================
-import { sessions, accounts } from './auth';
+import { sessions, accounts, verifications } from './auth';
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
   user: one(users, {
@@ -53,19 +53,42 @@ export const usersRelations = relations(users, ({ many }) => ({
 }));
 
 // ============================================
-// 🛍️ CUSTOMERS
+// 🛍️ CUSTOMERS & CUSTOMER STATS / WALLETS
 // ============================================
-export const customersRelations = relations(customers, ({ many }) => ({
+export const customersRelations = relations(customers, ({ one, many }) => ({
   addresses: many(addresses),
   orders: many(orders),
   cartItems: many(cartItems),
   haggleSessions: many(haggleSessions),
   telegramMessages: many(telegramMessages),
   groupBuysLed: many(groupBuys),
+  reviews: many(reviews),
+  stats: one(customerStats, {
+    fields: [customers.id],
+    references: [customerStats.customerId],
+  }),
+  wallet: one(customerWallets, {
+    fields: [customers.id],
+    references: [customerWallets.customerId],
+  }),
+}));
+
+export const customerStatsRelations = relations(customerStats, ({ one }) => ({
+  customer: one(customers, {
+    fields: [customerStats.customerId],
+    references: [customers.id],
+  }),
+}));
+
+export const customerWalletsRelations = relations(customerWallets, ({ one }) => ({
+  customer: one(customers, {
+    fields: [customerWallets.customerId],
+    references: [customers.id],
+  }),
 }));
 
 // ============================================
-// 🏪 STORES
+// 🏪 STORES & STORE STATS
 // ============================================
 export const storesRelations = relations(stores, ({ one, many }) => ({
   owner: one(users, {
@@ -84,6 +107,20 @@ export const storesRelations = relations(stores, ({ one, many }) => ({
   auditLogs: many(auditLogs),
   customDomains: many(customDomains),
   chatSessions: many(chatSessions),
+  cartItems: many(cartItems),
+  media: many(media),
+  reviews: many(reviews),
+  stats: one(storeStats, {
+    fields: [stores.id],
+    references: [storeStats.storeId],
+  }),
+}));
+
+export const storeStatsRelations = relations(storeStats, ({ one }) => ({
+  store: one(stores, {
+    fields: [storeStats.storeId],
+    references: [stores.id],
+  }),
 }));
 
 // ============================================
@@ -104,7 +141,7 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
 }));
 
 // ============================================
-// 📦 PRODUCTS
+// 📦 PRODUCTS & PRODUCT STATS
 // ============================================
 export const productsRelations = relations(products, ({ one, many }) => ({
   store: one(stores, {
@@ -120,6 +157,18 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   haggleSessions: many(haggleSessions),
   groupBuys: many(groupBuys),
   reviews: many(reviews),
+  media: many(media),
+  stats: one(productStats, {
+    fields: [products.id],
+    references: [productStats.productId],
+  }),
+}));
+
+export const productStatsRelations = relations(productStats, ({ one }) => ({
+  product: one(products, {
+    fields: [productStats.productId],
+    references: [products.id],
+  }),
 }));
 
 // ============================================
@@ -333,6 +382,14 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
     fields: [reviews.productId],
     references: [products.id],
   }),
+  customer: one(customers, {
+    fields: [reviews.customerId],
+    references: [customers.id],
+  }),
+  store: one(stores, {
+    fields: [reviews.storeId],
+    references: [stores.id],
+  }),
 }));
 
 // ============================================
@@ -342,5 +399,9 @@ export const mediaRelations = relations(media, ({ one }) => ({
   store: one(stores, {
     fields: [media.storeId],
     references: [stores.id],
+  }),
+  product: one(products, {
+    fields: [media.productId],
+    references: [products.id],
   }),
 }));

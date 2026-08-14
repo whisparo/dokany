@@ -54,7 +54,10 @@ export type HstsConfig = {
 export const customDomains = sqliteTable(
   'custom_domains',
   {
-    id: text('id').primaryKey(), // UUID يُولَّد في التطبيق قبل الـ Insert
+    // ✅ UUID يُولَّد تلقائياً
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
 
     storeId: text('store_id').notNull(),
     domain: text('domain').notNull(), // Normalized & Always Lowercase
@@ -95,12 +98,15 @@ export const customDomains = sqliteTable(
     autoRenewEnabled: integer('auto_renew_enabled', { mode: 'boolean' }).notNull().default(false),
 
     verifiedAt: integer('verified_at', { mode: 'timestamp' }),
+    
+    // ⏱️ التواقيت الموحدة
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`),
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`)
+      .$onUpdate(() => new Date()),
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
   },
   (table) => [
@@ -156,13 +162,17 @@ export const customDomains = sqliteTable(
       .on(table.domain, table.isActive)
       .where(sql`${table.deletedAt} IS NULL`),
 
+    // ✅ فهرس سلة المهملات
+    index('custom_domains_deleted_idx')
+      .on(table.deletedAt)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
+
     // ============================================
-    // 🛡️ القيط والتحققات المنطقية على مستوى الـ Engine (Check Constraints)
+    // 🛡️ القيود والتحققات المنطقية على مستوى الـ Engine (Check Constraints)
     // ============================================
     check('chk_domain_not_empty', sql`length(${table.domain}) > 0`),
     check('chk_domain_length', sql`length(${table.domain}) <= 253`),
     
-    // 🚀 تصليح سنيور: إجبار النطاق يكون Lowercase وحروف صالحة تماماً لمنع ثغرات الـ Routing والـ DNS Collisions
     check(
       'chk_domain_format',
       sql`
@@ -188,7 +198,6 @@ export const customDomains = sqliteTable(
       sql`(${table.isSubdomain} = 0 AND ${table.parentDomain} IS NULL) OR (${table.isSubdomain} = 1 AND ${table.parentDomain} IS NOT NULL)`
     ),
     
-    // 🚀 تصليح سنيور: التأكد من وجود النجمة الصريحة في بداية الـ Wildcard دون الاعتماد على الخلط المعماري للـ GLOB
     check(
       'chk_wildcard_format',
       sql`(${table.isWildcard} = 0) OR (${table.isWildcard} = 1 AND ${table.domain} LIKE '*.%')`

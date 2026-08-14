@@ -1,19 +1,35 @@
 // src/components/storefront/Checkout/PaymentMethods.tsx
 'use client';
 
-import { Wallet, CreditCard, Building2, Check } from 'lucide-react';
+import { Wallet, CreditCard, Building2, HelpCircle, Check } from 'lucide-react';
 import { Typography } from '@/components/shared/Typography';
 import type { CheckoutPayload } from './Checkout.adapter';
+import type { CheckoutTheme } from './Checkout.theme';
 
 interface PaymentMethodsProps {
   methods: CheckoutPayload['paymentMethods'];
   selectedId: string;
   onChange: (id: string) => void;
-  theme: any;
+  theme: CheckoutTheme;
 }
 
 export function PaymentMethods({ methods, selectedId, onChange, theme }: PaymentMethodsProps) {
-  if (methods.length === 0) return null;
+  if (!methods || methods.length === 0) return null;
+
+  // 🛠️ دالة مساعدة لاختيار الأيقونة المناسبة
+  const renderPaymentIcon = (type: string) => {
+    const iconClass = "h-5 w-5 mt-0.5 text-muted-foreground flex-shrink-0";
+    switch (type) {
+      case 'cod':
+        return <Wallet className={iconClass} aria-hidden="true" />;
+      case 'card':
+        return <CreditCard className={iconClass} aria-hidden="true" />;
+      case 'wallet':
+        return <Building2 className={iconClass} aria-hidden="true" />;
+      default:
+        return <HelpCircle className={iconClass} aria-hidden="true" />;
+    }
+  };
 
   return (
     <div className={theme.paymentSection}>
@@ -23,26 +39,18 @@ export function PaymentMethods({ methods, selectedId, onChange, theme }: Payment
       <div className={theme.optionsGrid} role="radiogroup" aria-label="طرق الدفع">
         {methods.map((method) => {
           const isSelected = selectedId === method.id;
+
           return (
             <button
               key={method.id}
               type="button"
               role="radio"
               aria-checked={isSelected}
-              tabIndex={0}
               className={theme.optionCard(isSelected)}
               onClick={() => onChange(method.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onChange(method.id);
-                }
-              }}
             >
               <div className="flex items-start gap-3 flex-1 text-start">
-                {method.type === 'cod' && <Wallet className="h-5 w-5 mt-0.5 text-muted-foreground" aria-hidden="true" />}
-                {method.type === 'card' && <CreditCard className="h-5 w-5 mt-0.5 text-muted-foreground" aria-hidden="true" />}
-                {method.type === 'wallet' && <Building2 className="h-5 w-5 mt-0.5 text-muted-foreground" aria-hidden="true" />}
+                {renderPaymentIcon(method.type)}
                 <div>
                   <Typography variant="body2" weight="medium" className="text-foreground">
                     {method.name}
@@ -55,7 +63,7 @@ export function PaymentMethods({ methods, selectedId, onChange, theme }: Payment
                 </div>
               </div>
               {isSelected && (
-                <Check className="h-5 w-5 text-primary-600 dark:text-primary-400" aria-hidden="true" />
+                <Check className="h-5 w-5 text-primary-600 dark:text-primary-400 flex-shrink-0" aria-hidden="true" />
               )}
             </button>
           );

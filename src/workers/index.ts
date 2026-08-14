@@ -17,13 +17,15 @@ import { telegramRouter } from './routes/telegram';
 import { cronRouter } from './routes/cron';
 import { errorsRouter } from './routes/errors';
 import { cartRouter } from './routes/cart';
+import { couponsRouter } from './routes/coupons';
+import { haggleRouter } from './routes/haggle';
 
 // 🏛️ الاستيرادات المعتمدة والدقيقة للمشروع
 import { classifyError } from '@/lib/errors/classifier';
 import { sendErrorToTelegram, createTestErrorForNotifier } from '@/lib/errors/notifier';
 import type { ErrorCategory } from '@/lib/errors/types';
 
-// 🌐 استيراد الـ OpenNext Server Handler ليمرر له Hono باقي طلبات الفرونت إند
+// 🌐 استيراد الـ OpenNext Server Handler
 // @ts-ignore
 import openNextHandler from '../../.open-next/worker.js';
 
@@ -32,7 +34,7 @@ const app = new Hono<{ Bindings: Env }>();
 // Middlewares
 app.use('*', logger());
 
-// ⚡ 1. معالجة الـ Trailing Slash لمسارات الباك إند فقط لمنع الـ Redirect Loop مع Next.js
+// ⚡ 1. معالجة الـ Trailing Slash لمسارات الباك إند لمنع Redirect Loop
 app.use('*', async (c, next) => {
   const url = new URL(c.req.url);
   const isBackendRoute = url.pathname.startsWith('/api') || url.pathname.startsWith('/ping');
@@ -44,7 +46,7 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-// ⚡ 2. Dynamic CORS Origin Resolution (Task 2.1)
+// ⚡ 2. Dynamic CORS Origin Resolution مع Micro-Cache لـ Custom Domains KV
 app.use('*', async (c, next) => {
   const staticOrigins = [
     'https://www.dokany.workers.dev',
@@ -58,24 +60,43 @@ app.use('*', async (c, next) => {
       // 1. السماح بالطلبات التي لا تحتوي Origin (مثل Server-to-Server أو Telegram Webhooks)
       if (!origin) return '*';
 
-      // 2. مطابقة النطاقات الثابتة والتطويرية
+      // 2. مطابقة النطاقات الثابتة
       if (staticOrigins.includes(origin)) {
         return origin;
       }
 
-      // 3. التحقق الديناميكي من نطاقات المتاجر المخصصة (Subdomains / Custom Domains)
+      // 3. التحقق الديناميكي من النطاقات المخصصة والنطاقات الفرعية
       try {
         const url = new URL(origin);
 
-        // السماح بنطاقات المتاجر الفرعية الثابتة على المنصة
         if (url.hostname.endsWith('.dokany.workers.dev')) {
           return origin;
         }
 
-        // استخدام KV المخصص للمتاجر إذا كان معرّفاً في c.env
         if (c.env.CUSTOM_DOMAINS_KV) {
-          const isCustomDomain = await c.env.CUSTOM_DOMAINS_KV.get(`domain:${url.hostname}`);
-          if (isCustomDomain) {
+          // ⚡ L1 Worker Cache API للحصول على 0ms Latency بدلاً من استعلام KV في كل طلب
+          const cache = caches.default;
+          const cacheKey = new Request(`https://internal-cache/domain-check/${url.hostname}`);
+          
+          let response = await cache.match(cacheKey);
+
+          if (!response) {
+            const isCustomDomain = await c.env.CUSTOM_DOMAINS_KV.get(`domain:${url.hostname}`);
+            const isValid = !!isCustomDomain;
+
+            response = new Response(JSON.stringify({ valid: isValid }), {
+              headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'public, max-age=300', // 5 دقائق كاش على الـ Edge
+              },
+            });
+
+            // حفظ النتيجة في الكاش بدون تعطيل الـ Execution Flow
+            c.executionCtx.waitUntil(cache.put(cacheKey, response.clone()));
+          }
+
+          const cacheData = (await response.json()) as { valid: boolean };
+          if (cacheData.valid) {
             return origin;
           }
         }
@@ -101,7 +122,7 @@ app.use('*', async (c, next) => {
   return corsMiddleware(c, next);
 });
 
-// 🏛️ مسارات المراقبة الخارجية (Uptime Robot Check)
+// 🏛️ مسارات المراقبة الخارجية
 app.get('/ping', (c) => c.text('OK', 200));
 
 /**
@@ -111,8 +132,15 @@ function resolveTelegramChatId(env: Env): string | undefined {
   return env.TELEGRAM_ERROR_CHAT_ID || env.TELEGRAM_ADMIN_CHAT_ID || env.ERROR_CHANNEL_ID;
 }
 
-// 🧪 Route مباشر لتجربة التنبيهات مع فحص البيئة (Debug Mode)
+// 🧪 Route مباشر لتجربة التنبيهات (محمي بـ Internal Secret)
 app.get('/api/test-error', async (c) => {
+  const internalSecret = c.env.INTERNAL_API_SECRET;
+  const providedSecret = c.req.header('x-internal-secret');
+
+  if (internalSecret && providedSecret !== internalSecret) {
+    return c.json({ success: false, error: 'Unauthorized' }, 401);
+  }
+
   try {
     const testError = createTestErrorForNotifier();
     const chatId = resolveTelegramChatId(c.env);
@@ -122,7 +150,6 @@ app.get('/api/test-error', async (c) => {
       TELEGRAM_ERROR_CHAT_ID: chatId || '',
     };
 
-    // إرسال كارت التنبيه
     await sendErrorToTelegram(testError, envWithFallback);
 
     return c.json({
@@ -172,26 +199,35 @@ function mapCategoryToStatusCode(category: ErrorCategory): ContentfulStatusCode 
 
 // 🏛️ Global Error Handler التنفيذي المنسق مع notifier.ts
 app.onError((err, c) => {
-  // 1. تصنيف الخطأ وتحويله إلى SystemError الموحد
   const systemError = classifyError(err);
-  const chatId = resolveTelegramChatId(c.env);
 
+  const chatId = resolveTelegramChatId(c.env);
   const envWithFallback = {
     ...c.env,
     TELEGRAM_ERROR_CHAT_ID: chatId || '',
   };
 
-  // 2. استدعاء المبلّغ المركزي
+  const enrichedContext = {
+    ...systemError.context,
+    path: c.req.path,
+    method: c.req.method,
+    ip: c.req.header('cf-connecting-ip') || '0.0.0.0',
+  };
+
+  const enrichedError = Object.assign(
+    Object.create(Object.getPrototypeOf(systemError)),
+    systemError,
+    { context: enrichedContext }
+  );
+
   c.executionCtx.waitUntil(
-    sendErrorToTelegram(systemError, envWithFallback).catch((sendErr: unknown) => {
+    sendErrorToTelegram(enrichedError, envWithFallback).catch((sendErr: unknown) => {
       console.error('❌ Failed to process error notification pipeline:', sendErr);
     })
   );
 
-  // 3. تحديد HTTP Status Code بحسب نوع الخطأ
   const statusCode = mapCategoryToStatusCode(systemError.category);
 
-  // 4. إرجاع الرد الموحد والنظيف للمستخدم
   return c.json(
     {
       success: false,
@@ -213,10 +249,17 @@ app.route('/api', telegramRouter);
 app.route('/api', cronRouter);
 app.route('/api', errorsRouter);
 app.route('/api', cartRouter);
+app.route('/api', couponsRouter);
+app.route('/api', haggleRouter);
 
-// 🎯 3. Pass-through Fallback: أي مسار غير معرف في Hono يروح لـ Next.js مباشرة
+// 🎯 Pass-through Fallback: تمرير باقي طلبات واجهة المستخدم إلى OpenNext
 app.all('*', async (c) => {
-  return openNextHandler.fetch(c.req.raw, c.env, c.executionCtx);
+  try {
+    return await openNextHandler.fetch(c.req.raw, c.env, c.executionCtx);
+  } catch (err) {
+    console.error('❌ OpenNext Fetch Handler Error:', err);
+    return c.text('Internal Server Error', 500);
+  }
 });
 
 export default app;

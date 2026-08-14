@@ -21,11 +21,13 @@ import { users } from './users';
 export const categories = sqliteTable(
   'categories',
   {
-    // UUID يُولَّد في التطبيق
-    id: text('id').primaryKey(),
+    // ✅ توليد تلقائي للمعرف
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
 
     storeId: text('store_id').notNull(),
-    parentId: text('parentId'),
+    parentId: text('parent_id'),
 
     name: text('name').notNull(),
     slug: text('slug').notNull(),
@@ -40,18 +42,22 @@ export const categories = sqliteTable(
 
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
 
-    // JSON array تخزين المعرفات للوسائط
-    mediaIds: text('media_ids').$type<string[]>().notNull().default(sql`'[]'`),
+    // ✅ تحويل مصفوفة وسائط JSON بدعم Drizzle Runtime
+    mediaIds: text('media_ids', { mode: 'json' })
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'`),
 
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
     deletedBy: text('deleted_by'),
 
+    // ✅ توحيد التوقيت الأسرع المباشر لـ D1
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`),
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`),
   },
   (table) => [
     // ============================================
@@ -99,7 +105,7 @@ export const categories = sqliteTable(
 
     index('categories_deleted_idx')
       .on(table.deletedAt)
-      .where(sql`${table.deletedAt} IS NULL`),
+      .where(sql`${table.deletedAt} IS NOT NULL`),
 
     index('categories_active_idx')
       .on(table.storeId, table.isActive)
@@ -122,7 +128,6 @@ export const categories = sqliteTable(
     check('chk_level_range', sql`${table.level} >= 0 AND ${table.level} <= 10`),
     check('chk_products_count_positive', sql`${table.productsCount} >= 0`),
 
-    // حماية الـ Slug
     check('chk_slug_format', sql`${table.slug} NOT LIKE '% %'`),
 
     check(

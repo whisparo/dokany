@@ -21,8 +21,10 @@ import { users } from './users';
 export const coupons = sqliteTable(
   'coupons',
   {
-    // ✅ UUID يُولَّد في كود التطبيق
-    id: text('id').primaryKey(),
+    // ✅ UUID يُولَّد تلقائياً
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
     
     storeId: text('store_id').notNull(),
 
@@ -37,13 +39,13 @@ export const coupons = sqliteTable(
     minOrderAmount: text('min_order_amount').notNull().default('0'),
     maxDiscountAmount: text('max_discount_amount'),
     
-    // ✅ مصفوفات المعرفات (UUIDs) مخزنة كـ JSON text مع توثيق TypeScript الذكي
-    applicableCategories: text('applicable_categories')
+    // ✅ مصفوفات المعرفات مخزنة كـ JSON مع التفعيل المباشر للـ JSON Mode
+    applicableCategories: text('applicable_categories', { mode: 'json' })
       .$type<string[]>()
       .notNull()
       .default(sql`'[]'`),
       
-    applicableProducts: text('applicable_products')
+    applicableProducts: text('applicable_products', { mode: 'json' })
       .$type<string[]>()
       .notNull()
       .default(sql`'[]'`),
@@ -62,13 +64,14 @@ export const coupons = sqliteTable(
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
     deletedBy: text('deleted_by'),
 
-    // التواقيت بنظام الـ Unix Timestamp الملي ثانية (BigInt-like representation)
+    // التواقيت الموحدة بنظام Unix Timestamp بالملي ثانية
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`),
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`)
+      .$onUpdate(() => new Date()),
   },
   (table) => [
     // ============================================

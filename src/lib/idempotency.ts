@@ -4,22 +4,67 @@ import { getDb } from '@/lib/db';
 import { idempotency as idempotencyTable } from '@/lib/db/schema/idempotency';
 import { eq, and, lte } from 'drizzle-orm';
 import { SystemError } from '@/lib/errors/types';
+import type { D1Database } from '@cloudflare/workers-types';
 
-// ⏱️ المدة الزمنية للقفل المعلق (30 ثانية)
-const PENDING_LOCK_TTL_MS = 30 * 1000;
+const DEFAULT_LOCK_TTL_MS = 5 * 60 * 1000; // 300 ثانية (5 دقائق)
+
+interface IdempotencyOptions {
+  /** مدة القفل بالمللي ثانية (افتراضي: 30 ثانية) */
+  lockTTLMs?: number;
+}
 
 export const idempotency = {
   async execute<T>(
-    env: CloudflareEnv,
+    env: { DB: D1Database; UPSTASH_REDIS_REST_URL?: string; UPSTASH_REDIS_REST_TOKEN?: string },
     key: string,
-    fn: () => Promise<T>
+    fn: () => Promise<T>,
+    options: IdempotencyOptions = {}
   ): Promise<T> {
-    const db = getDb(env);
+    const { lockTTLMs = DEFAULT_LOCK_TTL_MS } = options;
+    const db = getDb(env as any);
     const now = new Date();
-    const lockExpiry = new Date(now.getTime() + PENDING_LOCK_TTL_MS);
+    const lockExpiry = new Date(now.getTime() + lockTTLMs);
+    
+    // معرف فريد للعملية لمنع Lock Theft في Redis
+    const lockToken = crypto.randomUUID();
+
+    // 🔒 1. محاولة القفل عبر Redis
+    let redisLockAcquired = false;
+    if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
+      try {
+        const { Redis } = await import('@upstash/redis');
+        const redis = new Redis({
+          url: env.UPSTASH_REDIS_REST_URL,
+          token: env.UPSTASH_REDIS_REST_TOKEN,
+        });
+        
+        // يخزن token فريد بدلاً من نص ثابت 'pending'
+        const result = await redis.set(`lock:idempotency:${key}`, lockToken, {
+          nx: true,
+          ex: Math.ceil(lockTTLMs / 1000),
+        });
+        
+        redisLockAcquired = !!result;
+        if (!redisLockAcquired) {
+          throw new SystemError({
+            code: 'IDEM_409',
+            userMessage: 'طلبك قيد المعالجة حالياً، يرجى الانتظار.',
+            category: 'business',
+            severity: 'info',
+            retryable: true,
+            shouldAlert: false,
+            technicalMessage: `Redis lock already held for key: ${key}`,
+          });
+        }
+      } catch (redisError) {
+        if (redisError instanceof SystemError) throw redisError;
+        console.warn('⚠️ Redis lock failed, falling back to D1:', redisError);
+        redisLockAcquired = false;
+      }
+    }
 
     try {
-      // 1️⃣ محاولة الإدراج الذرية (Atomic Lock Acquisition)
+      // 2️⃣ محاولة الإدراج الذرية في D1
       const insertResult = await db
         .insert(idempotencyTable)
         .values({
@@ -31,7 +76,7 @@ export const idempotency = {
         .onConflictDoNothing()
         .returning({ key: idempotencyTable.key });
 
-      // 2️⃣ في حالة وجود السجل مسبقاً (Conflict)
+      // 3️⃣ التعامل مع حالة وجود السجل مسبقاً (Conflict)
       if (insertResult.length === 0) {
         const [record] = await db
           .select()
@@ -51,18 +96,31 @@ export const idempotency = {
           });
         }
 
-        // 🟢 2.1 العملية مكتملة بنجاح (Return Cached Result)
+        // 🟢 3.1 النتيجة مكتملة ومحفوظة (Cached Return)
         if (record.status === 'completed') {
-          if (!record.result) return null as T;
-          return JSON.parse(record.result) as T;
+          if (record.result) {
+            try {
+              return JSON.parse(record.result) as T;
+            } catch {
+              console.warn(`⚠️ Invalid JSON in idempotency result for key ${key}`);
+            }
+          }
+          throw new SystemError({
+            code: 'IDEM_409',
+            userMessage: 'تم تنفيذ هذا الطلب بنجاح مسبقاً.',
+            category: 'business',
+            severity: 'info',
+            retryable: false,
+            shouldAlert: false,
+            technicalMessage: `Completed result exists for key: ${key}`,
+          });
         }
 
-        // 🟠 2.2 الطلب انتهت صلاحية قفله (Expired Lock Renewal) أو فشل سابقاً (Failed Retry)
-        const isExpired = record.status === 'pending' && record.expiresAt.getTime() <= now.getTime();
+        // 🟠 3.2 القفل منتهي الصلاحية أو العملية سقطت سابقاً (Expired / Failed Takeover)
+        const isExpired = record.status === 'pending' && (record.expiresAt?.getTime() ?? 0) <= now.getTime();
         const isFailed = record.status === 'failed';
 
         if (isExpired || isFailed) {
-          // محاولة استعادة القفل بشكل ذري (Atomic Lock Takeover)
           const updateResult = await db
             .update(idempotencyTable)
             .set({
@@ -74,14 +132,15 @@ export const idempotency = {
             .where(
               and(
                 eq(idempotencyTable.key, key),
-                // ضابط سباق التنفيذ (Race Condition Guard)
-                isExpired 
+                isExpired
                   ? lte(idempotencyTable.expiresAt, now)
                   : eq(idempotencyTable.status, 'failed')
               )
-            );
+            )
+            .returning({ key: idempotencyTable.key });
 
-          if (updateResult.meta.changes === 0) {
+          // 🛑 إذا فشل التنافس على استعادة القفل، ارمِ الخطأ وتوقف فوراً!
+          if (updateResult.length === 0) {
             throw new SystemError({
               code: 'IDEM_409',
               userMessage: 'طلبك قيد المعالجة حالياً من قِبل سيرفر آخر، يرجى الانتظار.',
@@ -89,11 +148,11 @@ export const idempotency = {
               severity: 'info',
               retryable: true,
               shouldAlert: false,
-              technicalMessage: `Failed atomic lock takeover for key: ${key}. Concurrent request won the race.`,
+              technicalMessage: `Failed atomic lock takeover for key: ${key}.`,
             });
           }
         } else {
-          // 🔴 2.3 الطلب ما زال قيد المعالجة النشطة (Active Pending)
+          // 🔴 3.3 الطلب ما زال نشطاً (Active Pending)
           throw new SystemError({
             code: 'IDEM_409',
             userMessage: 'طلبك قيد المعالجة حالياً، يرجى عدم إعادة التحديث.',
@@ -106,10 +165,10 @@ export const idempotency = {
         }
       }
 
-      // 3️⃣ تنفيذ الـ Business Logic
+      // 4️⃣ تنفيذ المنطق التجاري (Business Logic Execution)
       const result = await fn();
 
-      // 4️⃣ حفظ النتيجة وتعليم العملية كـ Completed
+      // 5️⃣ حفظ النتيجة وتعليم العملية كـ Completed
       await db
         .update(idempotencyTable)
         .set({
@@ -119,29 +178,76 @@ export const idempotency = {
         })
         .where(eq(idempotencyTable.key, key));
 
+      // 🔓 تحرير آمن لقفل Redis (Safe Lock Release)
+      if (redisLockAcquired) {
+        await releaseRedisLock(env, key, lockToken);
+      }
+
       return result;
 
     } catch (error) {
+      // 🛑 حماية: عدم تعديل حالة D1 إذا كان الخطأ هو رفض التكرار (IDEM_409)
+      const isConcurrencyConflict = error instanceof SystemError && error.code === 'IDEM_409';
+
+      if (!isConcurrencyConflict) {
+        try {
+          await db
+            .update(idempotencyTable)
+            .set({
+              status: 'failed',
+              result: JSON.stringify({
+                error: error instanceof Error ? error.message : 'Unknown execution error',
+              }),
+            })
+            .where(eq(idempotencyTable.key, key));
+        } catch (dbError) {
+          console.error('⚠️ Failed to register idempotency failure status:', dbError);
+        }
+      }
+
+      // 🔓 تحرير قفل Redis عند الفشل
+      if (redisLockAcquired) {
+        await releaseRedisLock(env, key, lockToken);
+      }
+
       if (error instanceof SystemError && error.code.startsWith('IDEM_')) {
         throw error;
       }
 
-      // 5️⃣ تسجيل الفشل لتسمح بالـ Retry المباشر
-      try {
-        await db
-          .update(idempotencyTable)
-          .set({
-            status: 'failed',
-            result: JSON.stringify({
-              error: error instanceof Error ? error.message : 'Unknown execution error',
-            }),
-          })
-          .where(eq(idempotencyTable.key, key));
-      } catch (dbError) {
-        console.error('⚠️ Failed to register idempotency failure status:', dbError);
-      }
-
-      throw error;
+      throw new SystemError({
+        code: 'IDEM_500',
+        userMessage: 'حدث خطأ غير متوقع أثناء تنفيذ العملية، يرجى المحاولة لاحقاً.',
+        category: 'system',
+        severity: 'critical',
+        retryable: true,
+        shouldAlert: true,
+        technicalMessage: error instanceof Error ? error.message : 'Unknown idempotency execution error',
+        cause: error,
+        metadata: { key },
+      });
     }
   },
 };
+
+// 🛠️ دالة تحرير القفل الآمنة لمنع Lock Theft
+async function releaseRedisLock(
+  env: { UPSTASH_REDIS_REST_URL?: string; UPSTASH_REDIS_REST_TOKEN?: string },
+  key: string,
+  lockToken: string
+) {
+  try {
+    const { Redis } = await import('@upstash/redis');
+    const redis = new Redis({
+      url: env.UPSTASH_REDIS_REST_URL!,
+      token: env.UPSTASH_REDIS_REST_TOKEN!,
+    });
+    
+    // التحقق من أن القفل المملوك هو نفس الـ lockToken قبل الحذف
+    const currentToken = await redis.get<string>(`lock:idempotency:${key}`);
+    if (currentToken === lockToken) {
+      await redis.del(`lock:idempotency:${key}`);
+    }
+  } catch (redisError) {
+    console.warn('⚠️ Failed to release Redis lock:', redisError);
+  }
+}

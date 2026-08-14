@@ -1,5 +1,5 @@
 // src/lib/db/schema/telegram-messages.ts
-import type { D1Database } from '@cloudflare/workers-types'; // ✅ تمت الإضافة
+import type { D1Database } from '@cloudflare/workers-types';
 import { sqliteTable, text, integer, index, uniqueIndex, check, foreignKey } from 'drizzle-orm/sqlite-core';
 import { sql, eq, and, isNull, desc, count, between } from 'drizzle-orm';
 import { type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
@@ -13,7 +13,7 @@ import { orders } from './orders';
 import { chatSessions } from './chat-sessions';
 
 // ============================================
-// 📦 أنواع TypeScript والـ Bindings
+// 📦 الأنواع والـ Bindings
 // ============================================
 
 export type MessageDirection = 'incoming' | 'outgoing';
@@ -126,9 +126,9 @@ export const telegramMessages = sqliteTable(
     check('chk_entities_limit', sql`json_array_length(${table.entities}) <= 100`),
     check('chk_retry_count_non_negative', sql`${table.retryCount} >= 0`),
     check('chk_spam_score_range', sql`${table.spamScore} BETWEEN 0 AND 100`),
-    check('chk_sent_consistency', sql`(${table.status} = 'pending' AND ${table.sentAt} IS NULL) OR (${table.status} != 'pending')`),
-    check('chk_delivered_consistency', sql`(${table.status} IN ('pending', 'sent') AND ${table.deliveredAt} IS NULL) OR (${table.status} NOT IN ('pending', 'sent'))`),
-    check('chk_read_consistency', sql`(${table.status} IN ('pending', 'sent', 'delivered') AND ${table.readAt} IS NULL) OR (${table.status} NOT IN ('pending', 'sent', 'delivered'))`),
+    check('chk_sent_consistency', sql`${table.sentAt} IS NULL OR ${table.status} NOT IN ('pending')`),
+    check('chk_delivered_consistency', sql`${table.deliveredAt} IS NULL OR ${table.status} IN ('delivered', 'read')`),
+    check('chk_read_consistency', sql`${table.readAt} IS NULL OR ${table.status} = 'read'`),
     check('chk_failure_consistency', sql`(${table.status} != 'failed' AND ${table.failureReason} IS NULL) OR (${table.status} = 'failed' AND ${table.failureReason} IS NOT NULL)`),
     check('chk_metadata_valid', sql`${table.metadata} IS NULL OR (json_valid(${table.metadata}) = 1 AND json_type(${table.metadata}) = 'object')`),
   ]
@@ -173,7 +173,7 @@ export function getCallbackData(message: TelegramMessage): string | null {
 }
 
 /**
- * ✅ تحديث حالة الرسالة بـ Type-Safe Drizzle API ملمع
+ * ✅ تحديث حالة الرسالة بـ Type-Safe Drizzle API
  */
 export async function updateMessageStatus(
   d1Database: D1Database,
@@ -350,10 +350,10 @@ export async function getMessageStats(
   const result = await db
     .select({
       total: count(telegramMessages.id),
-      incoming: sql<number>`SUM(CASE WHEN ${telegramMessages.direction} = 'incoming' THEN 1 ELSE 0 END)`,
-      outgoing: sql<number>`SUM(CASE WHEN ${telegramMessages.direction} = 'outgoing' THEN 1 ELSE 0 END)`,
-      commands: sql<number>`SUM(CASE WHEN ${telegramMessages.messageType} = 'command' THEN 1 ELSE 0 END)`,
-      callbacks: sql<number>`SUM(CASE WHEN ${telegramMessages.messageType} = 'callback_query' THEN 1 ELSE 0 END)`,
+      incoming: sql<number>`COALESCE(SUM(CASE WHEN ${telegramMessages.direction} = 'incoming' THEN 1 ELSE 0 END), 0)`,
+      outgoing: sql<number>`COALESCE(SUM(CASE WHEN ${telegramMessages.direction} = 'outgoing' THEN 1 ELSE 0 END), 0)`,
+      commands: sql<number>`COALESCE(SUM(CASE WHEN ${telegramMessages.messageType} = 'command' THEN 1 ELSE 0 END), 0)`,
+      callbacks: sql<number>`COALESCE(SUM(CASE WHEN ${telegramMessages.messageType} = 'callback_query' THEN 1 ELSE 0 END), 0)`,
     })
     .from(telegramMessages)
     .where(

@@ -264,11 +264,12 @@ export const ERROR_CODES: Record<string, ErrorCodeDefinition> = {
   // 💳 أخطاء التجارة (Commerce)
   PAY_001: {
     code: 'PAY_001',
-    userMessage: 'fشلت عملية الدفع، يرجى المحاولة مرة أخرى.',
+    userMessage: 'فشلت عملية الدفع، يرجى المحاولة مرة أخرى.', // ✅ إزالة حرف 'f' الزائد
     category: 'business',
     severity: 'warning',
     retryable: true,
     shouldAlert: true,
+
   },
   PAY_002: {
     code: 'PAY_002',

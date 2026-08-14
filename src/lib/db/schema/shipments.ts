@@ -1,5 +1,5 @@
 // src/lib/db/schema/shipments.ts
-import type { D1Database } from '@cloudflare/workers-types'; // ✅ تمت الإضافة
+import type { D1Database } from '@cloudflare/workers-types';
 import {
   sqliteTable,
   text,
@@ -13,7 +13,6 @@ import { type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { classifyError } from '@/lib/errors/classifier';
 
-// ... باقي الكود (الأنواع، الجدول، الدوال المساعدة) بدون أي تغيير ...
 // ============================================
 // 📦 أنواع TypeScript
 // ============================================
@@ -74,18 +73,18 @@ export const shipments = sqliteTable(
     customerId: text('customer_id'),
     addressId: text('address_id'),
 
-    // 🏢 مزود الشحن ('custom' للتاجر نفسه، أو 'bosta', 'aramex' مستقبلاً)
+    // 🏢 مزود الشحن
     provider: text('provider').notNull().default('custom'),
     providerShipmentId: text('provider_shipment_id'),
     trackingNumber: text('tracking_number'),
     trackingUrl: text('tracking_url'),
-    carrierService: text('carrier_service'), // ground, air, etc.
+    carrierService: text('carrier_service'),
 
     // 🎯 الحالة ونوع الخدمة
     status: text('status').$type<ShipmentStatus>().notNull().default('pending'),
-    shippingMethod: text('shipping_method').notNull().default('standard'), // standard, express
+    shippingMethod: text('shipping_method').notNull().default('standard'),
 
-    // 💰 التكاليف (تم تحويلها لـ integer بالقرش لسلامة وسرعة العمليات الحسابية)
+    // 💰 التكاليف (بالقرش/السنت)
     cost: integer('cost').notNull().default(0),
     chargedToCustomer: integer('charged_to_customer').notNull().default(0),
     estimatedCost: integer('estimated_cost').notNull().default(0),
@@ -99,10 +98,10 @@ export const shipments = sqliteTable(
     codCollectedAt: integer('cod_collected_at', { mode: 'timestamp' }),
 
     // 📦 الأبعاد والوزن
-    weight: text('weight'), // kg
-    length: text('length'), // cm
-    width: text('width'),   // cm
-    height: text('height'),  // cm
+    weight: text('weight'),
+    length: text('length'),
+    width: text('width'),
+    height: text('height'),
     packageCount: integer('package_count').notNull().default(1),
 
     // 👤 بيانات المستلم السريعة
@@ -133,7 +132,7 @@ export const shipments = sqliteTable(
     deliveryPhotos: text('delivery_photos', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
     deliveryInstructions: text('delivery_instructions'),
 
-    // 🌍 الجمارك وسجل تتبع الأحداث والـ Metadata
+    // 🌍 الجمارك والأحداث
     customsInfo: text('customs_info', { mode: 'json' }).$type<CustomsInfo>(),
     events: text('events', { mode: 'json' }).$type<ShipmentEvent[]>().notNull().default(sql`'[]'`),
     metadata: text('metadata', { mode: 'json' }).$type<ShipmentMetadata>().notNull().default(sql`'{}'`),
@@ -146,9 +145,7 @@ export const shipments = sqliteTable(
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
   },
   (table) => [
-    // ============================================
-    // 🗝️ الفهارس الفريدة (Unique Indexes)
-    // ============================================
+    // 🗝️ الفهارس الفريدة
     uniqueIndex('shipments_provider_shipment_unique')
       .on(table.provider, table.providerShipmentId)
       .where(sql`provider_shipment_id IS NOT NULL`),
@@ -157,22 +154,17 @@ export const shipments = sqliteTable(
       .on(table.trackingNumber)
       .where(sql`tracking_number IS NOT NULL`),
 
-    // ============================================
-    // ⚡ فهارس الأداء السريعة (Performance Indexes)
-    // ============================================
+    // ⚡ فهارس الأداء السريعة
     index('shipments_order_idx').on(table.orderId),
     index('shipments_store_idx').on(table.storeId),
     index('shipments_customer_idx').on(table.customerId).where(sql`customer_id IS NOT NULL`),
     index('shipments_status_idx').on(table.status),
     index('shipments_deleted_idx').on(table.deletedAt).where(sql`deleted_at IS NULL`),
     
-    // Composite indexes للـ Admin Dashboard والفلترة السريعة
     index('shipments_store_status_idx').on(table.storeId, table.status),
     index('shipments_store_created_idx').on(table.storeId, table.createdAt),
 
-    // ============================================
-    // 🛡️ القيود والتحققات (Check Constraints)
-    // ============================================
+    // 🛡️ القيود والتحققات
     check('chk_shipment_status', sql`${table.status} IN ('pending', 'label_created', 'pickup_scheduled', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered', 'failed_other', 'returned', 'delivery_attempt_failed', 'pickup_failed', 'address_invalid', 'cancelled')`),
     check('chk_shipping_method', sql`${table.shippingMethod} IN ('standard', 'express', 'same_day', 'next_day', 'economy', 'freight')`),
     
@@ -194,7 +186,7 @@ export type Shipment = InferSelectModel<typeof shipments>;
 export type NewShipment = InferInsertModel<typeof shipments>;
 
 // ============================================
-// 🛠️ الفانكشنز المساعدة المطهرة (Drizzle Engine)
+// 🛠️ الفانكشنز المساعدة
 // ============================================
 
 export function canTransitionStatus(currentStatus: ShipmentStatus, newStatus: ShipmentStatus): boolean {
@@ -202,13 +194,13 @@ export function canTransitionStatus(currentStatus: ShipmentStatus, newStatus: Sh
     pending: ['label_created', 'cancelled'],
     label_created: ['pickup_scheduled', 'cancelled'],
     pickup_scheduled: ['picked_up', 'pickup_failed', 'cancelled'],
-    picked_up: ['in_transit', 'cancelled'],
-    in_transit: ['out_for_delivery', 'returned', 'cancelled'],
-    out_for_delivery: ['delivered', 'delivery_attempt_failed', 'returned'],
+    picked_up: ['in_transit', 'failed_other', 'cancelled'],
+    in_transit: ['out_for_delivery', 'returned', 'failed_other', 'cancelled'],
+    out_for_delivery: ['delivered', 'delivery_attempt_failed', 'returned', 'failed_other'],
     delivered: ['returned'],
     failed_other: [],
     returned: [],
-    delivery_attempt_failed: ['out_for_delivery', 'returned'],
+    delivery_attempt_failed: ['out_for_delivery', 'returned', 'failed_other'],
     pickup_failed: ['pickup_scheduled', 'cancelled'],
     address_invalid: ['cancelled'],
     cancelled: [],
@@ -216,9 +208,6 @@ export function canTransitionStatus(currentStatus: ShipmentStatus, newStatus: Sh
   return transitions[currentStatus]?.includes(newStatus) ?? false;
 }
 
-/**
- * ✅ جلب شحنة برقم التتبع
- */
 export async function getShipmentByTrackingNumber(
   d1Database: D1Database,
   trackingNumber: string
@@ -231,9 +220,6 @@ export async function getShipmentByTrackingNumber(
     .get() || null;
 }
 
-/**
- * ✅ جلب شحنات المتجر بالـ Pagination والـ Status الفوري
- */
 export async function getStoreShipments(
   d1Database: D1Database,
   storeId: string,
@@ -249,20 +235,20 @@ export async function getStoreShipments(
 
   const baseCondition = and(...conditions);
 
-  const shipmentsList = await db
-    .select()
-    .from(shipments)
-    .where(baseCondition)
-    .orderBy(desc(shipments.createdAt))
-    .limit(limit)
-    .offset(offset)
-    .all();
-
-  const totalCount = await db
-    .select({ count: count(shipments.id) })
-    .from(shipments)
-    .where(baseCondition)
-    .get();
+  // تنفيذ الاستعلامين بالتوازي لتسريع زمن الاستجابة على الـ Edge
+  const [shipmentsList, totalCount] = await Promise.all([
+    db.select()
+      .from(shipments)
+      .where(baseCondition)
+      .orderBy(desc(shipments.createdAt))
+      .limit(limit)
+      .offset(offset)
+      .all(),
+    db.select({ count: count(shipments.id) })
+      .from(shipments)
+      .where(baseCondition)
+      .get()
+  ]);
 
   return {
     shipments: shipmentsList,
@@ -270,9 +256,6 @@ export async function getStoreShipments(
   };
 }
 
-/**
- * ✅ تحديث حالة الشحنة وبناء الـ Timeline Events بشكل آلي بالكامل
- */
 export async function updateShipmentStatus(
   d1Database: D1Database,
   shipmentId: string,
@@ -301,7 +284,6 @@ export async function updateShipmentStatus(
     );
   }
 
-  // إعداد الحدث الجديد
   const newEvent: ShipmentEvent = {
     timestamp: new Date().toISOString(),
     status: newStatus,
@@ -311,7 +293,6 @@ export async function updateShipmentStatus(
   
   const updatedEvents = [...(currentShipment.events || []), newEvent];
 
-  // تجميع التحديثات الزمنية والعدادات ديناميكياً
   const updates: Partial<typeof shipments.$inferInsert> = {
     status: newStatus,
     events: updatedEvents,
@@ -341,9 +322,6 @@ export async function updateShipmentStatus(
   return result;
 }
 
-/**
- * ✅ تسجيل تحصيل مبالغ الـ COD عند الاستلام
- */
 export async function recordCODCollection(
   d1Database: D1Database,
   shipmentId: string
@@ -369,9 +347,6 @@ export async function recordCODCollection(
   return result;
 }
 
-/**
- * ✅ جلب الشحنات المتأخرة عن موعد التوصيل المتوقع لمتابعتها
- */
 export async function getDelayedShipments(d1Database: D1Database): Promise<Shipment[]> {
   const db = drizzle(d1Database);
   const now = new Date();
@@ -381,7 +356,7 @@ export async function getDelayedShipments(d1Database: D1Database): Promise<Shipm
     .from(shipments)
     .where(
       and(
-        sql`${shipments.estimatedDelivery} < ${now.getTime()}`,
+        sql`${shipments.estimatedDelivery} < ${now}`,
         sql`${shipments.status} NOT IN ('delivered', 'returned', 'cancelled')`,
         isNull(shipments.deletedAt)
       )

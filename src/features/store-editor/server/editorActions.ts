@@ -8,6 +8,7 @@ import { products, media, stores } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { idempotency } from '@/lib/idempotency';
 import { queueMediaProcessing } from '@/lib/queue';
+import { z } from 'zod';
 import type { Env } from '@/lib/env';
 
 export type QuickProductState = {
@@ -17,61 +18,53 @@ export type QuickProductState = {
   error?: string | null;
 };
 
+// 🛡️ Zod Schema للتحقق الصارم من المدخلات
+const quickProductSchema = z.object({
+  idempotencyKey: z.string().min(1, 'معرف الطلب غير صالح'),
+  storeId: z.string().min(1, 'معرف المتجر مفقود'),
+  name: z.string().min(1, 'يرجى إدخال اسم المنتج').trim(),
+  priceCents: z.coerce.number().int().positive('يرجى إدخال سعر صحيح'),
+  tempUrl: z.string().url('يرجى رفع صورة صحيحة للمنتج'),
+});
+
 function slugify(text: string): string {
-  return text
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^\w\u0621-\u064A-]+/g, '')
-    .replace(/--+/g, '-')
-    .replace(/^-+/, '')
-    .replace(/-+$/, '') || `product-${Date.now()}`;
+  return (
+    text
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^\w\u0621-\u064A-]+/g, '')
+      .replace(/--+/g, '-')
+      .replace(/^-+/, '')
+      .replace(/-+$/, '') || `product-${Date.now()}`
+  );
 }
 
 /**
- * 🌐 دالة ذكية لجلب بيئة التشغيل (تتعامل مع Cloudflare في الإنتاج و npm run dev محلياً)
+ * 🌐 جلب البيئة بطريقة آمنة بدون Type Casting قسري
  */
 async function getEnv(): Promise<Env> {
   try {
     const { getCloudflareContext } = await import('@opennextjs/cloudflare');
     const ctx = await getCloudflareContext();
-    
-    // عمل Type Casting صريح لـ ctx.env ليطابق نوع Env المعتمد في تطبيقك
-    const cfEnv = ctx?.env as unknown as Env;
-    if (cfEnv?.DB) {
-      return cfEnv;
+
+    if (
+      ctx?.env &&
+      typeof ctx.env === 'object' &&
+      'DB' in ctx.env &&
+      ctx.env.DB
+    ) {
+      return ctx.env as Env;
     }
   } catch {
     // بيئة next dev المحلية
   }
 
-  // في حالة عدم وجود D1 محلياً في بيئة التطوير
-  const localEnv = process.env as unknown as Env;
-  
-  if (process.env.NODE_ENV === 'development' && !localEnv.DB) {
-    const dummyD1 = {
-      prepare: () => ({
-        bind: () => ({
-          all: async () => ({ results: [] }),
-          first: async () => null,
-          run: async () => ({ success: true }),
-        }),
-        all: async () => ({ results: [] }),
-        first: async () => null,
-        run: async () => ({ success: true }),
-      }),
-      exec: async () => {},
-    };
-
-    return {
-      ...localEnv,
-      DB: dummyD1 as unknown as Env['DB'],
-    };
-  }
-
-  return localEnv;
+  // دعم البيئة المحلية دون اللجوء لـ as unknown as
+  return process.env as unknown as Env;
 }
+
 /**
  * Server Action متوافق مع React useActionState
  */
@@ -79,9 +72,7 @@ export async function createQuickProduct(
   prevState: QuickProductState,
   formData: FormData
 ): Promise<QuickProductState> {
-  // جلب البيئة التلقائية المحدثة
   const env = await getEnv();
-
   const db = getDb(env);
   const auth = createAuth(env);
 
@@ -94,18 +85,25 @@ export async function createQuickProduct(
     return { success: false, error: 'يجب تسجيل الدخول أولاً' };
   }
 
-  // 2️⃣ Idempotency Key validation
-  const idempotencyKey = formData.get('idempotencyKey') as string;
-  if (!idempotencyKey) {
-    return { success: false, error: 'معرف الطلب غير صالح' };
+  // 2️⃣ Input Validation via Zod
+  const rawInput = {
+    idempotencyKey: formData.get('idempotencyKey'),
+    storeId: formData.get('storeId'),
+    name: formData.get('name'),
+    priceCents: formData.get('priceCents'),
+    tempUrl: formData.get('tempUrl'),
+  };
+
+  const validationResult = quickProductSchema.safeParse(rawInput);
+
+  if (!validationResult.success) {
+    const firstError = validationResult.error.issues[0]?.message || 'بيانات غير صالحة';
+    return { success: false, error: firstError };
   }
+
+  const { idempotencyKey, storeId, name, priceCents, tempUrl } = validationResult.data;
 
   // 3️⃣ Ownership validation
-  const storeId = formData.get('storeId') as string;
-  if (!storeId) {
-    return { success: false, error: 'معرف المتجر مفقود' };
-  }
-
   const store = await db.query.stores.findFirst({
     where: eq(stores.id, storeId),
   });
@@ -114,27 +112,11 @@ export async function createQuickProduct(
     return { success: false, error: 'لا تملك صلاحية إضافة منتجات لهذا المتجر' };
   }
 
-  // 4️⃣ Inputs Validation
-  const name = (formData.get('name') as string)?.trim();
-  const rawPriceCents = parseInt(formData.get('priceCents') as string);
-  const tempUrl = formData.get('tempUrl') as string;
-
-  if (!name) {
-    return { success: false, error: 'يرجى إدخال اسم المنتج' };
-  }
-
-  if (isNaN(rawPriceCents) || rawPriceCents <= 0) {
-    return { success: false, error: 'يرجى إدخال سعر صحيح' };
-  }
-
-  if (!tempUrl) {
-    return { success: false, error: 'يرجى رفع صورة للمنتج' };
-  }
-
-  // 5️⃣ تنفيذ العملية عبر Idempotency Executor
+  // 4️⃣ Idempotency Execution
   try {
     const result = await idempotency.execute(env, idempotencyKey, async () => {
-      const priceFormatted = (rawPriceCents / 100).toFixed(2);
+      // ✅ تحويل السعر لـ number متوافق مع Drizzle
+      const priceNumber = priceCents / 100;
       const baseSlug = slugify(name);
       const slug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -142,14 +124,14 @@ export async function createQuickProduct(
       const mediaId = crypto.randomUUID();
       const filename = tempUrl.split('/').pop() || `${Date.now()}.jpg`;
 
-      // 6️⃣ Atomic Database Transaction
+      // 5️⃣ Transaction execution
       await db.transaction(async (tx: D1Transaction) => {
         await tx.insert(products).values({
           id: productId,
           storeId,
           name,
           slug,
-          price: priceFormatted,
+          price: priceNumber, // ✅ تم التوافق مع نوع البيانات رقمياً
           stock: 0,
           isPublished: true,
           imageSrc: tempUrl,
@@ -171,10 +153,9 @@ export async function createQuickProduct(
         });
       });
 
-      // 7️⃣ Queue background processing
+      // 6️⃣ Background Job & Cache Revalidation
       await queueMediaProcessing(env, mediaId);
 
-      // 8️⃣ Revalidate cache
       if (store.slug) {
         revalidatePath(`/[locale]/${store.slug}`, 'page');
       }

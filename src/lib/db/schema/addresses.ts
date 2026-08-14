@@ -4,6 +4,7 @@ import {
   sqliteTable,
   text,
   integer,
+  real,
   index,
   uniqueIndex,
   check,
@@ -22,21 +23,16 @@ import { users } from './users';
 export const addresses = sqliteTable(
   'addresses',
   {
-    // ✅ UUID يُولَّد في التطبيق
     id: text('id').primaryKey(), 
 
-    // 🔗 العلاقات - text ليطابق الحقول المرتبطة
     customerId: text('customer_id').notNull(),
 
-    // 🏷️ تصنيف العنوان
     label: text('label').notNull().default('home'),
     isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
 
-    // 👤 بيانات المستلم
     recipientName: text('recipient_name').notNull(),
     recipientPhone: text('recipient_phone').notNull(),
 
-    // 📮 العنوان بالتفصيل
     country: text('country').notNull().default('EG'),
     city: text('city').notNull(),
     area: text('area'),
@@ -47,27 +43,26 @@ export const addresses = sqliteTable(
     postalCode: text('postal_code'),
     landmark: text('landmark'),
 
-    // 🗺️ الإحداثيات (مخزنة كـ text للدقة العالية وتجنب مشاكل العشري في SQLite)
-    latitude: text('latitude'),
-    longitude: text('longitude'),
+    // ✅ الإحداثيات من نوع real لحساب المسافات بكفاءة
+    latitude: real('latitude'),
+    longitude: real('longitude'),
 
     notes: text('notes'),
 
-    // 🗃️ Soft Delete
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
     deletedBy: text('deleted_by'),
 
-    // ⏱️ التواقيت بنظام الـ Unix Timestamp الملي ثانية
+    // ✅ تم الإصلاح: استخدام unixepoch() بدلاً من strftime للأداء الأفضل في D1
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`),
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`),
   },
   (table) => [
     // ============================================
-    // 🔗 Foreign Keys (Cascades & Actions)
+    // 🔗 Foreign Keys
     // ============================================
     foreignKey({
       columns: [table.customerId],
@@ -82,15 +77,14 @@ export const addresses = sqliteTable(
     }).onDelete('set null').onUpdate('cascade'),
 
     // ============================================
-    // 🗝️ الفهارس الفريدة المشروطة (Partial Unique Indexes)
+    // 🗝️ Partial Unique Indexes
     // ============================================
-    // يضمن وجود عنوان افتراضي واحد فقط "لكل عميل" للمتاجر الحية
     uniqueIndex('addresses_default_unique_idx')
       .on(table.customerId)
       .where(sql`${table.isDefault} = 1 AND ${table.deletedAt} IS NULL`),
 
     // ============================================
-    // ⚡ فهارس تحسين أداء الاستعلامات (Performance Indexes)
+    // ⚡ Performance Indexes
     // ============================================
     index('addresses_customer_idx').on(table.customerId),
     
@@ -100,9 +94,10 @@ export const addresses = sqliteTable(
     
     index('addresses_country_city_idx').on(table.country, table.city),
     
+    // ✅ الشرط يستهدف العناوين المحذوفة لسلة المهملات
     index('addresses_deleted_idx')
       .on(table.deletedAt)
-      .where(sql`${table.deletedAt} IS NULL`),
+      .where(sql`${table.deletedAt} IS NOT NULL`),
 
     index('addresses_postal_code_idx').on(table.postalCode),
     index('addresses_phone_idx').on(table.recipientPhone),
@@ -112,37 +107,29 @@ export const addresses = sqliteTable(
       .where(sql`${table.deletedAt} IS NULL`),
 
     // ============================================
-    // 🛡️ القيود المنطقية الصارمة (Check Constraints)
+    // 🛡️ Check Constraints
     // ============================================
-    check('chk_recipient_name_not_empty', sql`${table.recipientName} != ''`),
-    check('chk_recipient_phone_not_empty', sql`${table.recipientPhone} != ''`),
-    check('chk_city_not_empty', sql`${table.city} != ''`),
-    check('chk_street_not_empty', sql`${table.street} != ''`),
-    check('chk_label_not_empty', sql`${table.label} != ''`),
+    check('chk_recipient_name_not_empty', sql`length(${table.recipientName}) > 0`),
+    check('chk_recipient_phone_not_empty', sql`length(${table.recipientPhone}) > 0`),
+    check('chk_city_not_empty', sql`length(${table.city}) > 0`),
+    check('chk_street_not_empty', sql`length(${table.street}) > 0`),
+    check('chk_label_not_empty', sql`length(${table.label}) > 0`),
     
-    // التحقق من كود الدولة بنظام حرفين كبيرين (ISO)
     check('chk_country_code', sql`${table.country} GLOB '[A-Z][A-Z]'`),
 
-    // تأمين فحص رقم الهاتف بصيغة متوافقة تماماً مع معايير SQLite D1
     check(
       'chk_phone_format',
       sql`(${table.recipientPhone} GLOB '[+0-9]*') AND (length(${table.recipientPhone}) BETWEEN 7 AND 20)`
     ),
 
-    // قياسات الـ CAST الدقيقة لنطاق الإحداثيات الجغرافية
+    // ✅ قياسات الإحداثيات المباشرة بدون CAST (بفضل real)
     check(
       'chk_lat_range',
-      sql`${table.latitude} IS NULL OR (CAST(${table.latitude} AS REAL) BETWEEN -90.0 AND 90.0)`
+      sql`${table.latitude} IS NULL OR (${table.latitude} BETWEEN -90.0 AND 90.0)`
     ),
     check(
       'chk_lon_range',
-      sql`${table.longitude} IS NULL OR (CAST(${table.longitude} AS REAL) BETWEEN -180.0 AND 180.0)`
-    ),
-
-    // قيود اتساق الـ Soft Delete والعناوين الافتراضية
-    check(
-      'chk_deleted_by_consistency',
-      sql`(${table.deletedAt} IS NULL OR ${table.deletedBy} IS NOT NULL)`
+      sql`${table.longitude} IS NULL OR (${table.longitude} BETWEEN -180.0 AND 180.0)`
     ),
 
     check(

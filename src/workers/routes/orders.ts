@@ -1,79 +1,105 @@
 // src/worker/routes/orders.ts
 
 import { Hono } from 'hono';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, isNull, count } from 'drizzle-orm';
+import { z } from 'zod';
 import type { Env } from '@/lib/env';
 import { getDb } from '@/lib/db/db';
 import * as schema from '@/lib/db/schema';
 import { safeExecute } from '@/lib/errors/safe-executor';
+import { SystemError } from '@/lib/errors/types';
+import type { ShippingAddress, NewOrder } from '@/lib/db/schema/orders';
 import type { ProductOptions, NewOrderItem } from '@/lib/db/schema/order-items';
+import { requireAuth } from '@/workers/middleware/auth';
 
-export interface ShippingAddressInput {
-  recipientName: string;
-  recipientPhone: string;
-  country: string;
-  city: string;
-  street: string;
-  area?: string;
-  building?: string;
-  floor?: string;
-  apartment?: string;
-  notes?: string;
-  landmark?: string;
-  latitude?: number;
-  longitude?: number;
+/* ============================================================================
+ * 🛠️ TYPES & ENVS DECLARATIONS
+ * ============================================================================ */
+
+// ✅ نوع بيانات المستخدم للـ Context
+export interface UserContext {
+  id: string;
+  email?: string;
+  role?: string;
 }
 
-export interface CreateOrderItemInput {
-  productId: string;
-  quantity: number;
-  price?: string | number;
-  options?: ProductOptions;
-  variantSku?: string;
+// ✅ تعريف بيئة Hono شاملة الـ Bindings والـ Variables
+export interface AppEnv {
+  Bindings: Env;
+  Variables: {
+    user?: UserContext;
+  };
 }
 
-export interface CreateOrderBody {
-  customerId: string;
-  customerName: string;
-  customerPhone: string;
-  customerEmail?: string;
-  addressId?: string;
-  shippingAddress: ShippingAddressInput;
-  items: CreateOrderItemInput[];
-  shippingCost?: string | number;
-  taxAmount?: string | number;
-  discount?: string | number;
-  couponCode?: string;
-  couponId?: string;
-  paymentMethod?: 'cod' | 'credit_card' | 'wallet' | 'bank_transfer' | 'installments';
-  shippingMethod?: 'standard' | 'express' | 'same-day' | 'pickup';
-  customerNotes?: string;
-  haggleSessionId?: string;
-  haggleDiscount?: string | number;
-}
+/* ============================================================================
+ * 🛠️ VALIDATION SCHEMAS & TYPES
+ * ============================================================================ */
 
-export interface UpdateOrderStatusBody {
-  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
-  cancelReason?: string;
-}
+const shippingAddressSchema = z.object({
+  recipientName: z.string().min(1, 'اسم المستلم مطلوب'),
+  recipientPhone: z.string().min(1, 'رقم هاتف المستلم مطلوب'),
+  country: z.string().min(1, 'الدولة مطلوبة'),
+  city: z.string().min(1, 'المدينة مطلوبة'),
+  street: z.string().min(1, 'الشارع مطلوب'),
+  buildingNumber: z.string().optional(),
+  floor: z.string().optional(),
+  apartment: z.string().optional(),
+  nearestLandmark: z.string().optional(),
+  postalCode: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+const createOrderItemSchema = z.object({
+  productId: z.string().min(1, 'معرف المنتج مطلوب'),
+  quantity: z.number().int().positive('الكمية يجب أن تكون أكبر من صفر'),
+  price: z.number().int().nonnegative().optional(),
+  options: z.record(z.string(), z.unknown()).optional(),
+  variantSku: z.string().optional(),
+});
+
+const createOrderSchema = z.object({
+  customerId: z.string().min(1, 'معرف العميل مطلوب'),
+  customerName: z.string().min(1, 'اسم العميل مطلوب'),
+  customerPhone: z.string().min(1, 'رقم هاتف العميل مطلوب'),
+  customerEmail: z.string().email('البريد الإلكتروني غير صالح').optional().nullable(),
+  addressId: z.string().optional().nullable(),
+  shippingAddress: shippingAddressSchema,
+  items: z.array(createOrderItemSchema).min(1, 'يجب تقديم عنصر واحد على الأقل'),
+  shippingCost: z.union([z.number(), z.string()]).optional(),
+  taxAmount: z.union([z.number(), z.string()]).optional(),
+  discount: z.union([z.number(), z.string()]).optional(),
+  couponCode: z.string().optional().nullable(),
+  couponId: z.string().optional().nullable(),
+  paymentMethod: z.enum(['cod', 'credit_card', 'wallet', 'bank_transfer', 'installments']).optional(),
+  shippingMethod: z.enum(['standard', 'express', 'same-day', 'pickup']).optional(),
+  customerNotes: z.string().optional().nullable(),
+  haggleSessionId: z.string().optional().nullable(),
+  haggleDiscount: z.union([z.number(), z.string()]).optional(),
+});
+
+const updateOrderStatusSchema = z.object({
+  status: z.enum(['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled']),
+  cancelReason: z.string().optional(),
+});
 
 interface PreparedOrderItem {
   productId: string;
   productName: string;
+  productSlug: string | null;
   productSku: string;
   variantSku: string;
   productImage: string | null;
   productOptions: ProductOptions;
   quantity: number;
-  price: string;
-  lineTotal: string;
+  priceCents: number;
+  lineTotalCents: number;
+  netAmountCents: number;
 }
 
-export const ordersRouter = new Hono<{ Bindings: Env }>();
+/* ============================================================================
+ * 🛠️ HELPER FUNCTIONS
+ * ============================================================================ */
 
-/**
- * تحويل المبالغ إلى سنتات/قروش بشكل آمن لمنع مشاكل Float precision و NaN
- */
 function toCents(amount: string | number | undefined | null): number {
   if (amount === undefined || amount === null || amount === '') return 0;
   const parsed = typeof amount === 'number' ? amount : parseFloat(amount);
@@ -81,13 +107,6 @@ function toCents(amount: string | number | undefined | null): number {
   return Math.round(parsed * 100);
 }
 
-function toFormattedString(cents: number): string {
-  return (cents / 100).toFixed(2);
-}
-
-/**
- * توليد رقم عشوائي آمن تشفيرياً
- */
 function secureRandomInt(min: number, max: number): number {
   const array = new Uint32Array(1);
   crypto.getRandomValues(array);
@@ -95,8 +114,61 @@ function secureRandomInt(min: number, max: number): number {
 }
 
 /**
- * GET /api/store/:slug/orders
+ * جلب المتجر والتأكد من وجوده + فحص الملكية عند اللزوم (Anti-IDOR)
  */
+async function getStoreBySlugOrThrow(
+  db: ReturnType<typeof getDb>,
+  slug: string,
+  path: string,
+  requiredOwnerId?: string
+) {
+  const store = await db
+    .select({ id: schema.stores.id, ownerId: schema.stores.ownerId })
+    .from(schema.stores)
+    .where(and(eq(schema.stores.slug, slug), isNull(schema.stores.deletedAt)))
+    .get();
+
+  if (!store) {
+    throw new SystemError({
+      code: 'STORE_NOT_FOUND',
+      userMessage: 'المتجر المطلوب غير موجود.',
+      technicalMessage: `Store with slug '${slug}' not found or deleted.`,
+      category: 'business',
+      severity: 'info',
+      retryable: false,
+      shouldAlert: false,
+      context: { storeId: slug, path, extras: { storeSlug: slug } },
+    });
+  }
+
+  // 🛡️ فحص الملكية للعمليات الخاصة بأصحاب المتاجر
+  if (requiredOwnerId && store.ownerId !== requiredOwnerId) {
+    throw new SystemError({
+      code: 'FORBIDDEN',
+      userMessage: 'ليس لديك صلاحية للتعامل مع طلبات هذا المتجر.',
+      technicalMessage: `User '${requiredOwnerId}' attempted unauthorized operation on store '${store.id}' owned by '${store.ownerId}'.`,
+      category: 'security',
+      severity: 'warning',
+      retryable: false,
+      shouldAlert: true,
+      context: { storeId: store.id, path },
+    });
+  }
+
+  return store;
+}
+
+/* ============================================================================
+ * 🌐 ROUTER IMPLEMENTATION
+ * ============================================================================ */
+
+// ✅ استخدام AppEnv لتحديد الـ Variables والـ Bindings بشكل استثنائي وصحيح
+export const ordersRouter = new Hono<AppEnv>();
+
+// ============================================================
+// 🟢 GET Routes (عرض الطلبات)
+// ============================================================
+
 ordersRouter.get('/store/:slug/orders', (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
@@ -105,22 +177,26 @@ ordersRouter.get('/store/:slug/orders', (c) =>
     const status = c.req.query('status');
 
     const db = getDb({ DB: c.env.DB });
-
-    const store = await db.select().from(schema.stores).where(eq(schema.stores.slug, slug)).get();
-    if (!store) return c.json({ success: false, error: 'Store not found' }, 404);
+    const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
 
     const conditions = [
       eq(schema.orders.storeId, store.id),
-      sql`${schema.orders.deletedAt} IS NULL`,
+      isNull(schema.orders.deletedAt),
     ];
-    if (status) conditions.push(eq(schema.orders.status, status));
+
+    if (status) {
+      conditions.push(eq(schema.orders.status, status));
+    }
 
     const whereClause = and(...conditions);
 
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)` })
+    const countResult = await db
+      .select({ count: count() })
       .from(schema.orders)
-      .where(whereClause);
+      .where(whereClause)
+      .get();
+
+    const total = countResult?.count ?? 0;
 
     const ordersList = await db
       .select()
@@ -134,24 +210,19 @@ ordersRouter.get('/store/:slug/orders', (c) =>
       success: true,
       data: {
         orders: ordersList,
-        pagination: { limit, offset, total: count, hasMore: offset + limit < count },
+        pagination: { limit, offset, total, hasMore: offset + limit < total },
       },
-    });
+    }, 200);
   })
 );
 
-/**
- * GET /api/store/:slug/orders/:id
- */
 ordersRouter.get('/store/:slug/orders/:id', (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
     const id = c.req.param('id');
 
     const db = getDb({ DB: c.env.DB });
-
-    const store = await db.select().from(schema.stores).where(eq(schema.stores.slug, slug)).get();
-    if (!store) return c.json({ success: false, error: 'Store not found' }, 404);
+    const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
 
     const order = await db
       .select()
@@ -160,91 +231,120 @@ ordersRouter.get('/store/:slug/orders/:id', (c) =>
         and(
           eq(schema.orders.id, id),
           eq(schema.orders.storeId, store.id),
-          sql`${schema.orders.deletedAt} IS NULL`
+          isNull(schema.orders.deletedAt)
         )
       )
       .get();
 
-    if (!order) return c.json({ success: false, error: 'Order not found' }, 404);
+    if (!order) {
+      throw new SystemError({
+        code: 'ORDER_NOT_FOUND',
+        userMessage: 'الطلب المطلوب غير موجود.',
+        technicalMessage: `Order '${id}' not found in store '${store.id}'.`,
+        category: 'business',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        context: { storeId: store.id, path: c.req.path },
+      });
+    }
 
     const items = await db
       .select()
       .from(schema.orderItems)
       .where(eq(schema.orderItems.orderId, id));
 
-    return c.json({ success: true, data: { ...order, items } });
+    return c.json({ success: true, data: { ...order, items } }, 200);
   })
 );
 
+// ============================================================
+// 🟡 POST / PUT / DELETE Routes
+// ============================================================
+
 /**
  * POST /api/store/:slug/orders
+ * ✅ متاح للزوار والعملاء للـ Checkout العام في المتجر
  */
 ordersRouter.post('/store/:slug/orders', (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
-    const body = await c.req.json<CreateOrderBody>();
+    const rawBody = await c.req.json();
 
-    if (!body.items || body.items.length === 0) {
-      return c.json({ success: false, error: 'Order must have at least one item' }, 400);
-    }
-    if (!body.customerId) {
-      return c.json({ success: false, error: 'Customer ID is required' }, 400);
-    }
-    if (!body.customerName?.trim() || !body.customerPhone?.trim()) {
-      return c.json({ success: false, error: 'Customer name and phone are required' }, 400);
-    }
-    if (
-      !body.shippingAddress?.recipientName?.trim() ||
-      !body.shippingAddress?.recipientPhone?.trim() ||
-      !body.shippingAddress?.country?.trim()
-    ) {
-      return c.json({ success: false, error: 'Shipping address missing required recipient information' }, 400);
+    const parsed = createOrderSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new SystemError({
+        code: 'ORDER_VALIDATION_ERROR',
+        userMessage: parsed.error.issues[0]?.message || 'بيانات إنشاء الطلب غير صحيحة.',
+        technicalMessage: JSON.stringify(parsed.error.issues),
+        category: 'validation',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        context: { storeId: slug || 'unknown', path: c.req.path },
+      });
     }
 
+    const body = parsed.data;
     const db = getDb({ DB: c.env.DB });
-
-    const store = await db.select().from(schema.stores).where(eq(schema.stores.slug, slug)).get();
-    if (!store) return c.json({ success: false, error: 'Store not found' }, 404);
+    
+    const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
 
     const result = await db.transaction(async (tx) => {
       let subtotalCents = 0;
       const preparedItems: PreparedOrderItem[] = [];
 
       for (const item of body.items) {
-        if (!item.quantity || item.quantity <= 0) {
-          throw new Error(`Invalid item quantity for product ${item.productId}`);
-        }
-
         const product = await tx
           .select()
           .from(schema.products)
-          .where(and(eq(schema.products.id, item.productId), eq(schema.products.storeId, store.id)))
+          .where(
+            and(
+              eq(schema.products.id, item.productId),
+              eq(schema.products.storeId, store.id),
+              isNull(schema.products.deletedAt)
+            )
+          )
           .get();
 
         if (!product) {
-          throw new Error(`Product ${item.productId} not found`);
+          throw new SystemError({
+            code: 'PRODUCT_NOT_FOUND',
+            userMessage: `المنتج غير موجود أو محذوف.`,
+            technicalMessage: `Product '${item.productId}' not found in store '${store.id}'.`,
+            category: 'business',
+            severity: 'info',
+            retryable: false,
+            shouldAlert: false,
+            context: { storeId: store.id, path: c.req.path },
+          });
         }
+
         if (product.stock < item.quantity) {
-          throw new Error(`Product "${product.name}" has insufficient stock`);
+          throw new SystemError({
+            code: 'INSUFFICIENT_STOCK',
+            userMessage: `المنتج "${product.name}" لا يملك مخزوناً كافياً.`,
+            technicalMessage: `Stock insufficient for product '${product.id}'. Requested: ${item.quantity}, Available: ${product.stock}.`,
+            category: 'business',
+            severity: 'info',
+            retryable: false,
+            shouldAlert: false,
+            context: { storeId: store.id, path: c.req.path },
+          });
         }
 
-        const productPriceStr = typeof product.price === 'string' ? product.price : String(product.price);
-        const unitPriceStr = item.price !== undefined ? String(item.price) : productPriceStr;
-
-        const unitPriceCents = toCents(unitPriceStr);
+        const unitPriceCents = item.price !== undefined ? item.price : product.price;
         const lineTotalCents = unitPriceCents * item.quantity;
 
         subtotalCents += lineTotalCents;
 
         let mainImage: string | null = null;
-        if (product.images) {
-          try {
-            const parsedImages = typeof product.images === 'string' ? JSON.parse(product.images) : product.images;
-            if (Array.isArray(parsedImages) && parsedImages.length > 0 && typeof parsedImages[0] === 'string') {
-              mainImage = parsedImages[0];
-            }
-          } catch {
-            mainImage = null;
+        if (Array.isArray(product.images) && product.images.length > 0) {
+          const firstImg = product.images[0];
+          if (typeof firstImg === 'string') {
+            mainImage = firstImg;
+          } else if (typeof firstImg === 'object' && firstImg !== null && 'url' in firstImg) {
+            mainImage = String((firstImg as { url?: unknown }).url ?? '');
           }
         }
 
@@ -254,38 +354,61 @@ ordersRouter.post('/store/:slug/orders', (c) =>
         preparedItems.push({
           productId: product.id,
           productName: product.name,
+          productSlug: product.slug,
           productSku: sku,
-          variantSku: variantSku,
+          variantSku,
           productImage: mainImage,
-          productOptions: item.options || {},
+          productOptions: (item.options as ProductOptions) || {},
           quantity: item.quantity,
-          price: toFormattedString(unitPriceCents),
-          lineTotal: toFormattedString(lineTotalCents),
+          priceCents: unitPriceCents,
+          lineTotalCents,
+          netAmountCents: lineTotalCents,
         });
 
-        // خصم المخزون بشكل ذري (Atomic Update)
-        const updateResult = await tx
+        const updatedProducts = await tx
           .update(schema.products)
           .set({ stock: sql`${schema.products.stock} - ${item.quantity}` })
-          .where(and(eq(schema.products.id, item.productId), sql`${schema.products.stock} >= ${item.quantity}`));
+          .where(
+            and(
+              eq(schema.products.id, item.productId),
+              sql`${schema.products.stock} >= ${item.quantity}`
+            )
+          )
+          .returning({ updatedId: schema.products.id });
 
-        if (!updateResult) {
-          throw new Error(`Failed to update stock for product "${product.name}"`);
+        if (updatedProducts.length === 0) {
+          throw new SystemError({
+            code: 'INSUFFICIENT_STOCK_RACE',
+            userMessage: `حدث تغيير في المخزون للمنتج "${product.name}". يرجى إعادة المحاولة.`,
+            technicalMessage: `Atomic stock reduction failed for product '${product.id}'.`,
+            category: 'business',
+            severity: 'info',
+            retryable: true,
+            shouldAlert: false,
+            context: { storeId: store.id, path: c.req.path },
+          });
         }
       }
 
       const shippingCostCents = toCents(body.shippingCost);
       const taxAmountCents = toCents(body.taxAmount);
-      
-      // لحساب الخصم الكلي بشكل متوافق مع chk_order_total_calculation
       const generalDiscountCents = toCents(body.discount);
       const haggleDiscountCents = toCents(body.haggleDiscount);
-      const totalDiscountCents = generalDiscountCents + haggleDiscountCents;
 
+      const totalDiscountCents = generalDiscountCents + haggleDiscountCents;
       const totalCents = subtotalCents + shippingCostCents + taxAmountCents - totalDiscountCents;
 
       if (totalCents < 0) {
-        throw new Error('Calculated order total cannot be negative');
+        throw new SystemError({
+          code: 'INVALID_ORDER_TOTAL',
+          userMessage: 'إجمالي الطلب المحسوب لا يمكن أن يكون بالسالب.',
+          technicalMessage: `Calculated total is negative: ${totalCents}`,
+          category: 'validation',
+          severity: 'info',
+          retryable: false,
+          shouldAlert: false,
+          context: { storeId: store.id, path: c.req.path },
+        });
       }
 
       const orderId = crypto.randomUUID();
@@ -293,42 +416,43 @@ ordersRouter.post('/store/:slug/orders', (c) =>
       const generatedOrderNumber = `ORD-${Date.now().toString().slice(-6)}-${randomPart}`;
       const now = new Date();
 
+      const calculatedOriginalTotal = body.haggleSessionId
+        ? subtotalCents + shippingCostCents + taxAmountCents
+        : null;
+
+      const newOrderPayload: NewOrder = {
+        id: orderId,
+        orderNumber: generatedOrderNumber,
+        storeId: store.id,
+        customerId: body.customerId,
+        addressId: body.addressId ?? null,
+        customerName: body.customerName.trim(),
+        customerPhone: body.customerPhone.trim(),
+        customerEmail: body.customerEmail ?? null,
+        shippingAddress: body.shippingAddress as ShippingAddress,
+        currency: 'EGP',
+        subtotal: subtotalCents,
+        shippingCost: shippingCostCents,
+        taxAmount: taxAmountCents,
+        discount: totalDiscountCents,
+        total: totalCents,
+        couponCode: body.couponCode ?? null,
+        couponId: body.couponId ?? null,
+        haggleSessionId: body.haggleSessionId ?? null,
+        haggleDiscount: haggleDiscountCents,
+        originalTotal: calculatedOriginalTotal,
+        status: 'pending',
+        paymentStatus: 'pending',
+        paymentMethod: body.paymentMethod ?? 'cod',
+        shippingMethod: body.shippingMethod ?? 'standard',
+        customerNotes: body.customerNotes ?? null,
+        createdAt: now,
+        updatedAt: now,
+      };
+
       const [newOrder] = await tx
         .insert(schema.orders)
-        .values({
-          id: orderId,
-          orderNumber: generatedOrderNumber,
-          storeId: store.id,
-          customerId: body.customerId,
-          addressId: body.addressId ?? null,
-          customerName: body.customerName.trim(),
-          customerPhone: body.customerPhone.trim(),
-          customerEmail: body.customerEmail ?? null,
-
-          shippingAddress: body.shippingAddress,
-
-          currency: 'EGP',
-          subtotal: toFormattedString(subtotalCents),
-          shippingCost: toFormattedString(shippingCostCents),
-          taxAmount: toFormattedString(taxAmountCents),
-          discount: toFormattedString(totalDiscountCents),
-          total: toFormattedString(totalCents),
-
-          couponCode: body.couponCode ?? null,
-          couponId: body.couponId ?? null,
-
-          haggleSessionId: body.haggleSessionId ?? null,
-          haggleDiscount: toFormattedString(haggleDiscountCents),
-          originalTotal: body.haggleSessionId ? toFormattedString(subtotalCents + shippingCostCents + taxAmountCents) : null,
-
-          status: 'pending',
-          paymentStatus: 'pending',
-          paymentMethod: body.paymentMethod ?? 'cod',
-          shippingMethod: body.shippingMethod ?? 'standard',
-          customerNotes: body.customerNotes ?? null,
-          createdAt: now,
-          updatedAt: now,
-        })
+        .values(newOrderPayload)
         .returning();
 
       const orderItemsData: NewOrderItem[] = preparedItems.map((item) => ({
@@ -338,28 +462,28 @@ ordersRouter.post('/store/:slug/orders', (c) =>
         storeId: store.id,
         variantSku: item.variantSku,
         productName: item.productName,
-        productImage: item.productImage ?? undefined,
+        productSlug: item.productSlug,
+        productImage: item.productImage ?? null,
         productSku: item.productSku,
         productOptions: item.productOptions,
         orderedQty: item.quantity,
         cancelledQty: 0,
         shippedQty: 0,
         returnedQty: 0,
-        price: item.price,
-        lineTotal: item.lineTotal,
-        originalPrice: item.price,
-        haggleDiscount: '0',
-        discount: '0',
-        taxAmount: '0',
+        price: item.priceCents,
+        lineTotal: item.lineTotalCents,
+        originalPrice: item.priceCents,
+        haggleDiscount: 0,
+        discount: 0,
+        taxAmount: 0,
         taxRate: 0,
-        taxPercentage: '0',
-        shippingCost: '0',
+        shippingCost: 0,
         commissionRate: 0,
-        commissionAmount: '0',
-        netAmount: item.lineTotal,
+        commissionAmount: 0,
+        netAmount: item.netAmountCents,
         status: 'pending',
         fulfillmentStatus: 'unfulfilled',
-        refundAmount: '0',
+        refundAmount: 0,
         metadata: {},
         createdAt: now,
         updatedAt: now,
@@ -376,19 +500,33 @@ ordersRouter.post('/store/:slug/orders', (c) =>
 
 /**
  * PUT /api/store/:slug/orders/:id/status
+ * ✅ محمي بـ requireAuth + TypeScript Type safe مع user?.id
  */
-ordersRouter.put('/store/:slug/orders/:id/status', (c) =>
+ordersRouter.put('/store/:slug/orders/:id/status', requireAuth, (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
     const id = c.req.param('id');
-    const body = await c.req.json<UpdateOrderStatusBody>();
+    const user = c.get('user'); // ✅ TypeScript ينص الآن بوضوح أنه UserContext | undefined
+    const rawBody = await c.req.json();
 
-    if (!body.status) return c.json({ success: false, error: 'Status is required' }, 400);
+    const parsed = updateOrderStatusSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new SystemError({
+        code: 'STATUS_VALIDATION_ERROR',
+        userMessage: parsed.error.issues[0]?.message || 'حالة الطلب غير صحيحة.',
+        technicalMessage: JSON.stringify(parsed.error.issues),
+        category: 'validation',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        context: { storeId: slug || 'unknown', path: c.req.path },
+      });
+    }
 
+    const body = parsed.data;
     const db = getDb({ DB: c.env.DB });
-
-    const store = await db.select().from(schema.stores).where(eq(schema.stores.slug, slug)).get();
-    if (!store) return c.json({ success: false, error: 'Store not found' }, 404);
+    
+    const store = await getStoreBySlugOrThrow(db, slug, c.req.path, user?.id);
 
     await db.transaction(async (tx) => {
       const order = await tx
@@ -398,15 +536,26 @@ ordersRouter.put('/store/:slug/orders/:id/status', (c) =>
           and(
             eq(schema.orders.id, id),
             eq(schema.orders.storeId, store.id),
-            sql`${schema.orders.deletedAt} IS NULL`
+            isNull(schema.orders.deletedAt)
           )
         )
         .get();
 
-      if (!order) throw new Error('Order not found');
+      if (!order) {
+        throw new SystemError({
+          code: 'ORDER_NOT_FOUND',
+          userMessage: 'الطلب غير موجود.',
+          technicalMessage: `Order '${id}' not found for store '${store.id}'.`,
+          category: 'business',
+          severity: 'info',
+          retryable: false,
+          shouldAlert: false,
+          context: { storeId: store.id, path: c.req.path },
+        });
+      }
 
       const nowTimestamp = new Date();
-      const updateData: Partial<typeof schema.orders.$inferInsert> = {
+      const updateData: Partial<NewOrder> = {
         status: body.status,
         updatedAt: nowTimestamp,
       };
@@ -417,10 +566,13 @@ ordersRouter.put('/store/:slug/orders/:id/status', (c) =>
 
       if (body.status === 'cancelled') {
         updateData.cancelledAt = nowTimestamp;
-        updateData.cancelReason = body.cancelReason ?? 'Cancelled by admin/system';
+        updateData.cancelReason = body.cancelReason ?? 'تم الإلغاء بواسطة النظام/المسؤول';
 
         if (order.status !== 'cancelled') {
-          const items = await tx.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, id));
+          const items = await tx
+            .select()
+            .from(schema.orderItems)
+            .where(eq(schema.orderItems.orderId, id));
 
           for (const item of items) {
             const restockQty = item.orderedQty - item.shippedQty - item.cancelledQty;
@@ -450,22 +602,23 @@ ordersRouter.put('/store/:slug/orders/:id/status', (c) =>
         .where(eq(schema.orders.id, id));
     });
 
-    return c.json({ success: true, data: { message: `Order status updated to ${body.status}` } });
+    return c.json({ success: true, data: { message: `تم تحديث حالة الطلب إلى ${body.status}` } }, 200);
   })
 );
 
 /**
  * DELETE /api/store/:slug/orders/:id (Soft Delete)
+ * ✅ محمي بـ requireAuth + TypeScript Type safe مع user?.id
  */
-ordersRouter.delete('/store/:slug/orders/:id', (c) =>
+ordersRouter.delete('/store/:slug/orders/:id', requireAuth, (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
     const id = c.req.param('id');
+    const user = c.get('user'); // ✅ تم التعرف عليه بدون مشاكل
 
     const db = getDb({ DB: c.env.DB });
-
-    const store = await db.select().from(schema.stores).where(eq(schema.stores.slug, slug)).get();
-    if (!store) return c.json({ success: false, error: 'Store not found' }, 404);
+    
+    const store = await getStoreBySlugOrThrow(db, slug, c.req.path, user?.id);
 
     const order = await db
       .select()
@@ -474,18 +627,35 @@ ordersRouter.delete('/store/:slug/orders/:id', (c) =>
         and(
           eq(schema.orders.id, id),
           eq(schema.orders.storeId, store.id),
-          sql`${schema.orders.deletedAt} IS NULL`
+          isNull(schema.orders.deletedAt)
         )
       )
       .get();
 
-    if (!order) return c.json({ success: false, error: 'Order not found' }, 404);
+    if (!order) {
+      throw new SystemError({
+        code: 'ORDER_NOT_FOUND',
+        userMessage: 'الطلب غير موجود.',
+        technicalMessage: `Order '${id}' not found for store '${store.id}'.`,
+        category: 'business',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        context: { storeId: store.id, path: c.req.path },
+      });
+    }
 
     if (order.status === 'shipped' || order.status === 'delivered') {
-      return c.json({
-        success: false,
-        error: 'Cannot delete orders that are already shipped or delivered.',
-      }, 400);
+      throw new SystemError({
+        code: 'ORDER_CANNOT_BE_DELETED',
+        userMessage: 'لا يمكن حذف الطلبات التي تم شحنها أو توصيلها بالفعل.',
+        technicalMessage: `Cannot delete order '${id}' with status '${order.status}'.`,
+        category: 'business',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        context: { storeId: store.id, path: c.req.path },
+      });
     }
 
     const now = new Date();
@@ -497,6 +667,6 @@ ordersRouter.delete('/store/:slug/orders/:id', (c) =>
       })
       .where(eq(schema.orders.id, id));
 
-    return c.json({ success: true, data: { message: 'Order soft deleted successfully' } });
+    return c.json({ success: true, data: { message: 'تم نقل الطلب إلى المحذوفات بنجاح' } }, 200);
   })
 );

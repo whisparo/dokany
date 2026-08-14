@@ -37,7 +37,7 @@
     "src/**/*", // ✅ للتأكيد على قراءة كل ملفات الـ src بما فيها الـ CSS
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
-  ],
+, "vitest.config.mts"  ],
   "exclude": [
     "node_modules",
     "src/workers"

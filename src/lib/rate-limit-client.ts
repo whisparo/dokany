@@ -44,6 +44,28 @@ async function getRateLimiterEnv(): Promise<{ url?: string; token?: string }> {
   }
 }
 
+/**
+ * 🔄 Helper للقيام بـ fetch مع Single Retry و Timeout بطول 5 ثوانٍ
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retries = 1
+): Promise<Response> {
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(5000), // ⚡ 5 seconds timeout
+    });
+  } catch (err) {
+    if (retries > 0) {
+      console.warn('⚠️ Rate limiter request failed/timed out, retrying once...');
+      return await fetchWithRetry(url, options, retries - 1);
+    }
+    throw err;
+  }
+}
+
 export async function checkRateLimit(options: CheckOptions): Promise<CheckResult> {
   // 🟢 جلب المتغيرات ديناميكياً لتتوافق مع Cloudflare Context
   const { url: rateLimiterUrl, token: rateLimiterToken } = await getRateLimiterEnv();
@@ -63,16 +85,18 @@ export async function checkRateLimit(options: CheckOptions): Promise<CheckResult
       || headersList.get('x-forwarded-for')?.split(',')[0].trim()
       || '127.0.0.1';
 
-    const response = await fetch(`${rateLimiterUrl}/check`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-RL-Token': rateLimiterToken,
+    const response = await fetchWithRetry(
+      `${rateLimiterUrl}/check`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-RL-Token': rateLimiterToken,
+        },
+        body: JSON.stringify({ ...options, ip: rawIp }),
       },
-      body: JSON.stringify({ ...options, ip: rawIp }),
-      // timeout بعد ثانيتين كي لا يتعطل الـ Server Action
-      signal: AbortSignal.timeout(2000),
-    });
+      1 // Single Retry
+    );
 
     if (!response.ok) {
       if (response.status === 429) {
@@ -84,8 +108,8 @@ export async function checkRateLimit(options: CheckOptions): Promise<CheckResult
 
     return await response.json();
   } catch (error) {
-    // في حالة انقطاع الشبكة أو الـ Timeout: Fail-Open
-    console.error('Rate limiter call failed:', error);
+    // في حالة انقطاع الشبكة أو الـ Timeout بعد الإعادة: Fail-Open
+    console.error('Rate limiter call failed after retry:', error);
     return { allowed: true, degraded: true, limit: 0, remaining: 0, resetAt: 0 };
   }
 }

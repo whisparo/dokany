@@ -5,52 +5,66 @@ import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, ShoppingBag } from 'lucide-react';
 import { Typography } from '@/components/shared/Typography';
-import  Button  from '@/components/shared/Button';
-import { getCheckoutTheme } from './Checkout.theme';
+import Button from '@/components/shared/Button';
+import { getCheckoutTheme, type CheckoutTheme } from './Checkout.theme';
 import { adaptCheckout } from './Checkout.adapter';
 import { ShippingOptions } from './ShippingOptions';
 import { PaymentMethods } from './PaymentMethods';
 import { OrderSummary } from './OrderSummary';
-import { CheckoutForm } from './CheckoutForm'; 
-import type { CheckoutRawData } from '@/features/storefront-checkout/data/checkout-data-fetcher';
+import { CheckoutForm } from './CheckoutForm';
+import type { CheckoutRawData, ShippingOption } from '@/features/storefront-checkout/data/checkout-data-fetcher';
 import { useCartStore } from '@/stores/cart-store';
 import { cn } from '@/lib/utils';
+import type { CartItem } from '@/types/cart';
+import type { CheckoutFormSubmission } from '@/features/storefront-checkout/actions/checkout.actions';
+
+// ============================================================
+// 📦 أنواع صريحة (بدون any)
+// ============================================================
+
+interface CheckoutSubmitData {
+  customer: {
+    name: string;
+    phone: string;
+    email?: string;
+  };
+  shippingAddress: {
+    recipientName: string;
+    recipientPhone: string;
+    country: string;
+    city: string;
+    street: string;
+    building?: string;
+    floor?: string;
+    apartment?: string;
+  };
+  items: CheckoutFormSubmission['items'];
+  shippingCost: number;
+  paymentMethod: string;
+  shippingMethod: string;
+  currency: string;
+}
 
 export interface CheckoutProps {
   rawData: CheckoutRawData;
   className?: string;
-  onSubmit?: (data: {
-    customer: {
-      name: string;
-      phone: string;
-      email?: string;
-    };
-    shippingAddress: {
-      recipientName: string;
-      recipientPhone: string;
-      country: string;
-      city: string;
-      street: string;
-      building?: string;
-      floor?: string;
-      apartment?: string;
-    };
-    items: any[];
-    shippingCost: number;
-    paymentMethod: string;
-    shippingMethod: string;
-    currency: string;
-  }) => Promise<void>;
+  onSubmit?: (data: CheckoutSubmitData) => Promise<void>;
 }
 
+// ============================================================
+// 🎯 المكون الرئيسي
+// ============================================================
+
 export function Checkout({ rawData, className, onSubmit }: CheckoutProps) {
-  const theme = getCheckoutTheme();
-  
-  // 🟢 1. تعديل الخطأ: useRouter بدلاً من Router()
+  const theme: CheckoutTheme = useMemo(() => getCheckoutTheme(), []);
   const router = useRouter();
-  
-  // 🛒 2. قراءة بيانات السلة الفعلية من Zustand Store
   const { items: cartItems, clearCart } = useCartStore();
+
+  // 🛡️ معالجة الـ Hydration للـ Zustand Store
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   const [formData, setFormData] = useState({
     name: rawData.customer?.name || '',
@@ -76,26 +90,45 @@ export function Checkout({ rawData, className, onSubmit }: CheckoutProps) {
     }
   }, [rawData, selectedShippingId, selectedPaymentId]);
 
-  // 🟢 3. إعداد بيانات السلة بتسوية المسميات مع CartItem مع حماية TypeScript
+  // ✅ تحويل بيانات السلة من Zustand إلى تنسيق متوافق مع CheckoutRawData
   const effectiveRawData = useMemo(() => {
+    const mappedCartItems = cartItems.map((item: CartItem) => ({
+      id: item.id || item.productId,
+      productId: item.productId,
+      sku: item.variantId || 'DEFAULT-SKU',
+      name: item.name,
+      price: item.price,
+      originalPrice: item.price,
+      quantity: item.quantity,
+      image: item.image || '',
+      options: {},
+    }));
+
     return {
       ...rawData,
-      cartItems: cartItems.map((item: any) => ({
-        productId: item.productId,
-        sku: item.sku || 'DEFAULT-SKU',
-        name: item.name,
-        price: item.price,
-        originalPrice: item.price,
-        quantity: item.quantity,
-        image: item.image,
-        options: item.options || {},
-      })) as any,
+      cartItems: mappedCartItems,
     };
   }, [rawData, cartItems]);
 
   const payload = useMemo(() => {
     return adaptCheckout(effectiveRawData, selectedShippingId, rawData.currency);
   }, [effectiveRawData, selectedShippingId, rawData.currency]);
+
+  // ✅ تجهيز ثيمات المكونات الفرعية باستخدام useMemo لمنع إعادة الـ Render غير الضرورية
+  const formTheme = useMemo(() => ({
+    ...theme,
+    formGrid: 'grid grid-cols-1 gap-5 sm:grid-cols-2',
+  }), [theme]);
+
+  const shippingTheme = useMemo(() => ({
+    ...theme,
+    shippingSection: 'space-y-4',
+  }), [theme]);
+
+  const paymentTheme = useMemo(() => ({
+    ...theme,
+    paymentSection: 'space-y-4',
+  }), [theme]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -108,7 +141,6 @@ export function Checkout({ rawData, className, onSubmit }: CheckoutProps) {
     if (isSubmitting) return;
     setSubmitError(null);
 
-    // 🛑 التحقق من وجود منتجات في السلة
     if (!cartItems || cartItems.length === 0) {
       setSubmitError('سلة التسوق فارغة. يرجى إضافة منتجات أولاً قبل الدفع.');
       return;
@@ -122,37 +154,37 @@ export function Checkout({ rawData, className, onSubmit }: CheckoutProps) {
     setIsSubmitting(true);
     try {
       const selectedShippingOption = rawData.shippingOptions.find(
-        (opt) => opt.id === selectedShippingId
+        (opt: ShippingOption) => opt.id === selectedShippingId
       );
 
-      const rawShipping = selectedShippingOption as any;
-      const shippingCost = typeof rawShipping?.price === 'number' 
-        ? rawShipping.price 
-        : Number(rawShipping?.price || 0);
+      if (!selectedShippingOption) {
+        throw new Error('طريقة الشحن المحددة غير موجودة');
+      }
 
-      const shippingMethod = rawShipping?.type || rawShipping?.method || selectedShippingId || 'standard';
+      const shippingCost = selectedShippingOption.price;
+      const shippingMethod = selectedShippingOption.id;
 
-      // 🟢 4. تحويل عناصر السلة للـ Server Action بدون أخطاء TypeScript
-      const formattedItems = cartItems.map((item: any) => {
-        const itemSku = item.sku || 'DEFAULT-SKU';
-        const itemPrice = Number(item.price || 0);
+      const formattedItems = cartItems.map((item: CartItem) => {
+      const itemSku = item.variantId || 'DEFAULT-SKU';
+      const itemPrice = Number(item.price || 0);
+      const qty = Number(item.quantity || 1);
 
-        return {
-          productId: item.productId,
-          variantSku: itemSku,
-          productName: item.name || 'منتج',
-          productSku: itemSku,
-          productSlug: item.productId,
-          productImage: item.image || '',
-          productOptions: item.options || {},
-          orderedQty: Number(item.quantity || 1),
-          price: itemPrice.toString(),
-          originalPrice: itemPrice.toString(),
-          discount: '0',
-        };
-      });
+      return {
+        productId: item.productId,
+        variantSku: itemSku,
+        productName: item.name || 'منتج',
+        productSku: itemSku,
+        productSlug: item.productId,
+        productImage: item.image || '',
+        productOptions: {},
+        orderedQty: qty,
+        price: itemPrice, // 👈 number بدلاً من string
+        originalPrice: itemPrice, // 👈 number
+        discount: 0, // 👈 number
+        netAmount: itemPrice * qty, // 👈 number
+      };
+    });
 
-      // 🚀 إرسال الطلب
       await onSubmit?.({
         customer: {
           name: formData.name,
@@ -173,15 +205,20 @@ export function Checkout({ rawData, className, onSubmit }: CheckoutProps) {
         currency: rawData.currency || 'EGP',
       });
 
-      // 🎉 تفريغ السلة والتوجيه لصفحة النجاح
       clearCart();
       router.push('/order-success');
-    } catch (error: any) {
-      setSubmitError(error?.message || 'حدث خطأ أثناء معالجة الطلب. يرجى المحاولة مرة أخرى.');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'حدث خطأ أثناء معالجة الطلب. يرجى المحاولة مرة أخرى.';
+      setSubmitError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // 🛡️ الانتظار حتى اكتمال الـ Mount لتجنب Mismatch
+  if (!hasMounted) {
+    return null; // أو Skeleton Loader خفيف
+  }
 
   // 🛒 واجهة السلة الفارغة
   if (!cartItems || cartItems.length === 0) {
@@ -224,10 +261,7 @@ export function Checkout({ rawData, className, onSubmit }: CheckoutProps) {
               <CheckoutForm 
                 formData={formData} 
                 onChange={handleInputChange} 
-                theme={{
-                  ...theme,
-                  formGrid: 'grid grid-cols-1 gap-5 sm:grid-cols-2'
-                }} 
+                theme={formTheme} 
               />
             </div>
 
@@ -240,10 +274,7 @@ export function Checkout({ rawData, className, onSubmit }: CheckoutProps) {
                 selectedId={selectedShippingId} 
                 currency={rawData.currency} 
                 onChange={setSelectedShippingId} 
-                theme={{
-                  ...theme,
-                  shippingSection: 'space-y-4'
-                }} 
+                theme={shippingTheme} 
               />
             </div>
 
@@ -255,10 +286,7 @@ export function Checkout({ rawData, className, onSubmit }: CheckoutProps) {
                 methods={payload.paymentMethods}
                 selectedId={selectedPaymentId} 
                 onChange={setSelectedPaymentId} 
-                theme={{
-                  ...theme,
-                  paymentSection: 'space-y-4'
-                }} 
+                theme={paymentTheme} 
               />
             </div>
 

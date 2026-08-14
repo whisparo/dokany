@@ -30,8 +30,14 @@ export const users = sqliteTable(
     authMethod: text('auth_method').notNull().default('telegram'),
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
     deletedBy: text('deleted_by'),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
-    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
+
+    // ✅ تم التوحيد: استخدام (unixepoch() * 1000) الأسرع أداءً في D1
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
   },
   (table) => [
     foreignKey({
@@ -76,7 +82,11 @@ export const userStats = sqliteTable(
     totalSessions: integer('total_sessions').notNull().default(0),
     lastIp: text('last_ip'),
     firstLoginAt: integer('first_login_at', { mode: 'timestamp' }),
-    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
+
+    // ✅ تم التوحيد
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
   },
   (table) => [
     uniqueIndex('user_stats_user_id_idx').on(table.userId),
@@ -96,7 +106,11 @@ export const magicTokens = sqliteTable(
     type: text('type').notNull(),
     expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
     usedAt: integer('used_at', { mode: 'timestamp' }),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
+
+    // ✅ تم التوحيد
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),
   },
@@ -118,7 +132,11 @@ export const passwordHistory = sqliteTable(
     id: text('id').primaryKey(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
     passwordHash: text('password_hash').notNull(),
-    changedAt: integer('changed_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
+
+    // ✅ تم التوحيد
+    changedAt: integer('changed_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
     changedBy: text('changed_by'),
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),

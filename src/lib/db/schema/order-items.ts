@@ -13,7 +13,6 @@ import { type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 
 import { orders } from './orders';
 import { products } from './products';
-import { stores } from './stores';
 
 // ============================================
 // 📥 أنواع TypeScript
@@ -53,7 +52,7 @@ export const orderItems = sqliteTable(
     // 🔗 العلاقات الأساسية
     orderId: text('order_id').notNull(),
     productId: text('product_id'),
-    storeId: text('store_id').notNull(), // ✅ بيفضل كـ Column للـ RLS والأداء بدون قيد خارجي مكبل
+    storeId: text('store_id').notNull(),
 
     variantSku: text('variant_sku').notNull(),
 
@@ -65,14 +64,13 @@ export const orderItems = sqliteTable(
     productImage: text('product_image'),
     productSku: text('product_sku').notNull(),
 
-    // ✅ تأمين الـ JSON الافتراضي للـ Edge Runtime والـ D1 Migrations
     productOptions: text('product_options', { mode: 'json' })
       .$type<ProductOptions>()
       .notNull()
       .default(sql`'{}'`),
 
     // ============================================
-    // 📦 الكميات (Integer متوافق تماماً)
+    // 📦 الكميات
     // ============================================
     orderedQty: integer('ordered_qty').notNull().default(1),
     cancelledQty: integer('cancelled_qty').notNull().default(0),
@@ -80,31 +78,26 @@ export const orderItems = sqliteTable(
     returnedQty: integer('returned_qty').notNull().default(0),
 
     // ============================================
-    // 💰 الأسعار والمبالغ (Text لتفادي مشاكل الـ Rounding في SQLite)
+    // 💰 الأسعار والمبالغ (integer - قروش)
     // ============================================
-    price: text('price').notNull(), 
-    lineTotal: text('line_total').notNull(), 
-
-    originalPrice: text('original_price').notNull(), 
-    haggleDiscount: text('haggle_discount').notNull().default('0'), 
-    discount: text('discount').notNull().default('0'), 
-
-    taxAmount: text('tax_amount').notNull().default('0'),
-    taxRate: integer('tax_rate').notNull().default(0), 
-    taxPercentage: text('tax_percentage').notNull().default('0'),
-
-    shippingCost: text('shipping_cost').notNull().default('0'),
+    price: integer('price').notNull(),
+    lineTotal: integer('line_total').notNull(),
+    originalPrice: integer('original_price').notNull(),
+    haggleDiscount: integer('haggle_discount').notNull().default(0),
+    discount: integer('discount').notNull().default(0),
+    taxAmount: integer('tax_amount').notNull().default(0),
+    taxRate: integer('tax_rate').notNull().default(0),
+    shippingCost: integer('shipping_cost').notNull().default(0),
     shippingMethod: text('shipping_method'),
-
     commissionRate: integer('commission_rate').notNull().default(0),
-    commissionAmount: text('commission_amount').notNull().default('0'),
-    netAmount: text('net_amount').notNull(), 
+    commissionAmount: integer('commission_amount').notNull().default(0),
+    netAmount: integer('net_amount').notNull(),
 
     // 🚚 أبعاد الشحن
-    weight: text('weight'), 
-    length: text('length'), 
-    width: text('width'), 
-    height: text('height'), 
+    weight: text('weight'),
+    length: text('length'),
+    width: text('width'),
+    height: text('height'),
 
     // 🎯 الحالة والتتبع
     status: text('status').notNull().default('pending'),
@@ -121,7 +114,7 @@ export const orderItems = sqliteTable(
     returnReason: text('return_reason'),
     returnRequestedAt: integer('return_requested_at', { mode: 'timestamp' }),
     returnProcessedAt: integer('return_processed_at', { mode: 'timestamp' }),
-    refundAmount: text('refund_amount').notNull().default('0'),
+    refundAmount: integer('refund_amount').notNull().default(0),
 
     // 🗃️ المخزن والملاحظات
     warehouseLocation: text('warehouse_location'),
@@ -134,16 +127,17 @@ export const orderItems = sqliteTable(
       .notNull()
       .default(sql`'{}'`),
 
+    // ✅ التوقيت التلقائي المباشر عبر DB Engine
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
-      .$defaultFn(() => new Date()),
+      .default(sql`(unixepoch() * 1000)`),
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
-      .$defaultFn(() => new Date()),
+      .default(sql`(unixepoch() * 1000)`),
   },
   (table) => [
     // ============================================
-    // 🔗 Foreign Keys الضرورية فقط لـ SQLite
+    // 🔗 Foreign Keys
     // ============================================
     foreignKey({
       columns: [table.orderId],
@@ -157,17 +151,16 @@ export const orderItems = sqliteTable(
       name: 'order_items_product_id_fkey',
     }).onDelete('set null').onUpdate('cascade'),
 
-    // ✅ تم إزالة مفتاح المتجر الخارجي التكراري تماشياً مع معاييرنا
-
     // ============================================
-    // 🗝️ الفهارس الفريدة والأداء (تنظيف كامل)
+    // 🗝️ الفهارس
     // ============================================
+    // ✅ الفهرس الفريد آمن تماماً للعملاء المتغيرين والـ Nullable Products
     uniqueIndex('order_items_order_variant_unique')
-      .on(table.orderId, table.productId, table.variantSku),
+      .on(table.orderId, table.variantSku),
 
     index('order_items_order_idx').on(table.orderId),
     index('order_items_product_idx').on(table.productId).where(sql`${table.productId} IS NOT NULL`),
-    index('order_items_store_idx').on(table.storeId), // 👈 أساسي جداً للـ Tenant Isolation
+    index('order_items_store_idx').on(table.storeId),
     index('order_items_variant_sku_idx').on(table.variantSku),
     index('order_items_product_sku_idx').on(table.productSku),
     index('order_items_status_idx').on(table.status),
@@ -182,13 +175,13 @@ export const orderItems = sqliteTable(
     index('order_items_order_status_idx').on(table.orderId, table.status),
 
     // ============================================
-    // 🛡️ القيود المنطقية المتوافقة مع SQLite Engine
+    // 🛡️ القيود المنطقية (Check Constraints)
     // ============================================
     check('chk_item_status', sql`${table.status} IN ('pending', 'processing', 'shipped', 'delivered', 'cancelled', 'returned')`),
     check('chk_fulfillment_status', sql`${table.fulfillmentStatus} IN ('unfulfilled', 'partial', 'fulfilled')`),
     check('chk_return_status', sql`${table.returnStatus} IS NULL OR ${table.returnStatus} IN ('requested', 'approved', 'rejected', 'processed', 'refunded')`),
     
-    // قيود الكميات الصارمة (تشتغل 100% في SQLite)
+    // قيود الكميات
     check('chk_qty_positive', sql`${table.orderedQty} > 0`),
     check('chk_cancelled_positive', sql`${table.cancelledQty} >= 0`),
     check('chk_shipped_positive', sql`${table.shippedQty} >= 0`),
@@ -200,7 +193,18 @@ export const orderItems = sqliteTable(
     check('chk_tax_rate_range', sql`${table.taxRate} >= 0 AND ${table.taxRate} <= 100`),
     check('chk_commission_rate_range', sql`${table.commissionRate} >= 0 AND ${table.commissionRate} <= 100`),
 
-    // سلامة النصوص المدخلة
+    // قيود المبالغ (integer)
+    check('chk_price_positive', sql`${table.price} >= 0`),
+    check('chk_line_total_positive', sql`${table.lineTotal} >= 0`),
+    check('chk_original_price_positive', sql`${table.originalPrice} >= 0`),
+    check('chk_haggle_discount_non_negative', sql`${table.haggleDiscount} >= 0`),
+    check('chk_discount_non_negative', sql`${table.discount} >= 0`),
+    check('chk_tax_non_negative', sql`${table.taxAmount} >= 0`),
+    check('chk_shipping_non_negative', sql`${table.shippingCost} >= 0`),
+    check('chk_commission_non_negative', sql`${table.commissionAmount} >= 0`),
+    check('chk_net_amount_positive', sql`${table.netAmount} >= 0`),
+
+    // سلامة النصوص
     check('chk_sku_not_empty', sql`${table.productSku} != ''`),
     check('chk_variant_sku_not_empty', sql`${table.variantSku} != ''`),
     check('chk_product_name_not_empty', sql`${table.productName} != ''`),
@@ -211,48 +215,23 @@ export type OrderItem = InferSelectModel<typeof orderItems>;
 export type NewOrderItem = InferInsertModel<typeof orderItems>;
 
 // ============================================
-// 🛠️ الدوال المساعدة (تُنفذ الحسابات بدقة في الـ Application Layer)
+// 🛠️ الدوال المساعدة
 // ============================================
 
-/**
- * دالة مساعدة لتحويل السعر النصفي إلى سنتات/قروش تجنباً لأخطاء Floating Point
- */
-function toCents(amount: string | number): number {
-  return Math.round(parseFloat(amount.toString() || '0') * 100);
+export function calculateLineTotal(price: number, quantity: number): number {
+  return price * quantity;
 }
 
-/**
- * دالة مساعدة لإعادة السنتات إلى صيغة نصية محددة بفرعين عشريين
- */
-function toFormattedString(cents: number): string {
-  return (cents / 100).toFixed(2);
+export function calculateCommission(lineTotal: number, rate: number): number {
+  return Math.round((lineTotal * rate) / 100);
 }
 
-export function calculateLineTotal(price: string, quantity: number): string {
-  const priceInCents = toCents(price);
-  const totalInCents = priceInCents * quantity;
-  return toFormattedString(totalInCents);
+export function calculateTax(lineTotal: number, rate: number): number {
+  return Math.round((lineTotal * rate) / 100);
 }
 
-export function calculateCommission(lineTotal: string, rate: number): string {
-  const lineTotalInCents = toCents(lineTotal);
-  const commissionInCents = Math.round((lineTotalInCents * rate) / 100);
-  return toFormattedString(commissionInCents);
-}
-
-export function calculateTax(lineTotal: string, rate: number): string {
-  const lineTotalInCents = toCents(lineTotal);
-  const taxInCents = Math.round((lineTotalInCents * rate) / 100);
-  return toFormattedString(taxInCents);
-}
-
-export function calculateNetAmount(lineTotal: string, commission: string, tax: string): string {
-  const lineTotalInCents = toCents(lineTotal);
-  const commissionInCents = toCents(commission);
-  const taxInCents = toCents(tax);
-  
-  const netInCents = lineTotalInCents - commissionInCents - taxInCents;
-  return toFormattedString(netInCents);
+export function calculateNetAmount(lineTotal: number, discount: number, tax: number, commission: number): number {
+  return lineTotal - discount + tax - commission;
 }
 
 export function canReturnItem(item: OrderItem): boolean {

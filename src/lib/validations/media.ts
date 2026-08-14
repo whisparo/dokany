@@ -144,8 +144,9 @@ export type BulkImageUploadInput = z.infer<typeof bulkImageUploadSchema>;
 // 🗑️ DELETE MEDIA – حذف وسائط
 // ============================================================
 export const deleteMediaSchema = z.object({
-  productId: z.string().uuid('معرف المنتج غير صالح'),
-  mediaId: z.string().uuid('معرف الوسائط غير صالح'),
+// ✅ التعديل المتوافق مع Zod الجديد ومع الـ IDs المستعملة في مشروعك
+  productId: z.string().min(1, 'معرف المنتج مطلوب'),
+  mediaId: z.string().min(1, 'معرف الوسائط مطلوب'),
 }).strict();
 
 export type DeleteMediaInput = z.infer<typeof deleteMediaSchema>;

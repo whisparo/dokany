@@ -38,8 +38,13 @@ export type SettingCategory =
 export const platformSettings = sqliteTable(
   'platform_settings',
   {
-    // 🔑 المفتاح (مركب منطقياً عبر الـ Indexes والـ Primary هنا نصي)
-    key: text('key').primaryKey(),
+    // ✅ UUID يُولَّد تلقائياً كمفتاح أساسي فريد لكل السجلات
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+
+    // 🔑 المفتاح المفهرس فريداً حسب المتجر والبيئة
+    key: text('key').notNull(),
 
     // 💎 القيمة (تحويل وتفسير تلقائي عبر الدريزل)
     value: text('value', { mode: 'json' })
@@ -64,12 +69,14 @@ export const platformSettings = sqliteTable(
     // 👤 الـ Audit Log للـ Admin بدون قيود مكبلة للـ Engine
     updatedBy: text('updated_by'),
 
-    updatedAt: integer('updated_at', { mode: 'timestamp' })
-      .notNull()
-      .$defaultFn(() => new Date()),
+    // ⏱️ التواقيت الموحدة بنظام الـ Unix Timestamp بالملي ثانية
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
-      .$defaultFn(() => new Date()),
+      .default(sql`(unixepoch() * 1000)`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`)
+      .$onUpdate(() => new Date()),
   },
   (table) => [
     // ============================================
@@ -79,12 +86,12 @@ export const platformSettings = sqliteTable(
     // ✅ منع تكرار المفتاح على مستوى البيئة العامة (Global Settings)
     uniqueIndex('platform_settings_key_env_unique')
       .on(table.key, table.environment)
-      .where(sql`store_id IS NULL`),
+      .where(sql`${table.storeId} IS NULL`),
 
     // ✅ منع تكرار المفتاح على مستوى المتجر والبيئة معاً
     uniqueIndex('platform_settings_key_store_env_unique')
       .on(table.key, table.storeId, table.environment)
-      .where(sql`store_id IS NOT NULL`),
+      .where(sql`${table.storeId} IS NOT NULL`),
 
     index('platform_settings_category_idx').on(table.category),
     index('platform_settings_type_idx').on(table.type),
@@ -93,15 +100,15 @@ export const platformSettings = sqliteTable(
     // ✅ فهارس سريعة للـ Frontend والـ Multi-tenancy متوافقة مع SQLite Engine
     index('platform_settings_public_idx')
       .on(table.isPublic)
-      .where(sql`is_public = 1 AND environment = 'production'`),
+      .where(sql`${table.isPublic} = 1 AND ${table.environment} = 'production'`),
     
     index('platform_settings_store_idx')
       .on(table.storeId)
-      .where(sql`store_id IS NOT NULL`),
+      .where(sql`${table.storeId} IS NOT NULL`),
     
     index('platform_settings_store_env_idx')
       .on(table.storeId, table.environment)
-      .where(sql`store_id IS NOT NULL`),
+      .where(sql`${table.storeId} IS NOT NULL`),
       
     index('platform_settings_category_env_idx').on(table.category, table.environment),
 
@@ -130,7 +137,7 @@ export const platformSettings = sqliteTable(
 );
 
 // ============================================
-// 📚 أنواع TypeScript (تم تفعيلها صراحة بدون Any وبأعلى دقّة)
+// 📚 أنواع TypeScript 
 // ============================================
 export type PlatformSetting = InferSelectModel<typeof platformSettings>;
 export type NewPlatformSetting = InferInsertModel<typeof platformSettings>;
@@ -202,7 +209,6 @@ export async function updateSetting(
       value: value,
       version: sql`${platformSettings.version} + 1`,
       updatedBy: updatedBy || null,
-      updatedAt: new Date(),
     })
     .where(and(...conditions))
     .run();
@@ -341,12 +347,12 @@ export async function getSettingsByCategory(
 }
 
 /**
- * ✅ التحقق من صحة القيمة (Placeholder)
+ * ✅ التحقق من صحة القيمة
  */
 export async function validateSettingValue(
   d1Database: D1Database,
   key: string,
-  value: unknown
+  _value: unknown
 ): Promise<{ valid: boolean; error?: string }> {
   const setting = await getSetting(d1Database, key, 'production');
   

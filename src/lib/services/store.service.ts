@@ -9,9 +9,38 @@ import { SystemError } from '@/lib/errors/types';
 
 const STORE_CACHE_TTL_SECONDS = 300; // 5 دقائق
 
+// ============================================================
+// 📦 Cache للـ Redis Client لتحسين الأداء
+// ============================================================
+let cachedRedis: Redis | null = null;
+let cachedEnvSignature: string | null = null;
+
 /**
- * 🗄️ الدالة الأساسية لجلب بيانات المتجر مباشرة من قاعدة البيانات D1
+ * 🛠️ الحصول على Redis client مع caching
  */
+function getRedisClient(env: Env): Redis | null {
+  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
+    return null;
+  }
+
+  const envSignature = `${env.UPSTASH_REDIS_REST_URL}:${env.UPSTASH_REDIS_REST_TOKEN}`;
+
+  if (cachedRedis && cachedEnvSignature === envSignature) {
+    return cachedRedis;
+  }
+
+  cachedRedis = new Redis({
+    url: env.UPSTASH_REDIS_REST_URL,
+    token: env.UPSTASH_REDIS_REST_TOKEN,
+  });
+  cachedEnvSignature = envSignature;
+
+  return cachedRedis;
+}
+
+// ============================================================
+// 🗄️ الدالة الأساسية لجلب بيانات المتجر مباشرة من قاعدة البيانات D1
+// ============================================================
 export async function fetchStoreInfoFromDb(storeSlug: string, env: Env): Promise<Store | null> {
   if (!storeSlug || typeof storeSlug !== 'string') {
     throw new SystemError({
@@ -38,31 +67,15 @@ export async function fetchStoreInfoFromDb(storeSlug: string, env: Env): Promise
 
     if (!rawStore) return null;
 
-    let storeTheme: Store['theme'] = null;
-    if (rawStore.theme) {
-      try {
-        storeTheme = (
-          typeof rawStore.theme === 'string' 
-            ? JSON.parse(rawStore.theme) 
-            : rawStore.theme
-        ) as Store['theme'];
-      } catch (e) {
-        console.error('❌ Failed to parse store theme JSON:', e);
-      }
-    }
+    // ✅ بعد إضافة { mode: 'json' } في Schema، rawStore.theme و rawStore.settings
+    // أصبحا كائنات جاهزة للاستخدام مباشرة
+    const theme = rawStore.theme && typeof rawStore.theme === 'object'
+      ? rawStore.theme
+      : {};
 
-    let storeSettings: Store['settings'] = undefined;
-    if (rawStore.settings) {
-      try {
-        storeSettings = (
-          typeof rawStore.settings === 'string' 
-            ? JSON.parse(rawStore.settings) 
-            : rawStore.settings
-        ) as Store['settings'];
-      } catch (e) {
-        console.error('❌ Failed to parse store settings JSON:', e);
-      }
-    }
+    const settings = rawStore.settings && typeof rawStore.settings === 'object'
+      ? (rawStore.settings as Record<string, unknown>)
+      : {};
 
     return {
       id: rawStore.id,
@@ -87,12 +100,8 @@ export async function fetchStoreInfoFromDb(storeSlug: string, env: Env): Promise
       deletedBy: rawStore.deletedBy ?? null,
       deletedAt: rawStore.deletedAt ?? null,
       deletionReason: rawStore.deletionReason ?? null,
-      theme: storeTheme,
-      settings: storeSettings ?? {
-        theme: 'default',
-        colors: { primary: '#11CAA0' },
-        layout: [],
-      },
+      theme,
+      settings: { ...settings, theme: (settings.theme as string) ?? 'default' },
       templateVersion: rawStore.templateVersion,
       cloudinaryAccountIndex: rawStore.cloudinaryAccountIndex ?? null,
       isActive: rawStore.isActive,
@@ -100,8 +109,8 @@ export async function fetchStoreInfoFromDb(storeSlug: string, env: Env): Promise
       isFeatured: rawStore.isFeatured,
       createdAt: rawStore.createdAt,
       updatedAt: rawStore.updatedAt,
-    };
-  } catch (error) {
+    } as Store;
+  } catch (error: unknown) {
     if (error instanceof SystemError) throw error;
 
     throw new SystemError({
@@ -118,39 +127,67 @@ export async function fetchStoreInfoFromDb(storeSlug: string, env: Env): Promise
   }
 }
 
-/**
- * ⚡ Cache-Aside Pattern لجلب بيانات المتجر باستخدام Redis أولاً ثم D1
- */
+// ============================================================
+// ⚡ Cache-Aside Pattern لجلب بيانات المتجر باستخدام Redis أولاً ثم D1
+// ============================================================
 export async function getStoreInfoData(storeSlug: string, env: Env): Promise<Store | null> {
   const cacheKey = `cache:store:${storeSlug}`;
 
-  // 1. محاولة الجلب من Redis إذا توفرت المتغيرات
-  if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
+  const redis = getRedisClient(env);
+  
+  if (redis) {
     try {
-      const redis = new Redis({
-        url: env.UPSTASH_REDIS_REST_URL,
-        token: env.UPSTASH_REDIS_REST_TOKEN,
-      });
-
       const cachedStore = await redis.get<Store>(cacheKey);
       if (cachedStore) {
         return cachedStore;
       }
 
-      // 2. Cache Miss: الجلب من قاعدة البيانات D1
       const storeData = await fetchStoreInfoFromDb(storeSlug, env);
 
       if (storeData) {
-        // حفظ في Redis مع TTL
-        await redis.set(cacheKey, JSON.stringify(storeData), { ex: STORE_CACHE_TTL_SECONDS });
+        // ✅ تمرير الكائن مباشرة لـ Upstash Redis بدون JSON.stringify لمنع الـ Double-Serialization
+        await redis.set(cacheKey, storeData, { ex: STORE_CACHE_TTL_SECONDS });
       }
 
       return storeData;
-    } catch (cacheError) {
-      console.warn('⚠️ Cache fetch failed, falling back directly to D1:', cacheError);
+    } catch (cacheError: unknown) {
+      console.warn('⚠️ Cache fetch failed, falling back directly to D1:', 
+        cacheError instanceof Error ? cacheError.message : 'Unknown cache error'
+      );
     }
   }
 
-  // Fallback مباشر لقاعدة البيانات عند عدم توفر الكاش أو حدوث خطأ فيه
   return fetchStoreInfoFromDb(storeSlug, env);
+}
+
+// ============================================================
+// 🧹 Cache Invalidation
+// ============================================================
+export async function clearStoreCache(storeSlug: string, env: Env): Promise<void> {
+  const cacheKey = `cache:store:${storeSlug}`;
+  const redis = getRedisClient(env);
+
+  if (!redis) return;
+
+  try {
+    await redis.del(cacheKey);
+  } catch (error: unknown) {
+    console.warn('⚠️ Failed to clear store cache:', 
+      error instanceof Error ? error.message : 'Unknown error'
+    );
+  }
+}
+
+export async function clearMultipleStoresCache(storeSlugs: string[], env: Env): Promise<void> {
+  const redis = getRedisClient(env);
+  if (!redis || storeSlugs.length === 0) return;
+
+  try {
+    const cacheKeys = storeSlugs.map(slug => `cache:store:${slug}`);
+    await redis.del(...cacheKeys);
+  } catch (error: unknown) {
+    console.warn('⚠️ Failed to clear multiple stores cache:', 
+      error instanceof Error ? error.message : 'Unknown error'
+    );
+  }
 }

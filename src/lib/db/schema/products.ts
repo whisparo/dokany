@@ -53,10 +53,10 @@ export const products = sqliteTable(
     description: text('description'),
     shortDescription: text('short_description'),
 
-    // الأسعار والمبالغ مخزنة كنصوص لحماية الدقة العشرية
-    price: text('price').notNull(),
-    compareAtPrice: text('compare_at_price'),
-    cost: text('cost'),
+    // ✅ الأسعار والمبالغ كـ integer (أصغر وحدة نقدية / سنتات)
+    price: integer('price').notNull(),
+    compareAtPrice: integer('compare_at_price'),
+    cost: integer('cost'),
 
     // المخزون
     stock: integer('stock').notNull().default(0),
@@ -70,17 +70,17 @@ export const products = sqliteTable(
     width: text('width'),
     height: text('height'),
 
-    // الميديا والمتغيرات (JSON كـ text مع توثيق TypeScript)
-    mediaIds: text('media_ids').$type<string[]>().notNull().default(sql`'[]'`),
-    images: text('images').$type<ProductImage[]>().default(sql`'[]'`),
+    // ✅ استخدام mode: 'json' للتوافق التام مع Drizzle و Cloudflare D1
+    mediaIds: text('media_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
+    images: text('images', { mode: 'json' }).$type<ProductImage[]>().notNull().default([]),
     videoUrl: text('video_url'),
     imageSrc: text('image_src'),
 
-    variants: text('variants').$type<ProductVariant[]>().default(sql`'[]'`),
-    variantPrices: text('variant_prices').$type<Record<string, string>>().default(sql`'{}'`),
+    variants: text('variants', { mode: 'json' }).$type<ProductVariant[]>().notNull().default([]),
+    variantPrices: text('variant_prices', { mode: 'json' }).$type<Record<string, number>>().notNull().default({}),
 
     haggleEnabled: integer('haggle_enabled', { mode: 'boolean' }).notNull().default(false),
-    minPrice: text('min_price'),
+    minPrice: integer('min_price'),
 
     // SEO
     metaTitle: text('meta_title'),
@@ -89,17 +89,18 @@ export const products = sqliteTable(
     isPublished: integer('is_published', { mode: 'boolean' }).notNull().default(false),
     isFeatured: integer('is_featured', { mode: 'boolean' }).notNull().default(false),
 
-    metadata: text('metadata').$type<ProductMetadata>().default(sql`'{}'`),
+    metadata: text('metadata', { mode: 'json' }).$type<ProductMetadata>().notNull().default({}),
 
     // Soft Delete
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
 
+    // ✅ تعديل صيغة التوقيت لضمان التوافق مع D1 SQLite (unixepoch)
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`),
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`),
   },
   (table) => [
     // ============================================
@@ -168,45 +169,44 @@ export const products = sqliteTable(
     check('chk_prod_name_not_empty', sql`length(${table.name}) > 0`),
     check('chk_prod_slug_not_empty', sql`length(${table.slug}) > 0`),
 
-    // المبالغ والمخزون
-    check('chk_price_non_negative', sql`CAST(${table.price} AS REAL) >= 0.0`),
+    // المبالغ والمخزون (integer)
+    check('chk_price_non_negative', sql`${table.price} >= 0`),
     check('chk_stock_non_negative', sql`${table.stock} >= 0`),
     check('chk_low_stock_non_negative', sql`${table.lowStockThreshold} >= 0`),
 
     check(
       'chk_compare_at_price',
-      sql`${table.compareAtPrice} IS NULL OR CAST(${table.compareAtPrice} AS REAL) >= CAST(${table.price} AS REAL)`
+      sql`${table.compareAtPrice} IS NULL OR ${table.compareAtPrice} >= ${table.price}`
     ),
-    check('chk_cost_non_negative', sql`${table.cost} IS NULL OR CAST(${table.cost} AS REAL) >= 0.0`),
+    check('chk_cost_non_negative', sql`${table.cost} IS NULL OR ${table.cost} >= 0`),
     check(
       'chk_cost_price',
-      sql`${table.cost} IS NULL OR CAST(${table.cost} AS REAL) <= CAST(${table.price} AS REAL)`
+      sql`${table.cost} IS NULL OR ${table.cost} <= ${table.price}`
     ),
     check(
       'chk_min_price_non_negative',
-      sql`${table.minPrice} IS NULL OR CAST(${table.minPrice} AS REAL) >= 0.0`
+      sql`${table.minPrice} IS NULL OR ${table.minPrice} >= 0`
     ),
     check(
       'chk_min_price_limit',
-      sql`${table.minPrice} IS NULL OR CAST(${table.minPrice} AS REAL) <= CAST(${table.price} AS REAL)`
+      sql`${table.minPrice} IS NULL OR ${table.minPrice} <= ${table.price}`
     ),
     check(
       'chk_haggle_min_price',
       sql`${table.haggleEnabled} = 0 OR ${table.minPrice} IS NOT NULL`
     ),
 
-    // الأبعاد والوزن (CAST لتحويل النص إلى رقم)
+    // الأبعاد والوزن
     check('chk_weight_positive', sql`${table.weight} IS NULL OR CAST(${table.weight} AS REAL) > 0.0`),
     check('chk_length_positive', sql`${table.length} IS NULL OR CAST(${table.length} AS REAL) > 0.0`),
     check('chk_width_positive', sql`${table.width} IS NULL OR CAST(${table.width} AS REAL) > 0.0`),
     check('chk_height_positive', sql`${table.height} IS NULL OR CAST(${table.height} AS REAL) > 0.0`),
 
-    // صياغة الـ Slug: أحرف عربية/إنجليزية، أرقام، شرطات، وليس مسافات
+    // صياغة الـ Slug
     check('chk_prod_slug_format', sql`${table.slug} NOT LIKE '% %'`),
-    // الباركود (إن وُجد) لا يقل عن 3 أحرف
     check('chk_barcode_format', sql`${table.barcode} IS NULL OR length(${table.barcode}) >= 3`),
 
-    // حدود المصفوفات (باستخدام json_array_length)
+    // حدود المصفوفات
     check('chk_images_limit', sql`json_array_length(${table.images}) <= 50`),
     check('chk_variants_limit', sql`json_array_length(${table.variants}) <= 100`),
     check('chk_short_description_length', sql`${table.shortDescription} IS NULL OR length(${table.shortDescription}) <= 500`),
@@ -214,7 +214,7 @@ export const products = sqliteTable(
 );
 
 // ============================================
-// 📊 جدول إحصائيات المنتجات (منع تضخم الـ Write Locks)
+// 📊 جدول إحصائيات المنتجات
 // ============================================
 export const productStats = sqliteTable(
   'product_stats',
@@ -226,15 +226,14 @@ export const productStats = sqliteTable(
     salesCount: integer('sales_count').notNull().default(0),
     reviewsCount: integer('reviews_count').notNull().default(0),
 
-    // الـ Rating كـ Integer (مثال: 4.5 → 450)
+    // ✅ التقييم يحسب كـ (الرقم المباشر * 100) لتجنب الفواصل (مثلاً 4.5 = 450)
     rating: integer('rating').notNull().default(0),
 
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`),
   },
   (table) => [
-    // ⚠️ ForeignKey منفصلة لتجنب تداخل الأنواع
     foreignKey({
       columns: [table.productId],
       foreignColumns: [products.id],

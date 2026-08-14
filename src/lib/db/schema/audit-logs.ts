@@ -36,7 +36,7 @@ export const getAuditLogsTable = (suffix: string) => {
       // ✅ توليد الـ UUID في التطبيق (وليس في D1) لسرعة الـ Edge
       id: text('id').primaryKey(),
 
-      // ✅ فك الارتباط (بدون Foreign Keys) لضمان نجاح الـ DROP TABLE الشهري والـ Isolation
+      // ✅ بدون Foreign Keys متعمداً لضمان نجاح الـ DROP TABLE الشهري والـ Partitioning
       userId: text('user_id'),
       storeId: text('store_id'),
 
@@ -50,7 +50,7 @@ export const getAuditLogsTable = (suffix: string) => {
       entityId: text('entity_id').notNull(),
       entityName: text('entity_name'),
 
-      // ✅ الإصلاح: إرجاع { mode: 'json' } لضمان الـ Auto-parsing التلقائي في الـ Worker
+      // ✅ Auto-parsing تلقائي للـ JSON في الـ Worker
       changes: text('changes', { mode: 'json' })
         .$type<{
           before?: Record<string, unknown>;
@@ -69,15 +69,14 @@ export const getAuditLogsTable = (suffix: string) => {
       success: integer('success', { mode: 'boolean' }).notNull().default(true),
       errorMessage: text('error_message'),
 
-      // ✅ الإصلاح: إرجاع { mode: 'json' } هنا أيضاً
       metadata: text('metadata', { mode: 'json' })
         .$type<Record<string, unknown>>()
         .default({}),
 
-      // ✅ توقيت دقيق بالـ Milliseconds متوافق تماماً مع الـ Epoch timestamps والـ Redis
+      // ✅ توقيت متوافق 100% مع D1 SQLite و Epoch Milliseconds
       createdAt: integer('created_at', { mode: 'timestamp' })
         .notNull()
-        .default(sql`(strftime('%s', 'now') * 1000)`),
+        .default(sql`(unixepoch() * 1000)`),
     },
     (table) => [
       // ============================================
@@ -88,15 +87,15 @@ export const getAuditLogsTable = (suffix: string) => {
       index(`${tableName}_entity_idx`).on(table.entityType, table.entityId),
       index(`${tableName}_action_idx`).on(table.action),
 
-      // ✅ الترتيب التنازلي لـ SQLite المقفل بدون خطوط حمراء
+      // الترتيب التنازلي لـ SQLite
       index(`${tableName}_created_idx`).on(sql`${table.createdAt} DESC`),
 
-      // ✅ الفهرس المركب المثالي للـ Dashboard والاستعلام الحصري لكل تاجر
+      // الفهرس المركب المثالي للـ Dashboard والاستعلام الحصري لكل تاجر
       index(`${tableName}_store_created_idx`).on(table.storeId, sql`${table.createdAt} DESC`),
 
       index(`${tableName}_request_id_idx`).on(table.requestId),
 
-      // ✅ الفهرس الجزئي الذكي لمراقبة الأخطاء وحصر الـ Exceptions
+      // الفهرس الجزئي لمراقبة الأخطاء
       index(`${tableName}_success_idx`)
         .on(table.success)
         .where(sql`${table.success} = 0`),
@@ -107,23 +106,23 @@ export const getAuditLogsTable = (suffix: string) => {
       check(`${tableName}_chk_entity_type_not_empty`, sql`length(${table.entityType}) > 0`),
       check(`${tableName}_chk_entity_id_not_empty`, sql`length(${table.entityId}) > 0`),
       
-      // تناسق حالة الخطأ: يمنع تضارب الـ Status مع وجود رسالة خطأ
+      // تناسق حالة الخطأ
       check(
         `${tableName}_chk_error_message`, 
         sql`(${table.success} = 1 AND ${table.errorMessage} IS NULL) OR (${table.success} = 0 AND ${table.errorMessage} IS NOT NULL)`
       ),
       
-      // يجب أن يكون الحدث مرتبطاً بمطلب واحد على الأقل (مستخدم أو متجر)
+      // ربط الحدث بمستخدم أو متجر
       check(`${tableName}_chk_user_or_store`, sql`${table.userId} IS NOT NULL OR ${table.storeId} IS NOT NULL`),
     ]
   );
 };
+
 export const auditLogs = getAuditLogsTable('default');
 
 // ============================================
-// 📚 استنتاج الأنواع الافتراضية للمساعدة في الـ Codebase
+// 📚 استنتاج الأنواع الافتراضية
 // ============================================
 const defaultTable = getAuditLogsTable('default');
 export type AuditLog = InferSelectModel<typeof defaultTable>;
 export type NewAuditLog = InferInsertModel<typeof defaultTable>;
-

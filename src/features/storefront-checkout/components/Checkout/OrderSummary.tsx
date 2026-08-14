@@ -1,4 +1,4 @@
-// src/components/storefront/Checkout/OrderSummary.tsx
+// src/features/storefront-checkout/components/Checkout/OrderSummary.tsx
 'use client';
 
 import { useState } from 'react';
@@ -7,13 +7,16 @@ import { AlertCircle, ShoppingBag } from 'lucide-react';
 import { Typography } from '@/components/shared/Typography';
 import Button from '@/components/shared/Button';
 import { cn } from '@/lib/utils';
-import type { CheckoutPayload } from './Checkout.adapter';
+
+// 🎯 المسارات المضبوطة حسب شجرة المشروع
+import type { CheckoutPayload } from '@/features/storefront-checkout/adapters/checkout-page.adapter';
+import type { CheckoutTheme } from './Checkout.theme';
 
 interface OrderSummaryProps {
   payload: CheckoutPayload;
   selectedPaymentId: string;
   isSubmitting: boolean;
-  theme: any;
+  theme: CheckoutTheme;
 }
 
 export function OrderSummary({ payload, selectedPaymentId, isSubmitting, theme }: OrderSummaryProps) {
@@ -22,7 +25,7 @@ export function OrderSummary({ payload, selectedPaymentId, isSubmitting, theme }
 
   return (
     <div className={theme.summaryCard}>
-      {/* 🎒 رأس الكارت الأنيق */}
+      {/* 🎒 رأس الكارت */}
       <div className="flex items-center gap-3 border-b border-border/10 pb-4 mb-6">
         <div className="p-2 rounded-xl bg-primary/10 text-primary">
           <ShoppingBag className="h-5 w-5" />
@@ -40,7 +43,6 @@ export function OrderSummary({ payload, selectedPaymentId, isSubmitting, theme }
           return (
             <div key={item.id} className={theme.cartItem}>
               <div className="flex items-center gap-4 min-w-0 flex-1">
-                {/* حاوية الصورة الزجاجية الناعمة */}
                 <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-muted/40 border border-border/20 relative flex items-center justify-center">
                   {hasImageError || !item.image ? (
                     <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-primary/20 flex items-center justify-center text-xs text-primary/60 font-black">
@@ -58,14 +60,18 @@ export function OrderSummary({ payload, selectedPaymentId, isSubmitting, theme }
                       }}
                     />
                   )}
-                  {/* شارة صغيرة رائعة للكمية فوق الصورة مباشرة */}
-                  <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm">
+                  <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm z-10">
                     {item.quantity}
                   </span>
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <Typography variant="body2" weight="bold" className="truncate text-foreground/90">
+                  <Typography 
+                    variant="body2" 
+                    weight="bold" 
+                    className="truncate text-foreground/90"
+                    title={item.name}
+                  >
                     {item.name}
                   </Typography>
                   <Typography variant="caption" className="text-muted-foreground/70 font-medium">
@@ -74,7 +80,6 @@ export function OrderSummary({ payload, selectedPaymentId, isSubmitting, theme }
                 </div>
               </div>
 
-              {/* السعر الإجمالي للسطر بالكامل */}
               <Typography variant="body2" weight="bold" className="shrink-0 text-foreground font-mono font-black">
                 {item.formattedLineTotal}
               </Typography>
@@ -83,7 +88,7 @@ export function OrderSummary({ payload, selectedPaymentId, isSubmitting, theme }
         })}
       </div>
 
-      {/* 💰 الحسابات المالية الفورية بالتنسيق النيوني الناعم */}
+      {/* 💰 الحسابات المالية */}
       <div className={theme.summaryDetails}>
         <div className={theme.summaryRow}>
           <span className="text-muted-foreground/80">المجموع الفرعي</span>
@@ -111,7 +116,6 @@ export function OrderSummary({ payload, selectedPaymentId, isSubmitting, theme }
           </div>
         )}
         
-        {/* صندوق الإجمالي المشع والفاخر للغاية */}
         <div className="border-t border-border/10 mt-6 pt-5">
           <div className="flex items-center justify-between bg-gradient-to-r from-primary/[0.04] to-primary/[0.01] dark:from-primary/[0.08] p-4 rounded-2xl border border-primary/10 shadow-[0_4px_20px_rgba(var(--primary-rgb),0.02)]">
             <span className="text-sm font-black text-foreground/85">الإجمالي النهائي</span>
@@ -122,7 +126,6 @@ export function OrderSummary({ payload, selectedPaymentId, isSubmitting, theme }
         </div>
       </div>
 
-      {/* 🚀 زر الإرسال المتوهج بألوان حيوية تسرق العين */}
       <Button
         type="submit"
         variant="primary"
@@ -137,13 +140,11 @@ export function OrderSummary({ payload, selectedPaymentId, isSubmitting, theme }
         disabled={isSubmitting || payload.cartItems.length === 0}
       >
         <span className="relative z-10 flex items-center justify-center gap-2 font-black tracking-wide text-white">
-          {isSubmitting ? 'جاري تأكيد طلبك الفاخر...' : 'تأكيد وإتمام الطلب'}
+          {isSubmitting ? 'جاري تأكيد طلبك...' : 'تأكيد وإتمام الطلب'}
         </span>
-        {/* تأثير الـ Hover اللامع الانسيابي */}
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-[shimmer_1.8s_infinite] pointer-events-none" />
       </Button>
 
-      {/* 🔔 تنبيه الدفع عند الاستلام الأنيق جداً */}
       {selectedPayment?.type === 'cod' && (
         <div className={cn(theme.codNote, "mt-4 bg-amber-500/5 border border-amber-500/10 p-4 rounded-2xl flex gap-3")}>
           <AlertCircle className="h-5 w-5 shrink-0 text-amber-500 mt-0.5" aria-hidden="true" />

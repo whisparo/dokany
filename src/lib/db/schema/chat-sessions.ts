@@ -53,7 +53,10 @@ export type ChatSessionTimestamps = {
 export const chatSessions = sqliteTable(
   'chat_sessions',
   {
-    id: text('id').primaryKey(), // UUID يُولَّد في كود التطبيق
+    // ✅ توليد تلقائي للمعرف
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
 
     // 🔗 العلاقات (Cascade/Set Null مضبوطة هندسياً)
     userId: text('user_id'),
@@ -76,23 +79,24 @@ export const chatSessions = sqliteTable(
       .notNull()
       .default(sql`'{}'`),
 
-    // ⏱️ آخر نشاط بنظام الـ Unix Timestamp (الملي ثانية) لأداء فلكي في الـ Ordering
+    // ⏱️ آخر نشاط بنظام الـ Unix Timestamp الموحد
     lastActivityAt: integer('last_activity_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`),
 
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
 
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`),
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`)
+      .$onUpdate(() => new Date()),
   },
   (table) => [
     // ============================================
-    // 🔗 Foreign Keys الصارمة لمنع الـ Deprecated Warnings
+    // 🔗 Foreign Keys
     // ============================================
     foreignKey({
       columns: [table.userId],
@@ -109,15 +113,18 @@ export const chatSessions = sqliteTable(
     // ============================================
     // 🗝️ الفهارس الاستراتيجية والأداء العالي
     // ============================================
+    // ✅ مراعاة الـ Soft Delete لمنع التعارض عند إعادة الإنشاء
     uniqueIndex('chat_sessions_platform_external_unique')
-      .on(table.platform, table.externalId),
+      .on(table.platform, table.externalId)
+      .where(sql`${table.deletedAt} IS NULL`),
 
     index('chat_sessions_last_activity_idx').on(table.lastActivityAt),
     index('chat_sessions_created_idx').on(table.createdAt),
     
+    // ✅ تصحيح شرط الفهرس ليستهدف العناصر المحذوفة فقط
     index('chat_sessions_deleted_idx')
       .on(table.deletedAt)
-      .where(sql`${table.deletedAt} IS NULL`),
+      .where(sql`${table.deletedAt} IS NOT NULL`),
 
     index('chat_sessions_user_idx')
       .on(table.userId)
@@ -151,13 +158,11 @@ export const chatSessions = sqliteTable(
     check('chk_external_id_not_empty', sql`length(${table.externalId}) > 0`),
     check('chk_external_id_length', sql`length(${table.externalId}) <= 255`),
     
-    // 🚀 تصليح سنيور: جلسات الويب لازم الـ storeId موجود، وجلسات البوتات مربوطة بالـ externalId لتأمين الـ Lead Generation
     check(
       'chk_session_routing_integrity',
       sql`(${table.platform} = 'web' AND ${table.storeId} IS NOT NULL) OR (${table.platform} IN ('telegram', 'whatsapp', 'messenger') AND length(${table.externalId}) > 0)`
     ),
 
-    // فحص الـ Step المأخوذة من الـ JSON
     check(
       'chk_state_step',
       sql`
@@ -166,13 +171,11 @@ export const chatSessions = sqliteTable(
       `
     ),
 
-    // التحقق من سلامة الـ JSON Object
     check(
       'chk_timestamps_object',
       sql`json_valid(${table.timestamps}) = 1 AND json_type(${table.timestamps}) = 'object'`
     ),
 
-    // 🚀 تصليح سنيور: توسيع الـ GLOB ليدعم الحروف الكابيتال والسمول ومنع الـ Constraint Collapse
     check(
       'chk_visitor_fingerprint',
       sql`

@@ -9,18 +9,24 @@ import { users } from './users';
 export const sessions = sqliteTable(
   'session',
   {
-    id: text('id').primaryKey(),
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
     expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
     token: text('token').notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
-    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
-    userId: text('user_id').notNull(), // ✅ إزالة .references
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`)
+      .$onUpdate(() => new Date()),
+    userId: text('user_id').notNull(),
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),
     tokenFamily: text('token_family').notNull(),
   },
   (table) => [
-    // ✅ العلاقة الخارجية الصارمة
     foreignKey({ 
       columns: [table.userId], 
       foreignColumns: [users.id], 
@@ -32,6 +38,12 @@ export const sessions = sqliteTable(
     index('session_token_family_idx').on(table.tokenFamily),
     index('session_user_expires_idx').on(table.userId, table.expiresAt),
     index('session_user_token_family_idx').on(table.userId, table.tokenFamily),
+
+    // ✅ فهرس جزئي أمني للاستعلام حسب الـ IP وإبطال الجلسات المشبوهة
+    index('session_ip_address_idx')
+      .on(table.ipAddress)
+      .where(sql`${table.ipAddress} IS NOT NULL`),
+
     check('chk_session_token_not_empty', sql`length(${table.token}) > 0`),
   ]
 );
@@ -42,10 +54,12 @@ export const sessions = sqliteTable(
 export const accounts = sqliteTable(
   'account',
   {
-    id: text('id').primaryKey(),
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
     accountId: text('account_id').notNull(),
     providerId: text('provider_id').notNull(),
-    userId: text('user_id').notNull(), // ✅ إزالة .references
+    userId: text('user_id').notNull(),
     accessToken: text('access_token'),
     refreshToken: text('refresh_token'),
     idToken: text('id_token'),
@@ -53,11 +67,15 @@ export const accounts = sqliteTable(
     refreshTokenExpiresAt: integer('refresh_token_expires_at', { mode: 'timestamp' }),
     scope: text('scope'),
     password: text('password'),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
-    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`)
+      .$onUpdate(() => new Date()),
   },
   (table) => [
-    // ✅ العلاقة الخارجية الصارمة
     foreignKey({ 
       columns: [table.userId], 
       foreignColumns: [users.id], 
@@ -78,12 +96,19 @@ export const accounts = sqliteTable(
 export const verifications = sqliteTable(
   'verification',
   {
-    id: text('id').primaryKey(),
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
     identifier: text('identifier').notNull(),
     value: text('value').notNull(),
     expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
-    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`)
+      .$onUpdate(() => new Date()),
   },
   (table) => [
     index('verification_identifier_idx').on(table.identifier),

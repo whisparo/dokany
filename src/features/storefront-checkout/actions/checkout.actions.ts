@@ -6,7 +6,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 import { processCheckout } from '@/features/storefront-checkout/orchestrators/checkout.orchestrator';
 import { CustomerService } from '@/lib/services/customer.service';
-import { OrderService } from '@/lib/services/order-service';
+import { OrderService } from '@/lib/services/order-service'; // تم تعديل المسار لـ orders-service بناءً على ملفك
 
 // 🛡️ 1. استيراد دالة الحماية والـ Action Error Handler الموحد
 import { enforceRateLimit } from '@/lib/rate-limit-client';
@@ -66,13 +66,12 @@ export async function handleCheckoutSubmit(
 
     // 👤 3. جلب أو إنشاء العميل
     const customer = await CustomerService.findOrCreateCustomer(env, {
-      storeId,
       name: payload.customer.name,
       phone: payload.customer.phone,
       email: payload.customer.email,
     });
 
-    // 📦 4. تحضير العناصر وحساب الإجماليات (🟢 تم تمرير storeId كمعامل ثانٍ)
+    // 📦 4. تحضير العناصر وحساب الإجماليات
     const preparedItems = OrderService.prepareOrderItems(payload.items, storeId);
 
     if (!preparedItems || preparedItems.length === 0) {
@@ -80,7 +79,7 @@ export async function handleCheckoutSubmit(
     }
 
     const subtotalNumber = preparedItems.reduce(
-      (acc, item) => acc + (parseFloat(item.lineTotal) || 0),
+      (acc, item) => acc + (typeof item.lineTotal === 'number' ? item.lineTotal : Number(item.lineTotal) || 0),
       0
     );
 
@@ -95,29 +94,27 @@ export async function handleCheckoutSubmit(
     const orderNumber = OrderService.generateOrderNumber();
     const idempotencyKey = payload.idempotencyKey || `chk_${orderId}`;
 
-    // 🔄 5. التنفيذ عبر الأوركستريتر (تمرير env النظيف مباشرة)
+    // 🔄 5. التنفيذ عبر الأوركستريتر (تمرير الـ 6 معلمات بالشكل والترتيب الصحيح)
     const result = await processCheckout(
-      env,
-      idempotencyKey,
-      {
+      env,                  // 1️⃣ env
+      idempotencyKey,       // 2️⃣ idempotencyKey
+      storeId,              // 3️⃣ trustedStoreId
+      customer.id,          // 4️⃣ trustedCustomerId
+      {                     // 5️⃣ orderInput
         id: orderId,
         orderNumber,
-        storeId,
-        customerId: customer.id,
         shippingAddress: payload.shippingAddress,
         customerName: payload.customer.name,
         customerPhone: payload.customer.phone,
         customerEmail: payload.customer.email,
         currency: payload.currency || 'EGP',
-        subtotal: totals.subtotal,
         shippingCost: totals.shippingCost,
         taxAmount: totals.taxAmount,
         discount: totals.discount,
-        total: totals.total,
         paymentMethod: payload.paymentMethod || 'cod',
         shippingMethod: payload.shippingMethod || 'standard',
       },
-      preparedItems
+      preparedItems         // 6️⃣ itemsInput
     );
 
     if (!result.success) {
@@ -127,7 +124,7 @@ export async function handleCheckoutSubmit(
       };
     }
 
-    // 🎯 هنا TypeScript أدرك تماماً أن result هي من نوع النجاح وبها orderId و orderNumber
+    // 🎯 توجيه بعد نجاح العملية
     const decodedSlug = decodeURIComponent(storeSlug);
     redirectUrlTarget = `/${decodedSlug}/order-confirmation?orderId=${result.orderId}&orderNumber=${result.orderNumber}`;
 

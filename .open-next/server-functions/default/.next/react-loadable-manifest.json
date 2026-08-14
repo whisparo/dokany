@@ -14,7 +14,7 @@
   "components\\shared\\ProductCard\\ProductCard.tsx -> @/features/storefront-home/components/AddToCartButton": {
     "id": 2604,
     "files": [
-      "static/chunks/604.3ed2bc5458f17a31.js"
+      "static/chunks/604.59721ec5ebb54c68.js"
     ]
   },
   "features\\storefront-home\\components\\CartDrawerWrapper.tsx -> ./ClientCartDrawer": {
@@ -27,31 +27,7 @@
     "id": 1146,
     "files": [
       "static/chunks/239-d33310ddfa6356f4.js",
-      "static/chunks/146.3d941bbc34a121da.js"
-    ]
-  },
-  "lib\\services\\cloudinary.ts -> @/lib/db/schema": {
-    "id": 8318,
-    "files": [
-      "static/chunks/658.f32cec3073a552de.js",
-      "static/chunks/780.5db2ca874f015b1a.js",
-      "static/chunks/566.baa091e87a623bef.js",
-      "static/chunks/318.dd5bcd021ae97179.js"
-    ]
-  },
-  "lib\\services\\cloudinary.ts -> drizzle-orm": {
-    "id": 3517,
-    "files": [
-      "static/chunks/658.f32cec3073a552de.js",
-      "static/chunks/517.16200730a7a3dc9f.js"
-    ]
-  },
-  "lib\\services\\cloudinary.ts -> drizzle-orm/d1": {
-    "id": 8850,
-    "files": [
-      "static/chunks/658.f32cec3073a552de.js",
-      "static/chunks/780.5db2ca874f015b1a.js",
-      "static/chunks/850.90376f0442105155.js"
+      "static/chunks/146.849c653b164f1f92.js"
     ]
   }
 }

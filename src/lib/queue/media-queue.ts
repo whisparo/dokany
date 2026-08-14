@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db';
 import { media } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import type { Env } from '@/lib/env';
+import { uploadToB2 } from '@/lib/storage';
 
 // ============================================================
 // 🔒 واجهات البيانات المحددة بدقة (Strict Types)
@@ -59,7 +60,8 @@ export async function queueMediaProcessing(
       return;
     }
 
-    const idempotencyKey = `media_${mediaId}_${Date.now()}`;
+    // 🔒 Idempotency Key ثابت مبني على id الصورة لضمان عدم التكرار
+    const idempotencyKey = `media_job_${mediaId}`;
     const sequenceNumber = await getNextSequenceNumber(env, mediaRecord.storeId);
 
     const job: MediaProcessingJob = {
@@ -120,7 +122,7 @@ async function getNextSequenceNumber(env: Env, storeId: string): Promise<number>
 }
 
 /**
- * معالجة الوسائط بشكل متزامن (Sync Fallback)
+ * معالجة الوسائط بشكل متزامن (Sync Fallback) ونقلها إلى B2
  */
 async function processMediaSync(env: Env, mediaId: string): Promise<void> {
   console.log(`[processMediaSync] Synchronous processing triggered for media: ${mediaId}`);
@@ -133,57 +135,86 @@ async function processMediaSync(env: Env, mediaId: string): Promise<void> {
 
     if (!mediaRecord) return;
 
-    const processedUrl = await processMediaInBackground(env, mediaRecord.url, mediaRecord.type);
+    // 1️⃣ تحويل/معالجة الصورة أو سحبها ونقلها لـ Backblaze B2
+    const processedUrl = await processMediaInBackground(
+      env,
+      mediaRecord.url,
+      mediaRecord.type,
+      mediaRecord.storeId,
+      mediaRecord.filename
+    );
 
+    // 2️⃣ تحديث سجل D1 بالرابط النهائي والملف الأصلي
     await db
       .update(media)
       .set({
         url: processedUrl,
+        originalUrl: mediaRecord.originalUrl || mediaRecord.url,
         updatedAt: new Date(),
       })
       .where(eq(media.id, mediaId));
 
-    console.log(`[processMediaSync] Media ${mediaId} synced successfully`);
+    console.log(`[processMediaSync] Media ${mediaId} synced & archived successfully to B2`);
   } catch (error) {
     console.error(`[processMediaSync] Failed during sync processing for media ${mediaId}:`, error);
   }
 }
 
 /**
- * استدعاء معالج الصور الخارجي/المستقل باحترافية وأمان
+ * استدعاء معالج الصور الخارجي/المستقل، وإذا لم يتوفر يتم سحب الملف من Cloudinary وحفظه مباشرة في Backblaze B2
  */
 async function processMediaInBackground(
   env: Env,
   rawUrl: string,
-  mediaType: string
+  mediaType: string,
+  storeId?: string,
+  filename?: string
 ): Promise<string> {
   try {
-    if (!env.MEDIA_PROCESSOR_URL) {
-      console.info('[processMediaInBackground] MEDIA_PROCESSOR_URL not set. Retaining original raw URL.');
-      return rawUrl;
+    // 1️⃣ إذا وُجدت خدمة معالجة خارجية
+    if (env.MEDIA_PROCESSOR_URL) {
+      const response = await fetch(`${env.MEDIA_PROCESSOR_URL}/process`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Secret': env.INTERNAL_API_SECRET || '',
+        },
+        body: JSON.stringify({
+          rawUrl,
+          mediaType,
+          storeId,
+        }),
+      });
+
+      if (response.ok) {
+        const result = (await response.json()) as ProcessorResponse;
+        if (result.processedUrl) return result.processedUrl;
+      }
+      console.warn('[processMediaInBackground] External Processor bypass, falling back to direct B2 archive.');
     }
 
-    const response = await fetch(`${env.MEDIA_PROCESSOR_URL}/process`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Internal-Secret': env.INTERNAL_API_SECRET || '',
-      },
-      body: JSON.stringify({
-        rawUrl,
-        mediaType,
-      }),
-    });
+    // 2️⃣ Fallback المعماري: سحب الصورة من Cloudinary ونقلها لـ B2 حماية للملفات
+    if (storeId && filename && env.B2_BUCKET_NAME) {
+      const imageRes = await fetch(rawUrl);
+      if (imageRes.ok) {
+        const imageBuffer = await imageRes.arrayBuffer();
+        const b2Key = `stores/${storeId}/${mediaType}s/${Date.now()}_${filename}`;
+        
+        await uploadToB2(
+          b2Key,
+          imageBuffer,
+          env,
+          imageRes.headers.get('content-type') || undefined
+        );
 
-    if (!response.ok) {
-      console.warn(`[processMediaInBackground] Processor returned status ${response.status}. Retaining raw URL.`);
-      return rawUrl;
+        const b2Endpoint = (env.B2_ENDPOINT || 'https://s3.us-west-004.backblazeb2.com').replace(/\/$/, '');
+        return `${b2Endpoint}/${env.B2_BUCKET_NAME}/${b2Key}`;
+      }
     }
 
-    const result = (await response.json()) as ProcessorResponse;
-    return result.processedUrl || rawUrl;
+    return rawUrl;
   } catch (error) {
-    console.error('[processMediaInBackground] Request failed, using fallback raw URL:', error);
+    console.error('[processMediaInBackground] Archiving to B2 failed, retaining Cloudinary raw URL:', error);
     return rawUrl;
   }
 }

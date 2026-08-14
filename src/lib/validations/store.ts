@@ -65,6 +65,41 @@ const currencySchema = z
   .regex(/^[A-Z]{3}$/, 'كود العملة يجب أن يكون أحرف إنجليزية كبيرة فقط');
 
 // ╔════════════════════════════════════════════════════════════╗
+// ║  🎨 Store Theme & Settings Schemas                         ║
+// ╚════════════════════════════════════════════════════════════╝
+export const storeThemeSchema = z
+  .object({
+    primaryColor: z
+      .string()
+      .regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'كود اللون غير صالح')
+      .optional(),
+    secondaryColor: z
+      .string()
+      .regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'كود اللون غير صالح')
+      .optional(),
+    fontFamily: z.string().trim().max(100).optional(),
+    bannerUrl: z.url({ message: 'رابط البانر غير صالح' }).optional().nullable(),
+  })
+  .catchall(z.unknown());
+
+export const storeSettingsSchema = z
+  .object({
+    allowGuestCheckout: z.boolean().optional(),
+    enableReviews: z.boolean().optional(),
+    autoApproveOrders: z.boolean().optional(),
+    inventoryThreshold: z.number().int().nonnegative().optional(),
+    socialLinks: z
+      .object({
+        facebook: z.url({ message: 'رابط فيسبوك غير صالح' }).optional().or(z.literal('')),
+        instagram: z.url({ message: 'رابط انستجرام غير صالح' }).optional().or(z.literal('')),
+        twitter: z.url({ message: 'رابط تويتر غير صالح' }).optional().or(z.literal('')),
+        tiktok: z.url({ message: 'رابط تيك توك غير صالح' }).optional().or(z.literal('')),
+      })
+      .optional(),
+  })
+  .catchall(z.unknown());
+
+// ╔════════════════════════════════════════════════════════════╗
 // ║  🏪 CREATE STORE – إنشاء متجر جديد (للبوت)                ║
 // ║  📌 country و currency لا يُطلبان هنا؛ الخدمة تستنبطهما     ║
 // ║     تلقائياً من مفتاح الدولة في رقم الهاتف (مثلاً: 20 → EG).║
@@ -98,13 +133,21 @@ export const updateStoreSchema = z.object({
     z.string().min(SHOP_NAME_MIN).max(SHOP_NAME_MAX)
   ).optional(),
   description: z.string().max(DESCRIPTION_MAX).trim().optional().nullable(),
+  logo: z.url({ message: 'رابط اللوجو غير صالح' }).optional().nullable(),
+  coverImage: z.url({ message: 'رابط الغلاف غير صالح' }).optional().nullable(),
   phone: phoneSchema.nullable().optional(),
   email: emailSchema.nullable().optional(),
   country: countrySchema.optional(),
   city: z.string().max(100).trim().optional().nullable(),
   address: z.string().max(ADDRESS_MAX).trim().optional().nullable(),
   currency: currencySchema.optional(),
+  paymentGateway: z.enum(['stripe', 'paypal', 'paymob', 'cash']).optional(),
+  settings: storeSettingsSchema.optional(),
+  theme: storeThemeSchema.optional(),
+  // 🛡️ حقول الإدارة والتمييز (يتم فحص صلاحية تعديلها في طبقة الـ Route)
+  isActive: z.boolean().optional(),
+  isVerified: z.boolean().optional(),
+  isFeatured: z.boolean().optional(),
 }).strict();
 
-/** جميع الحقول اختيارية. لإزالة قيمة حقل، أرسل null. */
 export type UpdateStoreInput = z.infer<typeof updateStoreSchema>;

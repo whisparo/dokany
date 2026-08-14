@@ -1,4 +1,4 @@
-//src/workers/rate-limiter/src/limiter.ts
+// src/workers/rate-limiter/src/limiter.ts
 
 import { Redis } from '@upstash/redis';
 import { STRATEGIES, type Strategy } from './strategies';
@@ -16,7 +16,7 @@ export interface RateLimitResult {
   remaining: number;
   resetAt: number;        // Unix timestamp
   retryAfter?: number;    // seconds
-  layer: 'global' | 'ip' | 'user' | 'store';
+  layer: 'global' | 'ip' | 'user' | 'store' | 'blocklist';
 }
 
 export interface EnvBindings {
@@ -24,7 +24,7 @@ export interface EnvBindings {
   UPSTASH_REDIS_REST_TOKEN: string;
 }
 
-// 🧠 1. In-Memory Block Cache
+// 🧠 1. L1 In-Memory Block Cache
 // ذاكرة محلية داخل الـ Worker لرفض الهجمات فوراً ومنع استنزاف Upstash Quota
 const inMemoryBlocklist = new Map<string, number>();
 
@@ -75,10 +75,11 @@ export async function checkRateLimit(
   const strategy: Strategy = STRATEGIES[req.action] || STRATEGIES.default;
   const now = Date.now();
 
-  // A. فحص الـ In-Memory Cache أولاً (إذا كان الهدف محظوراً سابقاً، ارفض فوراً)
+  // A. فحص الـ L1 In-Memory Cache أولاً
   cleanMemoryCache();
   const blockKeys = [
     `global`,
+    `ip:${req.ip}`,
     `ip:${req.ip}:${req.action}`,
     req.userId ? `user:${req.userId}:${req.action}` : null,
     req.storeId ? `store:${req.storeId}:${req.action}` : null,
@@ -94,16 +95,40 @@ export async function checkRateLimit(
         remaining: 0,
         resetAt: blockedUntil,
         retryAfter,
-        layer: bKey === 'global' ? 'global' : bKey.startsWith('ip') ? 'ip' : bKey.startsWith('user') ? 'user' : 'store',
+        layer: bKey.startsWith('ip') ? 'ip' : bKey === 'global' ? 'global' : bKey.startsWith('user') ? 'user' : 'store',
       };
     }
   }
 
-  // B. إنشاء العميل بمتغيرات البيئة الممررة ديناميكياً من Cloudflare Worker
+  // B. إنشاء العميل بمتغيرات البيئة الممررة ديناميكياً
   const redis = new Redis({
     url: env.UPSTASH_REDIS_REST_URL,
     token: env.UPSTASH_REDIS_REST_TOKEN,
   });
+
+  // 🛡️ B.1: فحص Global IP Blocklist من Redis (تأكيد الحظر الموحد الشامل)
+  try {
+    const isGlobalIpBlocked = await redis.exists(`blocklist:ip:${req.ip}`);
+    if (isGlobalIpBlocked) {
+      const ttl = await redis.ttl(`blocklist:ip:${req.ip}`);
+      const durationSeconds = ttl > 0 ? ttl : 3600; // افتراضي ساعة لو بدون TTL
+      const resetAt = now + durationSeconds * 1000;
+      
+      // حفظ في L1 Cache المحلي عشان ما نرجعش لـ Redis في الطلبات القادمة من نفس الـ Worker
+      inMemoryBlocklist.set(`ip:${req.ip}`, resetAt);
+
+      return {
+        allowed: false,
+        limit: 0,
+        remaining: 0,
+        resetAt,
+        retryAfter: durationSeconds,
+        layer: 'blocklist',
+      };
+    }
+  } catch (err) {
+    console.error('[RateLimiter] Error checking Redis global blocklist:', err);
+  }
 
   const windowSeconds = Math.ceil((strategy.windowMs || 60000) / 1000);
 
@@ -121,6 +146,14 @@ export async function checkRateLimit(
   const ipResult = await checkLayer(redis, ipKey, strategy.perIp, windowSeconds);
   if (!ipResult.allowed) {
     inMemoryBlocklist.set(`ip:${req.ip}:${req.action}`, ipResult.resetAt);
+    
+    // ⚡ خيار حظر الـ IP شاملاً عبر Redis لو تجاوز الحدود بشكل مفرط
+    try {
+      await redis.set(`blocklist:ip:${req.ip}`, '1', { ex: windowSeconds * 2 });
+    } catch (e) {
+      console.error('[RateLimiter] Failed to publish blocklist to Redis:', e);
+    }
+
     return { ...ipResult, layer: 'ip' };
   }
 

@@ -53,37 +53,37 @@ export function loadAccounts(env?: CloudinaryEnv): CloudinaryAccount[] {
     {
       id: 1,
       cloudName: env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_1 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_1,
-      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_1 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_1 ?? 'dokany_unsigned',
+      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_1 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_1 ?? 'dokany_unsigned_preset',
       apiKey: env?.NEXT_PUBLIC_CLOUDINARY_API_KEY_1 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_1 ?? '',
-      apiSecret: env?.CLOUDINARY_API_SECRET_1 ?? '',
+      apiSecret: env?.CLOUDINARY_API_SECRET_1 ?? process.env.CLOUDINARY_API_SECRET_1 ?? '',
     },
     {
       id: 2,
       cloudName: env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_2 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_2,
-      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_2 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_2 ?? 'dokany_unsigned',
+      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_2 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_2 ?? 'dokany_unsigned_preset',
       apiKey: env?.NEXT_PUBLIC_CLOUDINARY_API_KEY_2 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_2 ?? '',
-      apiSecret: env?.CLOUDINARY_API_SECRET_2 ?? '',
+      apiSecret: env?.CLOUDINARY_API_SECRET_2 ?? process.env.CLOUDINARY_API_SECRET_2 ?? '',
     },
     {
       id: 3,
       cloudName: env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_3 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_3,
-      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_3 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_3 ?? 'dokany_unsigned',
+      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_3 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_3 ?? 'dokany_unsigned_preset',
       apiKey: env?.NEXT_PUBLIC_CLOUDINARY_API_KEY_3 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_3 ?? '',
-      apiSecret: env?.CLOUDINARY_API_SECRET_3 ?? '',
+      apiSecret: env?.CLOUDINARY_API_SECRET_3 ?? process.env.CLOUDINARY_API_SECRET_3 ?? '',
     },
     {
       id: 4,
       cloudName: env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_4 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_4,
-      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_4 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_4 ?? 'dokany_unsigned',
+      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_4 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_4 ?? 'dokany_unsigned_preset',
       apiKey: env?.NEXT_PUBLIC_CLOUDINARY_API_KEY_4 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_4 ?? '',
-      apiSecret: env?.CLOUDINARY_API_SECRET_4 ?? '',
+      apiSecret: env?.CLOUDINARY_API_SECRET_4 ?? process.env.CLOUDINARY_API_SECRET_4 ?? '',
     },
     {
       id: 5,
       cloudName: env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_5 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_5,
-      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_5 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_5 ?? 'dokany_unsigned',
+      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_5 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_5 ?? 'dokany_unsigned_preset',
       apiKey: env?.NEXT_PUBLIC_CLOUDINARY_API_KEY_5 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_5 ?? '',
-      apiSecret: env?.CLOUDINARY_API_SECRET_5 ?? '',
+      apiSecret: env?.CLOUDINARY_API_SECRET_5 ?? process.env.CLOUDINARY_API_SECRET_5 ?? '',
     },
   ];
 
@@ -91,7 +91,7 @@ export function loadAccounts(env?: CloudinaryEnv): CloudinaryAccount[] {
 }
 
 /**
- * اختيار حساب عشوائي للرفع الموزع
+ * اختيار حساب عشوائي للحالات الاحتياطية العامة
  */
 export function getNextCloudinaryAccount(env?: CloudinaryEnv): CloudinaryAccount {
   const accounts = loadAccounts(env);
@@ -111,39 +111,44 @@ export async function allocateCloudinaryAccount(
   const accounts = loadAccounts(env);
   if (accounts.length === 0) return 1;
 
-  const { drizzle } = await import('drizzle-orm/d1');
-  const { sql, isNull } = await import('drizzle-orm');
-  const { stores } = await import('@/lib/db/schema');
+  try {
+    const { drizzle } = await import('drizzle-orm/d1');
+    const { sql, isNull } = await import('drizzle-orm');
+    const { stores } = await import('@/lib/db/schema');
 
-  const db = drizzle(d1Database);
-  const stats = await db
-    .select({
-      accountIndex: stores.cloudinaryAccountIndex,
-      count: sql<number>`count(*)`,
-    })
-    .from(stores)
-    .where(isNull(stores.deletedAt))
-    .groupBy(stores.cloudinaryAccountIndex);
+    const db = drizzle(d1Database);
+    const stats = await db
+      .select({
+        accountIndex: stores.cloudinaryAccountIndex,
+        count: sql<number>`count(*)`,
+      })
+      .from(stores)
+      .where(isNull(stores.deletedAt))
+      .groupBy(stores.cloudinaryAccountIndex);
 
-  const statsMap = new Map<string, number>(
-    stats.map((row) => [
-      row.accountIndex !== null ? String(row.accountIndex) : '1',
-      row.count,
-    ])
-  );
+    const statsMap = new Map<string, number>(
+      stats.map((row) => [
+        row.accountIndex !== null ? String(row.accountIndex) : '1',
+        row.count,
+      ])
+    );
 
-  let minCount = Infinity;
-  let targetIndex = 1;
+    let minCount = Infinity;
+    let targetIndex = 1;
 
-  for (let i = 1; i <= accounts.length; i++) {
-    const currentCount = statsMap.get(String(i)) || 0;
-    if (currentCount < minCount) {
-      minCount = currentCount;
-      targetIndex = i;
+    for (let i = 1; i <= accounts.length; i++) {
+      const currentCount = statsMap.get(String(i)) || 0;
+      if (currentCount < minCount) {
+        minCount = currentCount;
+        targetIndex = i;
+      }
     }
-  }
 
-  return targetIndex;
+    return targetIndex;
+  } catch (err) {
+    console.error('⚠️ [Cloudinary Allocation Failed]:', err);
+    return 1;
+  }
 }
 
 /**
@@ -152,22 +157,33 @@ export async function allocateCloudinaryAccount(
 export function getStoreCloudinaryAccount(
   storeAccountIndex: string | number | null | undefined,
   env?: CloudinaryEnv
-): CloudinaryAccount | undefined {
-  if (!storeAccountIndex) return undefined;
+): CloudinaryAccount {
   const accounts = loadAccounts(env);
+  if (accounts.length === 0) {
+    throw new Error('SYS_500: لم يتم ضبط حسابات Cloudinary في متغيرات البيئة');
+  }
+
+  if (!storeAccountIndex) return accounts[0];
+
   const index =
     typeof storeAccountIndex === 'number'
       ? storeAccountIndex
       : parseInt(storeAccountIndex, 10);
-  if (isNaN(index) || index < 1 || index > accounts.length) return undefined;
+
+  if (isNaN(index) || index < 1 || index > accounts.length) {
+    return accounts[0];
+  }
+
   return accounts[index - 1];
 }
 
 /**
  * رفع الوسائط إلى Cloudinary مع دعم البيئات المزدوجة (Edge/Server & Client Browser)
+ * ودعم توجيه الرفع للحساب المخصص للمتجر
  */
 export async function uploadToCloudinary(
   file: File,
+  storeAccountIndex?: number | string | null,
   onProgress?: (progress: number) => void,
   env?: CloudinaryEnv
 ): Promise<string> {
@@ -175,7 +191,11 @@ export async function uploadToCloudinary(
     throw new Error('لم يتم تحديد ملف للرفع');
   }
 
-  const account = getNextCloudinaryAccount(env);
+  // استخدام حساب المتجر المخصص، أو السقوط للحساب العشوائي
+  const account = storeAccountIndex
+    ? getStoreCloudinaryAccount(storeAccountIndex, env)
+    : getNextCloudinaryAccount(env);
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('upload_preset', account.uploadPreset);

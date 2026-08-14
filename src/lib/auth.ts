@@ -10,10 +10,6 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { Redis } from '@upstash/redis';
 import { checkRateLimit, buildRateLimitKey } from '@/lib/rate-limit';
 
-// ============================================================
-// 🔒 تعريف البيئة المدعومة بشكل صارم
-// ============================================================
-
 export interface AuthEnv {
   DB: D1Database;
   UPSTASH_REDIS_REST_URL?: string;
@@ -45,16 +41,8 @@ interface AuthUserResult {
   image?: string;
 }
 
-// ============================================================
-// 🔐 Web Crypto PBKDF2 Helpers (Edge-Native & Fast)
-// ============================================================
-
-/**
-  توليد Hash آمن للـ PIN باستخدام PBKDF2 بدلاً من bcrypt
- */
 export async function hashPin(pin: string, providedSalt?: Uint8Array<ArrayBuffer>): Promise<string> {
   const encoder = new TextEncoder();
-  // تحديد النوع صراحة ليكون Uint8Array<ArrayBuffer>
   const salt: Uint8Array<ArrayBuffer> = providedSalt || globalThis.crypto.getRandomValues(new Uint8Array(16));
 
   const keyMaterial = await globalThis.crypto.subtle.importKey(
@@ -68,7 +56,7 @@ export async function hashPin(pin: string, providedSalt?: Uint8Array<ArrayBuffer
   const derivedKey = await globalThis.crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
-      salt: salt, // أصبح الآن متوافقاً تماماً مع BufferSource
+      salt: salt,
       iterations: 100000,
       hash: 'SHA-256',
     },
@@ -86,9 +74,6 @@ export async function hashPin(pin: string, providedSalt?: Uint8Array<ArrayBuffer
   return `pbkdf2:${saltHex}:${hashHex}`;
 }
 
-/**
- * التحقق من صحة الـ PIN بشكل آمن ومقاوم للـ Timing Attacks في بيئة Edge
- */
 async function verifyPin(pin: string, storedHash: string): Promise<boolean> {
   if (!storedHash) return false;
 
@@ -100,7 +85,6 @@ async function verifyPin(pin: string, storedHash: string): Promise<boolean> {
     const saltMatch = saltHex.match(/.{1,2}/g);
     if (!saltMatch) return false;
 
-    // تحويل البيانات صراحة لـ Uint8Array<ArrayBuffer>
     const salt = new Uint8Array(new ArrayBuffer(saltMatch.length));
     saltMatch.forEach((byte, i) => {
       salt[i] = parseInt(byte, 16);
@@ -129,10 +113,6 @@ async function verifyPin(pin: string, storedHash: string): Promise<boolean> {
   return false;
 }
 
-// ============================================================
-// 🔐 دوال التحقق من تليجرام (مُؤمنة ضد Timing Attacks)
-// ============================================================
-
 async function verifyTelegramHash(
   data: Record<string, string | undefined>,
   botToken: string
@@ -140,7 +120,6 @@ async function verifyTelegramHash(
   if (!data.hash || !data.auth_date) return false;
 
   const authDate = parseInt(data.auth_date, 10);
-  // صلاحية الـ Hash هي 24 ساعة فقط (86400 ثانية)
   if (isNaN(authDate) || Math.floor(Date.now() / 1000) - authDate > 86400) return false;
 
   const checkData: Record<string, string> = {};
@@ -154,7 +133,6 @@ async function verifyTelegramHash(
   const dataString = sortedKeys.map((k) => `${k}=${checkData[k]}`).join('\n');
   const encoder = new TextEncoder();
 
-  // 1. حساب Secret Key عبر Web Crypto API المتوافق مع Edge
   const secretKeyBuffer = await globalThis.crypto.subtle.digest(
     'SHA-256',
     encoder.encode(botToken)
@@ -168,7 +146,6 @@ async function verifyTelegramHash(
     ['verify', 'sign']
   );
 
-  // 2. تحويل الـ Received Hash إلى Uint8Array لمقارنتها ذرياً
   const hashHex = data.hash;
   if (hashHex.length !== 64) return false;
 
@@ -177,7 +154,6 @@ async function verifyTelegramHash(
 
   const receivedSignature = new Uint8Array(byteMatches.map((byte) => parseInt(byte, 16)));
 
-  // 3. استخدام Web Crypto verify لمنع Timing Attacks
   return await globalThis.crypto.subtle.verify(
     'HMAC',
     cryptoKey,
@@ -185,10 +161,6 @@ async function verifyTelegramHash(
     encoder.encode(dataString)
   );
 }
-
-// ============================================================
-// 🧠 مُنشئ الـ Auth
-// ============================================================
 
 export function createAuth(env: AuthEnv) {
   const db = getDb({ DB: env.DB });
@@ -204,14 +176,11 @@ export function createAuth(env: AuthEnv) {
     session: {
       cookieCache: {
         enabled: true,
-        maxAge: 5 * 60, // 5 دقائق
+        maxAge: 5 * 60,
       },
     },
 
     providers: [
-      // ============================================================
-      // 1. مزود تليجرام
-      // ============================================================
       {
         id: 'telegram',
         name: 'Telegram',
@@ -299,10 +268,6 @@ export function createAuth(env: AuthEnv) {
           },
         },
       },
-
-      // ============================================================
-      // 2. مزود Backup PIN (مع حماية Rate Limiting و Web Crypto)
-      // ============================================================
       {
         id: 'pin',
         name: 'Backup PIN',
@@ -313,14 +278,12 @@ export function createAuth(env: AuthEnv) {
             pin: { type: 'string', required: true },
           },
           async verify({ input }: { input: PinInput }): Promise<AuthUserResult | null> {
-            // ✅ حماية ضد Brute Force بـ Upstash Redis إذا أتيحت المتغيرات
             if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
               const redis = new Redis({
                 url: env.UPSTASH_REDIS_REST_URL,
                 token: env.UPSTASH_REDIS_REST_TOKEN,
               });
               const limitKey = buildRateLimitKey('auth', input.phone, 'pin_attempt');
-              // أقصى حد: 5 محاولات فاشلة كل 15 دقيقة (900 ثانية)
               const limitCheck = await checkRateLimit(redis, limitKey, 5, 900);
               if (!limitCheck.allowed) {
                 throw new Error('TOO_MANY_ATTEMPTS: يرجى الانتظار قبل محاولة إدخال الـ PIN مجدداً');
@@ -337,7 +300,6 @@ export function createAuth(env: AuthEnv) {
               return null;
             }
 
-            // ✅ التحقق التوافق التام مع Edge باستخدام Web Crypto PBKDF2
             const isValid = await verifyPin(input.pin, user.backupPin);
             if (!isValid) return null;
 

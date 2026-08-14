@@ -1,0 +1,1664 @@
+openapi: 3.0.0
+info:
+  title: Dokany API
+  description: منصة دكاني - واجهات برمجة التطبيقات
+  version: 1.1.0
+  contact:
+    name: Dokany Team
+    url: https://dokany.com
+
+servers:
+  - url: https://api.dokany.com
+    description: Production Server
+  - url: http://localhost:3000
+    description: Development Server
+
+tags:
+  - name: Auth
+    description: المصادقة وإدارة الجلسات
+  - name: User
+    description: بيانات المستخدم والبروفايل
+  - name: Store
+    description: إدارة المتجر والإعدادات
+  - name: Products
+    description: المنتجات
+  - name: Orders
+    description: الطلبات والدفع
+  - name: Categories
+    description: التصنيفات
+  - name: Cart
+    description: سلة التسوق
+  - name: Coupons
+    description: الكوبونات
+  - name: Haggle
+    description: المساومة الذكية
+  - name: Shipping
+    description: الشحن والتوصيل
+  - name: Media
+    description: رفع وإدارة الميديا
+  - name: Payments
+    description: المدفوعات والمعاملات
+  - name: Notifications
+    description: الإشعارات والويب هوك
+  - name: Health
+    description: فحص صحة الخدمة
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    storeIdHeader:
+      type: apiKey
+      in: header
+      name: x-store-id
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        code:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "بيانات غير صالحة"
+
+    Store:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        shopName:
+          type: string
+        description:
+          type: string
+        logo:
+          type: string
+        coverImage:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        country:
+          type: string
+        currency:
+          type: string
+        settings:
+          type: object
+        theme:
+          type: object
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    StoreSettings:
+      type: object
+      properties:
+        allowGuestCheckout:
+          type: boolean
+        enableReviews:
+          type: boolean
+        autoApproveOrders:
+          type: boolean
+        inventoryThreshold:
+          type: integer
+        socialLinks:
+          type: object
+          properties:
+            facebook:
+              type: string
+            instagram:
+              type: string
+            twitter:
+              type: string
+            tiktok:
+              type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phoneNumber:
+          type: string
+        image:
+          type: string
+        role:
+          type: string
+        merchantId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    Address:
+      type: object
+      properties:
+        id:
+          type: string
+        recipientName:
+          type: string
+        recipientPhone:
+          type: string
+        country:
+          type: string
+        city:
+          type: string
+        street:
+          type: string
+        building:
+          type: string
+        floor:
+          type: string
+        apartment:
+          type: string
+        isDefault:
+          type: boolean
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        price:
+          type: integer
+        stock:
+          type: integer
+        isPublished:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        orderNumber:
+          type: string
+        status:
+          type: string
+          enum: [pending, confirmed, processing, shipped, delivered, cancelled]
+        total:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        image:
+          type: string
+        parentId:
+          type: string
+        isActive:
+          type: boolean
+        order:
+          type: integer
+
+    CartItem:
+      type: object
+      properties:
+        productId:
+          type: string
+        variantSku:
+          type: string
+        quantity:
+          type: integer
+
+    CouponValidationRequest:
+      type: object
+      properties:
+        storeId:
+          type: string
+        code:
+          type: string
+        cartTotalAmount:
+          type: string
+        customerId:
+          type: string
+        categoryId:
+          type: string
+        productId:
+          type: string
+
+    HaggleSession:
+      type: object
+      properties:
+        id:
+          type: string
+        sessionCode:
+          type: string
+        status:
+          type: string
+          enum: [active, counter_offered, accepted, rejected, expired, cancelled]
+        currentOffer:
+          type: string
+
+    MediaSignature:
+      type: object
+      properties:
+        signature:
+          type: string
+        timestamp:
+          type: integer
+        cloudName:
+          type: string
+        apiKey:
+          type: string
+        publicId:
+          type: string
+        folder:
+          type: string
+
+    ShippingRate:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: integer
+        estimatedDays:
+          type: integer
+
+    PaymentRequest:
+      type: object
+      properties:
+        orderId:
+          type: string
+        amount:
+          type: integer
+        currency:
+          type: string
+        method:
+          type: string
+        provider:
+          type: string
+
+security:
+  - bearerAuth: []
+  - storeIdHeader: []
+
+paths:
+  # ============================================================
+  # 🔐 AUTH
+  # ============================================================
+  /auth/telegram:
+    post:
+      tags: [Auth]
+      summary: تسجيل الدخول عبر تليجرام
+      x-implemented: true
+      operationId: authTelegram
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+                hash: { type: string }
+                auth_date: { type: string }
+                first_name: { type: string }
+                last_name: { type: string }
+                username: { type: string }
+                photo_url: { type: string }
+      responses:
+        '200': { description: تم تسجيل الدخول بنجاح }
+        '400': { description: بيانات غير صالحة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: توقيع غير صالح, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /auth/verify:
+    get:
+      tags: [Auth]
+      summary: التحقق من صحة التوكن
+      x-implemented: true
+      operationId: authVerify
+      responses:
+        '200': { description: التوكن صالح }
+        '401': { description: التوكن غير صالح أو منتهي, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: تسجيل الخروج
+      x-implemented: true
+      operationId: authLogout
+      responses:
+        '200': { description: تم تسجيل الخروج }
+        '401': { description: غير مصرح, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: تجديد التوكن
+      x-implemented: true
+      operationId: authRefresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: { type: string }
+      responses:
+        '200': { description: تم تجديد التوكن }
+
+  # ============================================================
+  # 👤 USER
+  # ============================================================
+  /me:
+    get:
+      tags: [User]
+      summary: جلب بيانات المستخدم الحالي
+      x-implemented: false
+      description: |
+        ⚠️ **غير منفذ حالياً**
+        يجب إضافة هذا الـ Endpoint في `workers/routes/auth.ts` أو ملف منفصل.
+        يعيد بيانات المستخدم (الاسم، الهاتف، البريد، الصورة، الدور، العناوين المحفوظة).
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: بيانات المستخدم
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: غير مصرح
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags: [User]
+      summary: تحديث بيانات المستخدم الحالي
+      x-implemented: false
+      description: |
+        ⚠️ **غير منفذ حالياً**
+        يجب إضافة هذا الـ Endpoint في `workers/routes/auth.ts` أو ملف منفصل.
+        يسمح بتحديث الاسم، البريد، رقم الهاتف، وإضافة عناوين شحن محفوظة.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                email: { type: string }
+                phone: { type: string }
+                addresses: { type: array, items: { $ref: '#/components/schemas/Address' } }
+      responses:
+        '200': { description: تم التحديث }
+        '400': { description: بيانات غير صالحة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: غير مصرح, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /me/orders:
+    get:
+      tags: [User]
+      summary: جلب طلبات المستخدم الحالي
+      x-implemented: false
+      description: |
+        ⚠️ **غير منفذ حالياً**
+        يجب إضافة هذا الـ Endpoint في `workers/routes/orders.ts`.
+        يعيد قائمة طلبات العميل نفسه (وليس طلبات المتجر كاملة).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: قائمة الطلبات
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      orders:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Order'
+                      pagination:
+                        type: object
+        '401':
+          description: غير مصرح
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # 🏪 STORE
+  # ============================================================
+  /store/{slug}:
+    get:
+      tags: [Store]
+      summary: جلب بيانات المتجر العامة
+      x-implemented: true
+      operationId: getStore
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: بيانات المتجر
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Store'
+        '404':
+          description: المتجر غير موجود
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /store/{slug}/settings:
+    get:
+      tags: [Store]
+      summary: جلب إعدادات المتجر
+      x-implemented: false
+      description: |
+        ⚠️ **غير منفذ حالياً**
+        يجب إضافة هذا الـ Endpoint في `workers/routes/store.ts`.
+        يعيد إعدادات الشحن، الضرائب، والميزات (مثل تفعيل المساومة).
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: إعدادات المتجر
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/StoreSettings'
+        '404':
+          description: المتجر غير موجود
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags: [Store]
+      summary: تحديث إعدادات المتجر
+      x-implemented: false
+      description: |
+        ⚠️ **غير منفذ حالياً**
+        يجب إضافة هذا الـ Endpoint في `workers/routes/store.ts`.
+        يسمح بتحديث إعدادات الشحن، الضرائب، والميزات.
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreSettings'
+      responses:
+        '200':
+          description: تم التحديث
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/StoreSettings'
+        '400':
+          description: بيانات غير صالحة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: غير مصرح
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: ليس لديك صلاحية
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # 📂 CATEGORIES
+  # ============================================================
+  /store/{slug}/categories:
+    get:
+      tags: [Categories]
+      summary: جلب قائمة التصنيفات
+      x-implemented: true
+      operationId: getCategories
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: قائمة التصنيفات
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Category'
+
+    post:
+      tags: [Categories]
+      summary: إنشاء تصنيف جديد
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                parentId: { type: string }
+                order: { type: integer }
+                isActive: { type: boolean }
+      responses:
+        '201':
+          description: تم الإنشاء
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Category'
+        '400':
+          description: بيانات غير صالحة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: غير مصرح
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /store/{slug}/categories/{categoryId}:
+    get:
+      tags: [Categories]
+      summary: جلب تفاصيل تصنيف
+      x-implemented: false
+      description: |
+        ⚠️ **غير منفذ حالياً**
+        يجب إضافة هذا الـ Endpoint في `workers/routes/categories.ts`.
+        يعيد تفاصيل التصنيف مع قائمة المنتجات التابعة له.
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: categoryId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: تفاصيل التصنيف
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Category'
+        '404':
+          description: التصنيف غير موجود
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags: [Categories]
+      summary: تحديث تصنيف
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: categoryId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                parentId: { type: string }
+                order: { type: integer }
+                isActive: { type: boolean }
+      responses:
+        '200':
+          description: تم التحديث
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Category'
+
+    delete:
+      tags: [Categories]
+      summary: حذف تصنيف
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: categoryId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: تم الحذف
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+
+  # ============================================================
+  # 📦 PRODUCTS
+  # ============================================================
+  /store/{slug}/products:
+    get:
+      tags: [Products]
+      summary: جلب منتجات المتجر
+      x-implemented: true
+      operationId: getProducts
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: categoryId
+          in: query
+          schema: { type: string }
+        - name: minPrice
+          in: query
+          schema: { type: integer }
+        - name: maxPrice
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: قائمة المنتجات
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      products:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Product'
+                      pagination:
+                        type: object
+
+    post:
+      tags: [Products]
+      summary: إنشاء منتج جديد
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                price: { type: integer }
+                description: { type: string }
+                stock: { type: integer }
+                isPublished: { type: boolean }
+      responses:
+        '201':
+          description: تم الإنشاء
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Product'
+        '400':
+          description: بيانات غير صالحة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: غير مصرح
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /store/{slug}/products/{productSlug}:
+    get:
+      tags: [Products]
+      summary: جلب منتج مفصل
+      x-implemented: true
+      operationId: getProduct
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: productSlug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: بيانات المنتج
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Product'
+        '404':
+          description: المنتج غير موجود
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags: [Products]
+      summary: تحديث منتج
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: productSlug
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: تم التحديث
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Product'
+
+    delete:
+      tags: [Products]
+      summary: حذف منتج
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: productSlug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: تم الحذف
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+
+  # ============================================================
+  # 📋 ORDERS
+  # ============================================================
+  /store/{slug}/orders:
+    get:
+      tags: [Orders]
+      summary: جلب طلبات المتجر
+      x-implemented: true
+      operationId: getOrders
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: قائمة الطلبات
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      orders:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Order'
+                      pagination:
+                        type: object
+
+    post:
+      tags: [Orders]
+      summary: إنشاء طلب جديد
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                customerId: { type: string }
+                customerName: { type: string }
+                customerPhone: { type: string }
+                shippingAddress: { type: object }
+                items:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/CartItem'
+                shippingCost: { type: integer }
+      responses:
+        '201':
+          description: تم إنشاء الطلب
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Order'
+
+  /store/{slug}/orders/{orderId}:
+    put:
+      tags: [Orders]
+      summary: تحديث حالة الطلب
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [pending, confirmed, processing, shipped, delivered, cancelled]
+                cancelReason:
+                  type: string
+      responses:
+        '200':
+          description: تم التحديث
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+
+    delete:
+      tags: [Orders]
+      summary: حذف طلب (Soft Delete)
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: تم الحذف
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+
+  # ============================================================
+  # 🛒 CART
+  # ============================================================
+  /cart/sync:
+    post:
+      tags: [Cart]
+      summary: مزامنة السلة
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/CartItem'
+      responses:
+        '200':
+          description: تمت المزامنة
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  syncedAt:
+                    type: string
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+
+  /cart/validate:
+    post:
+      tags: [Cart]
+      summary: التحقق من السلة
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/CartItem'
+      responses:
+        '200':
+          description: نتيجة التحقق
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  validated:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productId: { type: string }
+                        valid: { type: boolean }
+                        reason: { type: string }
+
+  # ============================================================
+  # 🎟️ COUPONS
+  # ============================================================
+  /coupons/validate:
+    post:
+      tags: [Coupons]
+      summary: التحقق من كوبون الخصم
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CouponValidationRequest'
+      responses:
+        '200':
+          description: الكوبون صالح
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid: { type: boolean }
+                  couponId: { type: string }
+                  calculatedDiscountAmount: { type: string }
+                  finalAmount: { type: string }
+        '400':
+          description: الكوبون غير صالح
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid: { type: boolean, example: false }
+                  error: { type: string }
+
+  # ============================================================
+  # 💬 HAGGLE
+  # ============================================================
+  /haggle:
+    post:
+      tags: [Haggle]
+      summary: إنشاء جلسة مساومة
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                storeId: { type: string }
+                productId: { type: string }
+                originalPrice: { type: string }
+                minAllowedPrice: { type: string }
+                initialOffer: { type: string }
+                maxRounds: { type: integer }
+                durationInMinutes: { type: integer }
+                strategy: { type: string, enum: [aggressive, friendly, middle_ground] }
+      responses:
+        '201':
+          description: تم إنشاء الجلسة
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  session: { $ref: '#/components/schemas/HaggleSession' }
+                  botMessage: { type: string }
+
+    patch:
+      tags: [Haggle]
+      summary: تقديم عرض في جلسة مساومة
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sessionId: { type: string }
+                offeredPrice: { type: string }
+                message: { type: string }
+      responses:
+        '200':
+          description: تم تقديم العرض
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  session: { $ref: '#/components/schemas/HaggleSession' }
+                  botMessage: { type: string }
+
+  /haggle/{sessionId}:
+    get:
+      tags: [Haggle]
+      summary: جلب حالة جلسة مساومة
+      x-implemented: false
+      description: |
+        ⚠️ **غير منفذ حالياً**
+        يجب إضافة هذا الـ Endpoint في `workers/routes/haggle.ts`.
+        يعيد حالة الجلسة الحالية مع آخر عرض وسعر.
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: حالة الجلسة
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/HaggleSession'
+        '404':
+          description: الجلسة غير موجودة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # 🚚 SHIPPING
+  # ============================================================
+  /store/{slug}/shipping-rates:
+    get:
+      tags: [Shipping]
+      summary: جلب أسعار الشحن المتاحة
+      x-implemented: false
+      description: |
+        ⚠️ **غير منفذ حالياً**
+        يجب إضافة هذا الـ Endpoint في `workers/routes/orders.ts` أو ملف منفصل.
+        يعيد قائمة المحافظات/المناطق وأسعار الشحن.
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: أسعار الشحن
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ShippingRate'
+        '404':
+          description: المتجر غير موجود
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # 💳 PAYMENTS
+  # ============================================================
+  /orders/{orderId}/pay:
+    post:
+      tags: [Payments]
+      summary: بدء عملية دفع
+      x-implemented: false
+      description: |
+        ⚠️ **غير منفذ حالياً**
+        يجب إضافة هذا الـ Endpoint في `workers/routes/orders.ts` أو ملف `payments.ts`.
+        يولد رابط/Token بوابة الدفع.
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                method: { type: string, enum: [cash, card, wallet, vodafone_cash, instapay] }
+                provider: { type: string }
+      responses:
+        '200':
+          description: تم بدء الدفع
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      paymentId: { type: string }
+                      redirectUrl: { type: string }
+                      token: { type: string }
+        '400':
+          description: بيانات غير صالحة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: الطلب غير موجود
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /payments/webhook:
+    post:
+      tags: [Payments]
+      summary: استقبال تحديثات بوابة الدفع
+      x-implemented: false
+      description: |
+        ⚠️ **غير منفذ حالياً**
+        يجب إضافة هذا الـ Endpoint في `workers/routes/payments.ts`.
+        يستقبل الـ Webhook من بوابة الدفع (مثل Paymob، Stripe، Tap) لتحديث حالة الدفع.
+      security:
+        - storeIdHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                transactionId:
+                  type: string
+                status:
+                  type: string
+                  enum: [pending, paid, failed, refunded]
+                amount:
+                  type: integer
+                signature:
+                  type: string
+      responses:
+        '200':
+          description: تم استقبال التحديث
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+        '400':
+          description: توقيع غير صالح
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # 🖼️ MEDIA
+  # ============================================================
+  /media/cloudinary-sign:
+    post:
+      tags: [Media]
+      summary: الحصول على توقيع Cloudinary للرفع
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                publicId: { type: string }
+                folder: { type: string }
+                resourceType: { type: string, enum: [image, video, raw] }
+                tags: { type: array, items: { type: string } }
+      responses:
+        '200':
+          description: تم توليد التوقيع
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/MediaSignature'
+
+  /media/upload-url:
+    post:
+      tags: [Media]
+      summary: الحصول على رابط رفع مباشر لـ B2
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fileName: { type: string }
+                fileSize: { type: integer }
+                mimeType: { type: string }
+                type: { type: string, enum: [image, video] }
+      responses:
+        '200':
+          description: تم تجهيز الرابط
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      uploadUrl: { type: string }
+                      fileKey: { type: string }
+                      bucketName: { type: string }
+                      resourceType: { type: string }
+
+  /media/confirm:
+    post:
+      tags: [Media]
+      summary: تأكيد رفع الميديا
+      x-implemented: true
+      security:
+        - bearerAuth: []
+        - storeIdHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string }
+                originalUrl: { type: string }
+                type: { type: string, enum: [image, video, document] }
+                mimeType: { type: string }
+                filename: { type: string }
+                size: { type: integer }
+                productId: { type: string }
+                categoryId: { type: string }
+                isPrimary: { type: boolean }
+                order: { type: integer }
+      responses:
+        '200':
+          description: تم تأكيد الرفع
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data: { type: object }
+
+  # ============================================================
+  # 🔔 NOTIFICATIONS
+  # ============================================================
+  /telegram/webhook:
+    post:
+      tags: [Notifications]
+      summary: استقبال تحديثات بوت تليجرام
+      x-implemented: true
+      description: |
+        نقطة نهاية ويب هوك تليجرام الرئيسية.
+        تستقبل التحديثات من بوت تليجرام وتعالجها (تسجيل، طلبات، إشعارات).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: تم استقبال التحديث
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+
+  # ============================================================
+  # 🏥 HEALTH
+  # ============================================================
+  /health:
+    get:
+      tags: [Health]
+      summary: فحص صحة الخدمة
+      x-implemented: true
+      operationId: healthCheck
+      responses:
+        '200':
+          description: الخدمة تعمل
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string, example: ok }
+                      timestamp: { type: string }
+                      version: { type: string }

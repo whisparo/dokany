@@ -17,7 +17,7 @@ import { products } from './products';
 import { categories } from './categories';
 
 // ============================================
-// 📦 أنواع TypeScript (في أول الملف)
+// 📦 أنواع TypeScript
 // ============================================
 
 export type MediaType = 'image' | 'video' | 'document' | 'audio' | 'archive';
@@ -45,7 +45,10 @@ export type MediaMetadata = {
 export const media = sqliteTable(
   'media',
   {
-    id: text('id').primaryKey(),
+    // ✅ توليد تلقائي للمعرف
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
 
     // 🔗 العلاقات
     storeId: text('store_id').notNull(),
@@ -58,14 +61,14 @@ export const media = sqliteTable(
     cdnUrl: text('cdn_url'), 
 
     // 📦 البيانات الأساسية
-    type: text('type').notNull(), 
+    type: text('type').$type<MediaType>().notNull(), 
     mimeType: text('mime_type').notNull(), 
     filename: text('filename').notNull(),
     
-    // ✅ الحجم كـ number آمن ومتوافق مع SQLite
+    // الحجم كـ number آمن ومتوافق مع SQLite
     size: integer('size', { mode: 'number' }).notNull(),
     
-    // 📊 الـ Default المقفل للـ Edge Runtime
+    // البيانات الإضافية بصيغة JSON
     metadata: text('metadata', { mode: 'json' })
       .$type<MediaMetadata>()
       .notNull()
@@ -83,18 +86,16 @@ export const media = sqliteTable(
     // 🗃️ Soft Delete
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
 
-    // ⏱️ التواقيت
+    // ⏱️ التواقيت الموحدة
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`),
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
-      .default(sql`(strftime('%s', 'now') * 1000)`),
+      .default(sql`(unixepoch() * 1000)`),
   },
   (table) => [
-    // ============================================
-    // 🔗 Foreign Keys
-    // ============================================
+    // Foreign Keys
     foreignKey({
       columns: [table.storeId],
       foreignColumns: [stores.id],
@@ -113,9 +114,7 @@ export const media = sqliteTable(
       name: 'media_category_id_fkey',
     }).onDelete('set null').onUpdate('cascade'),
 
-    // ============================================
-    // 🗝️ الفهارس الفريدة
-    // ============================================
+    // Unique Indexes
     uniqueIndex('media_store_url_unique')
       .on(table.storeId, table.url)
       .where(sql`${table.deletedAt} IS NULL`),
@@ -124,9 +123,7 @@ export const media = sqliteTable(
       .on(table.productId)
       .where(sql`${table.isPrimary} = 1 AND ${table.deletedAt} IS NULL`),
 
-    // ============================================
-    // ⚡ فهارس الأداء
-    // ============================================
+    // Performance Indexes
     index('media_store_idx').on(table.storeId),
     index('media_type_idx').on(table.storeId, table.type),
     index('media_url_idx').on(table.url),
@@ -147,17 +144,16 @@ export const media = sqliteTable(
     index('media_views_idx').on(table.viewCount),
     index('media_last_viewed_idx').on(table.lastViewedAt),
     
+    // ✅ تصحيح الشرط ليستهدف العناصر المحذوفة في سلة المهملات
     index('media_deleted_idx')
       .on(table.deletedAt)
-      .where(sql`${table.deletedAt} IS NULL`),
+      .where(sql`${table.deletedAt} IS NOT NULL`),
     
     index('media_primary_idx')
       .on(table.productId)
       .where(sql`${table.isPrimary} = 1 AND ${table.deletedAt} IS NULL`),
 
-    // ============================================
-    // 🛡️ القيود المنطقية (Check Constraints)
-    // ============================================
+    // Check Constraints
     check('chk_media_type', sql`${table.type} IN ('image', 'video', 'document', 'audio', 'archive')`),
     check('chk_type_length', sql`length(${table.type}) BETWEEN 1 AND 20`),
     check('chk_filename_length', sql`length(${table.filename}) BETWEEN 1 AND 255`),
@@ -188,7 +184,7 @@ export type Media = InferSelectModel<typeof media>;
 export type NewMedia = InferInsertModel<typeof media>;
 
 // ============================================
-// 🛠️ دوال مساعدة (Validation)
+// 🛠️ دوال مساعدة (Validation & Queries)
 // ============================================
 
 export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
@@ -246,13 +242,13 @@ export async function calculateFileHash(file: File): Promise<string> {
 }
 
 /**
- * ✅ تحديث عداد المشاهدات
+ * ✅ تحديث عداد المشاهدات بالتوقيت الموحد
  */
 export async function incrementViewCount(mediaId: string, db: D1Database): Promise<void> {
   await db.prepare(`
     UPDATE media
     SET view_count = view_count + 1,
-        last_viewed_at = (strftime('%s', 'now') * 1000)
+        last_viewed_at = (unixepoch() * 1000)
     WHERE id = ? AND deleted_at IS NULL
   `).bind(mediaId).run();
 }
