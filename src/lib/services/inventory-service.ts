@@ -116,6 +116,7 @@ export async function updateStock(items: StockUpdateItem[], tx: D1Transaction): 
         .update(schema.products)
         .set({
           stock: sql`${schema.products.stock} - ${item.quantity}`,
+          version: sql`${schema.products.version} + 1`,
           updatedAt: new Date(),
         })
         .where(productWhere)
@@ -175,7 +176,6 @@ export async function reserveStockAtomic(
 
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {
-    // ⚙️ الإصلاح هنا: استخدام Type Assertion صريح للنتيجة المُرجعة من Redis
     const redisPromise = redis.eval(
       LUA_DECREMENT_SCRIPT,
       [stockKey],
@@ -233,6 +233,7 @@ async function fallbackToD1(
       .update(schema.products)
       .set({
         stock: sql`${schema.products.stock} - ${quantity}`,
+        version: sql`${schema.products.version} + 1`,
         updatedAt: new Date(),
       })
       .where(
@@ -299,6 +300,7 @@ export async function compensateStock(
         .update(schema.products)
         .set({
           stock: sql`${schema.products.stock} + ${quantity}`,
+          version: sql`${schema.products.version} + 1`,
           updatedAt: new Date(),
         })
         .where(and(eq(schema.products.id, productId), isNull(schema.products.deletedAt)))
@@ -309,7 +311,6 @@ export async function compensateStock(
       const redis = getRedisClient(env);
       if (redis) {
         const stockKey = `stock:${productId}`;
-        // ⚙️ الإصلاح هنا أيضاً:
         const newStock = (await redis.eval(LUA_INCREMENT_SCRIPT, [stockKey], [quantity])) as number;
         console.log(`[Inventory] ✅ Compensation: incremented Redis stock for ${productId}, new stock: ${newStock}`);
       }
@@ -319,6 +320,7 @@ export async function compensateStock(
         .update(schema.products)
         .set({
           stock: sql`${schema.products.stock} + ${quantity}`,
+          version: sql`${schema.products.version} + 1`,
           updatedAt: new Date(),
         })
         .where(and(eq(schema.products.id, productId), isNull(schema.products.deletedAt)))
@@ -363,14 +365,14 @@ export async function syncStockFromD1ToRedis(
   }
 
   const db = getDb(env);
-  let products: Array<{ id: string; stock: number; updatedAt: Date | number }>;
+  let products: Array<{ id: string; stock: number; version: number }>;
 
   if (productIds && productIds.length > 0) {
     products = await db
       .select({
         id: schema.products.id,
         stock: schema.products.stock,
-        updatedAt: schema.products.updatedAt,
+        version: schema.products.version,
       })
       .from(schema.products)
       .where(and(inArray(schema.products.id, productIds), isNull(schema.products.deletedAt)))
@@ -380,7 +382,7 @@ export async function syncStockFromD1ToRedis(
       .select({
         id: schema.products.id,
         stock: schema.products.stock,
-        updatedAt: schema.products.updatedAt,
+        version: schema.products.version,
       })
       .from(schema.products)
       .where(isNull(schema.products.deletedAt))
@@ -403,11 +405,8 @@ export async function syncStockFromD1ToRedis(
     for (const p of batch) {
       const stockKey = `stock:${p.id}`;
       const versionKey = `version:${p.id}`;
-      const version = p.updatedAt instanceof Date
-        ? p.updatedAt.getTime()
-        : Number(p.updatedAt) || 0;
 
-      pipeline.eval(LUA_VERSIONED_SYNC_SCRIPT, [stockKey, versionKey], [p.stock, version]);
+      pipeline.eval(LUA_VERSIONED_SYNC_SCRIPT, [stockKey, versionKey], [p.stock, p.version]);
     }
 
     try {

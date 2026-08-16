@@ -96,9 +96,14 @@ export class OrderService {
 
   /**
    * 4️⃣ حفظ رأس الطلب (Order Header)
+   * customerId اختياري (قد يكون ضيفاً)
    */
-  static async createOrder(orderData: NewOrder, tx: D1Transaction): Promise<Order> {
-    if (!orderData || !orderData.storeId || !orderData.customerId) {
+  static async createOrder(
+    orderData: NewOrder & { customerId?: string | null },
+    tx: D1Transaction
+  ): Promise<Order> {
+    // التحقق من الحقول الإجبارية فقط (storeId)
+    if (!orderData || !orderData.storeId) {
       throw new SystemError({
         code: 'ORD_400',
         userMessage: 'فشلت معالجة الطلب بسبب نقص في البيانات الأساسية.',
@@ -106,21 +111,25 @@ export class OrderService {
         severity: 'warning',
         retryable: false,
         shouldAlert: false,
-        technicalMessage: 'CREATE_ORDER_VALIDATION_FAILED: Missing mandatory fields (storeId or customerId).',
-        metadata: { storeId: orderData.storeId, customerId: orderData.customerId },
+        technicalMessage: 'CREATE_ORDER_VALIDATION_FAILED: Missing mandatory field (storeId).',
+        metadata: { storeId: orderData.storeId },
       });
     }
 
     try {
       const now = new Date();
+      const values = {
+        ...orderData,
+        // تحويل customerId: إذا كان undefined أو null، نمرر null
+        customerId: orderData.customerId ?? null,
+        id: orderData.id || crypto.randomUUID(),
+        createdAt: orderData.createdAt || now,
+        updatedAt: orderData.updatedAt || now,
+      };
+
       const [order] = await tx
         .insert(schema.orders)
-        .values({
-          ...orderData,
-          id: orderData.id || crypto.randomUUID(),
-          createdAt: orderData.createdAt || now,
-          updatedAt: orderData.updatedAt || now,
-        })
+        .values(values as any) // ✅ أيجاد cast مؤقت لتجاوز مشكلة الأنواع
         .returning();
 
       if (!order) {

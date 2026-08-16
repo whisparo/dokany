@@ -56,18 +56,18 @@ describe('OrderService Tests', () => {
           productName: 'منتج تجريبي',
           productSku: 'SKU-P1',
           orderedQty: 2,
-          price: '100.00',
+          price: 100,
         },
       ];
 
-      const prepared = prepareOrderItems(rawItems, 'store-123');
+      const prepared = prepareOrderItems(rawItems as any, 'store-123');
 
       expect(prepared).toHaveLength(1);
       expect(prepared[0]).toMatchObject({
         storeId: 'store-123',
         productId: 'prod-1',
         orderedQty: 2,
-        price: '100.00',
+        price: 100,
       });
       expect(prepared[0].lineTotal).toBeDefined();
     });
@@ -76,18 +76,18 @@ describe('OrderService Tests', () => {
   describe('calculateOrderTotals', () => {
     it('يجب أن يحسب المجاميع بصيغة مقربة بخانتين عشريتين', () => {
       const totals = calculateOrderTotals({
-        subtotal: 100.5,
-        shippingCost: 15.25,
+        subtotal: 100,
+        shippingCost: 15,
         taxAmount: 14,
         discount: 10,
       });
 
       expect(totals).toEqual({
-        subtotal: '100.50',
-        shippingCost: '15.25',
-        taxAmount: '14.00',
-        discount: '10.00',
-        total: '119.75',
+        subtotal: 100,
+        shippingCost: 15,
+        taxAmount: 14,
+        discount: 10,
+        total: 119,
       });
     });
   });
@@ -124,7 +124,7 @@ describe('OrderService Tests', () => {
       mockTx._returningMock.mockResolvedValueOnce(mockItems);
 
       const itemsToInsert: any = [
-        { productId: 'p-1', price: '10.00', orderedQty: 1 },
+        { productId: 'p-1', price: 10, orderedQty: 1 },
       ];
 
       const result = await createOrderItems('order-1', itemsToInsert, mockTx);

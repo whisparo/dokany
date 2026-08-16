@@ -94,6 +94,9 @@ export const products = sqliteTable(
     // Soft Delete
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
 
+    // ✅ إضافة عمود الإصدار (Version) للمزامنة الذرية
+    version: integer('version').notNull().default(1),
+
     // ✅ تعديل صيغة التوقيت لضمان التوافق مع D1 SQLite (unixepoch)
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
@@ -163,6 +166,10 @@ export const products = sqliteTable(
     // بحث سريع بـ COLLATE NOCASE
     index('products_name_idx').on(table.storeId, sql`${table.name} COLLATE NOCASE`),
 
+    // ✨ NEW: فهارس الـ Version للمزامنة التلقائية
+    index('products_version_idx').on(table.storeId, table.version),
+    index('products_version_updated_idx').on(table.storeId, table.version, table.updatedAt),
+
     // ============================================
     // 🛡️ القيود المنطقية (Check Constraints)
     // ============================================
@@ -210,6 +217,9 @@ export const products = sqliteTable(
     check('chk_images_limit', sql`json_array_length(${table.images}) <= 50`),
     check('chk_variants_limit', sql`json_array_length(${table.variants}) <= 100`),
     check('chk_short_description_length', sql`${table.shortDescription} IS NULL OR length(${table.shortDescription}) <= 500`),
+
+    // ✨ NEW: التحقق من أن الإصدار عدد صحيح موجب
+    check('chk_version_positive', sql`${table.version} > 0`),
   ]
 );
 

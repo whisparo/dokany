@@ -1,166 +1,538 @@
-🏛️ دكاني - الدستور النهائي لنظام الأخطاء الخالد (الإصدار 8.0 - النسخة النهائية المُحكمة)
-الإصدار: 8.0 (الإصدار المعماري القطعي النهائي - الخالي من الأكواد)
-الهوية: نظام إدارة أخطاء استباقي (Proactive Error Management System)، يعمل على بيئة Cloudflare Edge، يجمع بين معالجة الاستثناءات، مراقبة الأداء، والشفافية الكاملة للمستخدم، مع تكلفة تشغيلية صفرية في الأوقات العادية، ونظام مراقبة صحيّة منفصل بالكامل، وآلية تخزين فورية مقاومة للانهيار.
+🏛️ دكاني - الدستور النهائي لنظام الأخطاء الخالد (الإصدار 9.1 - النسخة المعمارية القطعية النهائية المُحكمة)
+الإصدار: 9.1 (النسخة المعمارية القطعية - المراجعة النهائية المُحكمة)
+الهوية: نظام إدارة أخطاء استباقي (Proactive Error Management System) يعمل على بيئة Cloudflare Edge، يجمع بين معالجة الاستثناءات، مراقبة الأداء، والشفافية الكاملة للمستخدم، مع تكلفة تشغيلية صفرية في الأوقات العادية، ونظام مراقبة صحية منفصل بالكامل، وآلية تخزين فورية مقاومة للانهيار.
 
 📜 الديباجة: فلسفة "النظام الذي لا يموت بصمت" (The Never-Silent-Death Philosophy)
 نظام الأخطاء هو الجهاز العصبي المركزي للمنصة. هدفه ليس فقط إخبارك بأن شيئاً ما قد مات، بل تنبيهك بأن شيئاً ما على وشك الموت (البطء)، وتقديم تجربة سلسة للمستخدم حتى في أسوأ الظروف.
-المبدأ الأسمى: لا يمكن للنظام أن يموت بصمت. يجب أن يكون هناك عين ثالثة تراقب المُراقب نفسه.
 
-المبادئ الحاكمة:
+المبدأ الأسمى: لا يمكن للنظام أن يموت بصمت. يجب أن تكون هناك عين ثالثة تراقب المُراقب نفسه.
 
-الحركة عند الخطأ فقط (Motion on Error): لا يُستهلك أي مورد (Redis، QStash) إلا عند حدوث خطأ فعلي. في الأوقات العادية (99.9% من الوقت)، الاستهلاك = صفر.
-
-الاستباقية (Proactive): رصد البطء قبل أن يتحول إلى فشل (Performance Sentry).
-
-الفصل التام للمراقبة (Isolated Monitoring): مراقبة صحة الـ Worker تتم من خارج المنظومة (عبر Uptime Robot) لضمان عدم وجود نقطة فشل واحدة.
-
-الخلود التخزيني (Immortal Storage): الأخطاء لا تُخزن في الذاكرة العابرة (Buffer)، بل تُكتب فوراً في R2 (تخزين دائم) لضمان عدم فقدان أي خطأ حتى لو تعطل الـ Worker فجأة.
-
-التكلفة الصفرية المطلقة (Absolute Zero Cost): جميع المكونات ضمن حدود الخدمات المجانية (R2، Workers، Upstash Redis Free Tier).
-
-التوافق مع Edge (Edge-Ready): جميع المكونات تعمل في بيئة Cloudflare Workers.
-
-🧱 الباب الأول: المكونات الأساسية (Core Components)
-المكون	الملف	المسؤولية الدقيقة
-سجل الأكواد (Registry)	lib/errors/codes.ts	يحتوي على كل أكواد الأخطاء (DB_001, BIZ_001, PERF_001) مع userMessage، و severity، و retryable، و category، و shouldAlert.
-الأنواع (Types)	lib/errors/types.ts	تعريف SystemError الموحد، و ErrorCategory، و ErrorSeverity.
-السياق (Context)	lib/context.ts	يحمل correlationId عبر AsyncLocalStorage و breadcrumbs (آخر 10 أحداث).
-المُنقي (Sanitizer)	lib/errors/sanitizer.ts	يحذف الحساسيات (password, token, cookie) من السياق.
-المُصنف (Classifier)	lib/errors/classifier.ts	يحول الأخطاء الخام إلى SystemError موحد ويستخرج userMessage.
-المُنفذ الآمن (Safe Executor)	lib/errors/safe-executor.ts	يغلف العمليات، يعيد المحاولة (Retry) مع تأخير تصاعدي، يوفر fallback، ويرصد زمن التنفيذ (Performance Sentry).
-المُبلغ (Notifier)	lib/errors/notifier.ts	يُستدعى فقط عند الخطأ. يمرر الأخطاء عبر ثلاثة حراس (Dedup, Circuit Breaker, Rate Limiter) ويُرسل إلى تليجرام.
-المُخزن الفوري (Immediate Storage)	lib/errors/storage.ts	يكتب أي خطأ فوراً كملف JSON في Cloudflare R2 قبل أي معالجة أخرى.
-المعالج الخلفي (Background Processor)	lib/errors/background-processor.ts	يُستدعى عبر QStash (Cron كل 10 دقائق) لقراءة ملفات الأخطاء من R2، وتحديث عدادات Redis، وإعادة محاولة إرسال الأخطاء الفاشلة.
-داشبورد الأدمن (Admin Dashboard)	app/admin/errors/page.tsx	لوحة تحليل الأخطاء مع Cache داخلي لتقليل استهلاك Redis.
-نظام المراقبة الخارجي (External Monitoring)	Uptime Robot (خارجي)	يطرق مسار /ping على الـ Worker الرئيسي كل 5 دقائق. إذا لم يستجب، يُرسل تنبيهاً فورياً.
-🔄 الباب الثاني: تدفق البيانات (Data Flow – المُحسَّن)
+المبادئ الحاكمة الإثنا عشر
+المبدأ	الوصف
+الحركة عند الخطأ فقط	لا يُستهلك أي مورد (Redis، QStash) إلا عند حدوث خطأ فعلي. في الأوقات العادية (99.9% من الوقت)، الاستهلاك = صفر.
+الكتابة الفورية القطعية	كل خطأ يُكتب فوراً في Backblaze B2 (تخزين دائم) قبل أي معالجة أخرى. ضمان عدم فقدان أي خطأ حتى لو تعطل الـ Worker فجأة.
+الاستباقية	رصد البطء قبل أن يتحول إلى فشل (Performance Sentry) مع توليد تنبيهات PERF_001.
+الفصل التام للمراقبة	مراقبة صحة الـ Worker تتم من خارج المنظومة (عبر Uptime Robot) لضمان عدم وجود نقطة فشل واحدة.
+الاقتصاد في الإرسال	الأخطاء غير الحرجة تُجمّع وتُرسل دفعة واحدة كل 10 دقائق عبر QStash لحماية باقة تليجرام و Redis.
+التجميع الذكي	تجميع الأخطاء المتشابهة في "حادثة" واحدة (Incident Aggregation) لتجنب إغراق قنوات التليجرام، مع الاحتفاظ بـ First/Last Sample لتشخيص دقيق.
+التكلفة الصفرية المطلقة	جميع المكونات ضمن حدود الخدمات المجانية (B2، Workers، Upstash Redis Free Tier، QStash Free Tier).
+التوافق مع Edge	جميع المكونات تعمل في بيئة Cloudflare Workers مع استخدام عمليات أرخص وتجنب عمليات LIST المكلفة.
+المرونة في الفشل	فشل إرسال التنبيه الفوري لا يمنع وصوله لاحقاً عبر المعالج الخلفي (Retry + Fallback).
+الشفافية للمستخدم	فصل الرسائل الموجهة للمستخدم (userMessage) عن التفاصيل التقنية (technicalMessage).
+الصمت الانتقائي	بعض الأخطاء (مثل فشل تحديث Cache) تُسجل في B2 فقط دون إرسال تنبيهات (Silent Errors)، مع تقرير يومي مُلخص.
+التخزين المضغوط	ضغط ملفات الأخطاء في B2 باستخدام gzip لتوفير المساحة وزيادة سرعة القراءة.
+📁 الهيكلية المعمارية الموزعة للملفات (v9.1 - النسخة المحسنة النهائية)
 text
-[يحدث خطأ أو بطء]
-       │
-       ▼
-[1. safeExecute] يُلتقط الخطأ ويحسب زمن التنفيذ.
-       │
-       ▼
-[2. classifyError] يُصنف الخطأ ويستخرج درجة الخطورة (Severity).
-       │
-       ▼
-[3. الكتابة الفورية في R2] ──► (تأمين البيانات بنسبة 100% في نفس الكسر من الثانية).
-       │
-       ▼
-❓ [فحص كود الخطورة - Severity Check]
-       │
-       ├───► (لو الخطأ CRITICAL - كارثة تقفل المحل): 【المسار السريع الفوري】
-       │     يتم إرساله فوراً إلى تليجرام في نفس الدقيقة عبر (ctx.waitUntil) من وراء الظهر.
-       │     (تأخير = صفر ثانية | حماية ضد السكتة القلبية للمنصة).
-       │
-       └───► (لو الخطأ WARNING / INFO - بسيط أو بزنس): 【المسار الاقتصادي المجمع】
-             يُقفل الطلب في صمت، وينتظر الـ QStash كل 10 دقائق ليجمعه في رسالة واحدة.
-             (حماية لباقة Redis من النفاد، ومنع تليجرام من عمل بلوك للبوت).
+lib/errors/
+├── core/                        # المفاهيم والأنواع الأساسية
+│   ├── codes.ts                 # سجل الأكواد (DB_001, BIZ_001, PERF_001...)
+│   ├── types.ts                 # تعريف SystemError و Interfaces
+│   ├── context.ts               # AsyncLocalStorage والـ Breadcrumbs (مع Hybrid Context)
+│   └── sanitizer.ts             # تنقية البيانات الحساسة (password, token, cookie)
+│
+├── processing/                  # معالجة وتنفيذ الأخطاء
+│   ├── classifier.ts            # تحويل الأخطاء الخام إلى SystemError
+│   ├── safe-executor.ts         # تنفيذ العمليات وغلاف الـ Try/Catch و Retry
+│   └── performance-sentry.ts    # قياس الأداء ورصد بطء التنفيذ (PERF_001)
+│
+├── storage/                     # الطبقة التخزينية (B2 & Redis)
+│   ├── b2-store.ts              # الكتابة والقراءة من Backblaze B2 (مع ضغط gzip)
+│   ├── redis-counter.ts         # إدارة العدادات والـ Dashboard Cache
+│   └── queue-manager.ts         # إدارة قائمة الانتظار في Redis (تجنب LIST)
+│
+├── guards/                      # حراس التنبيهات (Resilience Architecture)
+│   ├── deduplicator.ts          # منع التكرار والـ Incident Aggregation (مع First/Last Sample)
+│   ├── circuit-breaker.ts       # حماية الخدمات الخارجية من الانهيار
+│   └── rate-limiter.ts          # حماية باقة التليجرام والحدود المسموحة
+│
+├── clients/                     # عملاء الخدمات الخارجية
+│   ├── telegram.ts              # إرسال الرسائل وتنسيق Formats التليجرام
+│   └── qstash.ts                # التفاعل مع QStash Jobs (جدولة + Retry)
+│
+├── background/                  # المعالجة الخلفية
+│   ├── processor.ts             # الـ Worker Job المعالج لملفات B2 (مع Retry)
+│   └── silent-digest.ts         # تقرير يومي للأخطاء الصامتة (Cron Job)
+│
+├── health/                      # نقطة الصحة للمراقبة الخارجية
+│   ├── ping.ts                  # مسار /ping (خفيف جداً لـ Uptime Robot)
+│   └── readiness.ts             # مسار /readiness (فحص D1 + Redis)
+│
+├── config/                      # الإعدادات المتقدمة
+│   └── thresholds.ts            # Route-based Performance Thresholds
+│
+└── index.ts                     # Public API موحد للتصدير واستخدام النظام
+🧱 الباب الأول: المكونات الأساسية (Core Components) - التفاصيل العميقة
+1.1 سجل الأكواد (codes.ts)
+الكود	الفئة	درجة الخطورة	userMessage	technicalMessage	retryable	shouldAlert	silent
+DB_001	database	critical	"نواجه مشكلة في الاتصال بقاعدة البيانات حالياً، يرجى المحاولة لاحقاً."	"D1 connection timeout or unavailable"	true	true	false
+DB_002	database	warning	"حدث خطأ أثناء حفظ البيانات، يرجى المحاولة مرة أخرى."	"D1 write operation failed"	true	true	false
+BIZ_001	business	warning	"الكمية المطلوبة غير متوفرة حالياً في المخزن."	"Insufficient stock for product XYZ"	false	false	false
+BIZ_002	business	info	"تم إنشاء الطلب بنجاح."	"Order created successfully"	false	false	false
+PERF_001	performance	warning	"نواجه بطئاً في الأداء حالياً، قد تستغرق العملية وقتاً أطول."	"API response time exceeded threshold"	false	true	false
+PERF_002	performance	info	"تم رصد بطء طفيف في الأداء."	"Background task exceeded threshold"	false	false	true
+CACHE_001	cache	info	(رسالة فارغة للمستخدم)	"Cache update failed, continuing with stale data"	true	false	true
+RATE_001	security	warning	"لقد تجاوزت عدد المحاولات المسموحة، يرجى الانتظار قليلاً."	"Rate limit exceeded for IP/User"	false	true	false
+RATE_002	security	critical	"تم حظر طلبك مؤقتاً لحماية النظام."	"Rate limiter rejected request"	false	true	false
+AUTH_001	security	warning	"جلسة الدخول منتهية، يرجى تسجيل الدخول مرة أخرى."	"JWT token expired or invalid"	false	true	false
+INT_001	integration	critical	"نواجه مشكلة في التواصل مع خدمة الدفع، يرجى المحاولة لاحقاً."	"Payment gateway timeout"	true	true	false
+SILENT_001	system	info	(رسالة فارغة للمستخدم)	"Silent error logged for monitoring"	false	false	true
+1.2 الأنواع (types.ts)
+typescript
+export type ErrorSeverity = 'info' | 'warning' | 'critical';
+export type ErrorCategory = 'database' | 'business' | 'system' | 'security' | 'performance' | 'cache' | 'integration' | 'validation';
 
+export interface ErrorCodeConfig {
+  code: string;
+  category: ErrorCategory;
+  severity: ErrorSeverity;
+  userMessage: string;
+  technicalMessage: string;
+  retryable: boolean;
+  shouldAlert: boolean;
+  silent?: boolean; // ✅ الأخطاء الصامتة
+  httpStatus?: number;
+}
+
+export class SystemError extends Error {
+  public readonly code: string;
+  public readonly category: ErrorCategory;
+  public readonly severity: ErrorSeverity;
+  public readonly userMessage: string;
+  public readonly technicalMessage: string;
+  public readonly retryable: boolean;
+  public readonly shouldAlert: boolean;
+  public readonly silent: boolean;
+  public readonly httpStatus: number;
+  public readonly cause?: unknown;
+  public readonly metadata?: Record<string, unknown>;
+  public readonly timestamp: Date;
+  public readonly correlationId: string;
+  public readonly breadcrumbs: string[];
+  public readonly sourceMap?: string;
+}
+1.3 السياق (context.ts) - Hybrid Context Management 🛡️
+⚠️ ملاحظة حرجة: في Cloudflare Workers، دعم node:async_hooks يعتمد على تفعيل compatibility_flags = ["nodejs_compat"]. ومع ذلك، في بيئة Serverless Execution، استخدام Context Passing الصريح أو ربط الـ Context عبر Hono.js (c.set / c.get) يكون أضمن 100% ويمنع أي تسرب للـ Request Context بين الطلبات المختلفة.
+
+الحل المعتمد (Hybrid Approach):
+
+typescript
+// ✅ 1. تفعيل nodejs_compat في wrangler.toml
+// compatibility_flags = ["nodejs_compat"]
+
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+export interface ErrorContext {
+  correlationId: string;
+  storeId?: string;
+  userId?: string;
+  breadcrumbs: string[]; // آخر 10 أحداث
+  startTime: number;
+  path?: string;
+  method?: string;
+  ip?: string;
+}
+
+// ✅ 2. استخدام AsyncLocalStorage للـ Internal Helpers والـ Logger
+const contextStore = new AsyncLocalStorage<ErrorContext>();
+
+export function runWithContext<T>(context: ErrorContext, fn: () => T): T {
+  return contextStore.run(context, fn);
+}
+
+export function getContext(): ErrorContext | undefined {
+  return contextStore.getStore();
+}
+
+export function addBreadcrumb(message: string, data?: Record<string, unknown>): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const entry = `${new Date().toISOString()} - ${message}`;
+  ctx.breadcrumbs.push(entry);
+  if (ctx.breadcrumbs.length > 10) ctx.breadcrumbs.shift();
+}
+
+// ✅ 3. Context Passing صريح في Middleware عبر Hono.js
+// في middleware.ts:
+// c.set('traceContext', { correlationId, storeId, ... })
+// واسترجاعه عبر c.get('traceContext')
+1.4 المُنقي (sanitizer.ts) - أمان البيانات
+typescript
+const SENSITIVE_KEYS = ['password', 'token', 'secret', 'cookie', 'authorization', 'credit_card', 'cvv'];
+
+export function sanitizeObject(obj: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(obj).map(([key, value]) => {
+      if (SENSITIVE_KEYS.some(k => key.toLowerCase().includes(k))) {
+        return [key, '[REDACTED]'];
+      }
+      if (typeof value === 'object' && value !== null) {
+        return [key, sanitizeObject(value as Record<string, unknown>)];
+      }
+      return [key, value];
+    })
+  );
+}
+🔄 الباب الثاني: تدفق البيانات المُحسَّن (Data Flow v9.1)
+الرسم البياني المتكامل
 text
-[كل 5 دقائق] → Uptime Robot يرسل طلب GET إلى /ping على الـ Worker الرئيسي.
-    ↓ (إذا استجاب بـ 200 OK)
-[✅ النظام سليم]
-    ↓ (إذا لم يستجب أو رد بـ 5xx/Timeout)
-[🚨 إرسال تنبيه فوري إلى قروب "إنذار عاجل" في تليجرام] → "ALERT: Dokany Worker is DOWN!"
-🛠️ الباب الثالث: تفاصيل التنفيذ (بدون أكواد)
-3.1. المُخزن الفوري (Immediate Storage in R2) – القلب النابض
-الهدف: ضمان عدم فقدان أي خطأ، حتى في أسوأ السيناريوهات (Crash مفاجئ للـ Worker).
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          [ يحدث خطأ أو بطء ]                          │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  [1. safeExecute] يُلتقط الخطأ ويحسب زمن التنفيذ عبر Performance Sentry│
+│     • يتحقق من الـ Route-based Thresholds المخصصة                      │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  [2. classifyError] يُصنف الخطأ ويستخرج درجة الخطورة (Severity)        │
+│     • يستخدم سجل الأكواد (codes.ts) لاستخراج userMessage المناسب       │
+│     • يحدد إذا كان الخطأ "صامتاً" (silent: true)                       │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  [3. الكتابة الفورية في B2] ──► (ضمان 100% حفظ البيانات)               │
+│  • إنشاء ملف JSON فريد: errors/raw/YYYY-MM-DD/error_{timestamp}_{uuid}.json│
+│  • ضغط الملف بـ gzip قبل الكتابة (توفير 70-80% من المساحة)             │
+│  • كتابة مفتاح الملف في Redis List (بدلاً من LIST Operations)          │
+│    → Redis List: error_queue (LPUSH error_key)                         │
+│  • 🔥 سياسة TTL صارمة: لا يتجاوز أي مفتاح مؤقت في Redis 24 ساعة        │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ❓ [فحص كود الخطورة - Severity Check + Silent Flag]                   │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+          ┌──────────────────────┼──────────────────────┐
+          │                      │                      │
+          ▼                      ▼                      ▼
+┌─────────────────────┐ ┌─────────────────────┐ ┌─────────────────────┐
+│ [CRITICAL]          │ │ [WARNING]           │ │ [INFO / SILENT]     │
+│ (كارثة توقف المحل)   │ │ (خطأ تحذيري)        │ │ (خطأ بسيط أو صامت)  │
+│                     │ │                     │ │                     │
+│ [المسار السريع]     │ │ [المسار الاقتصادي]   │ │ [المسار الصامت]     │
+│                     │ │                     │ │                     │
+│ يُرسل فوراً عبر     │ │ يُقفل في B2          │ │ يُسجل في B2 فقط     │
+│ `waitUntil` (مع     │ │ وينتظر QStash       │ │ (بدون تنبيهات)      │
+│ Retry مدمج)         │ │ (كل 10 دقائق)       │ │                     │
+│                     │ │                     │ │                     │
+│ حتى لو فشل الإرسال  │ │ يُجمّع مع حوادث      │ │ يُستخدم لتحليل      │
+│ → يبقى في B2        │ │ متشابهة (Incident)  │ │ الأداء فقط          │
+│ ليرسل عبر QStash    │ │ مع First/Last Sample│ │                     │
+└─────────────────────┘ └─────────────────────┘ └─────────────────────┘
+          │                      │                      │
+          └──────────────────────┼──────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  [كل 10 دقائق] - QStash Cron Job يُطلق Background Processor            │
+│  • يقرأ المفاتيح من Redis List (RPOP) بدلاً من LIST Operations         │
+│  • يجلب الملفات من B2 باستخدام GET (عملية أرخص)                        │
+│  • يفك ضغط الملفات (gunzip)                                            │
+│  • تحديث عدادات Redis (للتحليل)                                       │
+│  • التحقق من الـ Incident Aggregation (في Redis)                       │
+│  • يحتفظ بـ First Sample و Last Sample لكل حادثة                       │
+│  • إرسال إلى تليجرام (مع Rate Limiting و Circuit Breaker)              │
+│  • نقل الملفات إلى errors/processed/ أو errors/failed/ (حسب النتيجة)  │
+│  • ❌ في حالة فشل الإرسال → Retry مع تأخير تصاعدي (3 محاولات)          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  [يومياً - 08:00 صباحاً] - Silent Errors Daily Digest                  │
+│  • يقرأ الـ Silent Errors المتراكمة في B2 خلال الـ 24 ساعة الماضية     │
+│  • يُرسل تقرير يومي ملخص على قناة التليجرام                            │
+│  • العنوان: 📊 Silent Errors Summary                                   │
+└─────────────────────────────────────────────────────────────────────────┘
+مخطط المراقبة الخارجية (العين الثالثة)
+text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         [Uptime Robot]                                 │
+│                    (خدمة خارجية - مجانية)                              │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+                    GET /ping (كل 5 دقائق)
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         [Worker الرئيسي]                               │
+│                                                                        │
+│  ┌─────────────────┐         ┌─────────────────┐                      │
+│  │   /ping (خفيف)  │         │ /readiness (فحص)│                      │
+│  │   → 200 OK فوري  │         │ → D1 + Redis    │                      │
+│  └─────────────────┘         └─────────────────┘                      │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+              ┌──────────────────┴──────────────────┐
+              │                                      │
+              ▼                                      ▼
+┌─────────────────────────────┐    ┌─────────────────────────────┐
+│  ✅ استجابة 200 OK          │    │  ❌ 5xx / Timeout            │
+│  → النظام سليم              │    │  → Uptime Robot يرسل         │
+└─────────────────────────────┘    │    تنبيهاً فورياً             │
+                                    │    إلى تليجرام:              │
+                                    │    "🚨 Worker is DOWN!"     │
+                                    └─────────────────────────────┘
+🛠️ الباب الثالث: تفاصيل التنفيذ المتقدمة (بدون أكواد)
+3.1 المُخزن الفوري (B2 Store) – القلب النابض المُحسَّن
+الهدف: ضمان عدم فقدان أي خطأ، حتى في أسوأ السيناريوهات (Crash مفاجئ للـ Worker)، مع تحسين الأداء والتكلفة.
 
 التنفيذ:
 
-عند حدوث أي خطأ، يقوم الـ Notifier بإنشاء ملف JSON فريد (باستخدام timestamp و UUID) ويحفظه في Bucket R2 (مثلاً: errors/raw/2026-07-07/error_1234567890_abc123.json).
+كتابة الملف في B2:
 
-محتوى الملف: SystemError كامل + correlationId + breadcrumbs + timestamp.
+إنشاء ملف JSON فريد:
 
-الميزة: R2 تخزين دائم (Persistent). حتى لو تعطل الـ Worker بعد 1 مللي ثانية من كتابة الملف، تبقى البيانات آمنة.
+text
+errors/raw/2026-07-07/error_1720368000000_abc123.json
+ضغط الملف بـ gzip قبل الكتابة (توفير 70-80% من المساحة).
 
-التكلفة: R2 مجاني (10GB تخزين، 1M عمليات كتابة/شهر). يكفي لملايين الأخطاء.
+استخدام Content-Encoding: gzip في الـ Headers.
 
-3.2. المعالج الخلفي (Background Processor) – التوفير الاقتصادي
-الهدف: فصل المعالجة الثقيلة (تحديث Redis، الإرسال لتليجرام) عن مسار الطلب الرئيسي لتقليل زمن الاستجابة واستهلاك موارد الـ Worker.
+استخدام Bandwidth Alliance بين Cloudflare و Backblaze (تحميل مجاني).
+
+إدارة قائمة الانتظار (النقطة الفارقة):
+
+لا يتم استخدام LIST Operations في B2 (مكلفة وبطيئة).
+
+بدلاً من ذلك: بعد كتابة الملف في B2، يتم دفع (LPUSH) مفتاح الملف إلى Redis List باسم error_queue.
+
+هذا يحول عمليات LIST المكلفة إلى عمليات GET (أرخص بكثير).
+
+سياسة TTL الصارمة:
+
+يجب ألا يتجاوز TTL لأي مفتاح مؤقت في Redis حاجز 24 ساعة كحد أقصى.
+
+الاعتماد الأساسي على B2 لتخزين الـ Logs والـ Payload العالية (10GB مجاناً بدون TTL قسري).
+
+يقتصر دور Redis فقط على الـ Key Pointers والحالات اللحظية (Ephemeral Metadata).
+
+التكلفة المحسوبة:
+
+LIST واحدة على 1000 ملف = 1000 عملية Class C (تستهلك حصتك اليومية).
+
+النظام الجديد: لكل خطأ، عملية PUT واحدة (Class B) + عملية LPUSH واحدة (Redis مجانية) + عملية GET واحدة (Class B) عند المعالجة. توفير 95% من التكلفة.
+
+3.2 المعالج الخلفي (Background Processor) – مع Retry و Fallback
+الهدف: فصل المعالجة الثقيلة عن مسار الطلب الرئيسي مع ضمان وصول 100% للتنبيهات.
 
 التنفيذ:
 
-جدولة QStash: مهمة Cron تعمل كل 10 دقائق (بدلاً من كل دقيقة لتوفير الموارد).
+جدولة QStash:
+
+مهمة Cron تعمل كل 10 دقائق.
+
+مع تفعيل Retry تلقائي: 3 محاولات بتأخير (5 دقائق، 15 دقيقة، ساعة).
 
 آلية العمل:
 
-يقرأ الـ Background Processor قائمة ملفات JSON من R2 (errors/raw/).
-لكل ملف، يقوم بـ:
+يقرأ المفاتيح من error_queue في Redis باستخدام RPOP (إزالة واسترجاع من النهاية).
+
+لكل مفتاح، يجلب الملف من B2 باستخدام GET (يفك ضغطه).
+
+يقوم بـ:
+
 تحديث عدادات Redis (للتحليل).
-التحقق من الـ Deduplication (لتجنب التكرار).
-إرسال إلى تليجرام (مع Rate Limiting و Circuit Breaker).
-ينقل الملفات المعالجة إلى مجلد errors/processed/ (أو يحذفها).
-الميزة: لا يتم لمس Redis أو تليجرام أثناء الطلب الأصلي، مما يقلل زمن الاستجابة إلى النصف ويحمي حدود Upstash.
 
-3.3. نظام المراقبة الخارجي (Uptime Robot) – العين الثالثة
-الهدف: مراقبة صحة الـ Worker من خارج بيئة Cloudflare (لتجنب نقطة الفشل الواحدة).
+التحقق من الـ Incident Aggregation (في Redis بمفتاح incident:${code} مع TTL 5 دقائق).
+
+إرسال إلى تليجرام (مع Rate Limiting).
+
+إذا نجح: يحذف الملف من B2 (أو ينقله إلى processed/).
+
+إذا فشل: ينقل الملف إلى errors/failed/ ويحتفظ بالمفتاح في Redis لـ Retry لاحقاً (مع حد أقصى 3 محاولات).
+
+آلية Retry الذكية:
+
+تخزين retry_count في الملف (أو في Redis).
+
+بعد 3 محاولات فاشلة، يُرسل تنبيه "حادث" (Incident) إلى قروب الإدارة.
+
+الميزة التنافسية: حتى لو فشل إرسال التليجرام الفوري (في المسار السريع)، يبقى الملف في raw/ وسيُرسل عبر المعالج الخلفي. ضمان وصول 100% للتنبيهات.
+
+3.3 Incident Aggregation – منع إغراق التليجرام (مع First/Last Sample)
+الهدف: تجميع الأخطاء المتشابهة في "حادثة" واحدة لتجنب إغراق قنوات التليجرام، مع الاحتفاظ بعينات كافية لتشخيص السبب الجذري.
 
 التنفيذ:
 
-مسار /ping: في الـ Worker الرئيسي، مسار بسيط يعيد 200 OK (بدون أي منطق معقد).
+إنشاء incident_id:
 
-Uptime Robot: خدمة مجانية (تسمح بـ 50 مراقبة) تطرق هذا المسار كل 5 دقائق.
+text
+incident:${code}:${storeId}
+في Redis:
 
-في حال الفشل: (Timeout أو 5xx)، يُرسل Uptime Robot تنبيهاً فورياً إلى تليجرام (عبر Webhook) أو إلى البريد الإلكتروني.
+INCR incident:DB_001:store_123
 
-الميزة: هذه هي "العين الثالثة". حتى لو توقف الـ Worker بالكامل (ولم يعد هناك Worker ليرسل Heartbeat)، فإن Uptime Robot سيكتشف ذلك من الخارج ويُعلمك.
+EXPIRE incident:DB_001:store_123 300 (5 دقائق)
 
-3.4. المُنفذ الآمن (Safe Executor) – مع حارس الزمن
-الهدف: غلاف آمن للعمليات مع مراقبة الأداء.
+تخزين First Sample و Last Sample:
+
+incident:DB_001:store_123:first ← أول خطأ
+
+incident:DB_001:store_123:last ← آخر خطأ
+
+incident:DB_001:store_123:count ← العدد الإجمالي
+
+عند الإرسال:
+
+إذا كان العداد = 1، أرسل الرسالة كاملة (مع First Sample).
+
+إذا كان العداد > 1، لا ترسل (تكتفي بزيادة العداد وتحديث Last Sample).
+
+بعد 5 دقائق، أرسل رسالة تلخيصية:
+
+text
+📊 Incident Report
+🔴 Code: DB_001
+🏪 Store: store_123
+📦 Count: 23 errors in 5 minutes
+
+📌 First Sample: { ... }
+📌 Last Sample: { ... }
+الميزة: تخفيض عدد رسائل التليجرام من آلاف إلى 1-2 رسالة كل 5 دقائق، مع الحفاظ على عينات دقيقة لتشخيص المشكلة.
+
+3.4 المُنفذ الآمن (Safe Executor) – مع حارس الزمن و Route Thresholds
+الهدف: غلاف آمن للعمليات مع مراقبة الأداء وإعادة المحاولة الذكية، مع مرونة في تحديد حدود الأداء لكل Route.
+
+التنفيذ:
+
+توقيت التنفيذ:
+
+typescript
+const start = performance.now();
+const result = await fn();
+const duration = performance.now() - start;
+حارس الزمن (Performance Sentry) مع Route Thresholds:
+
+جدول حدود الأداء المخصصة:
+
+Route Pattern	Slow Threshold	Critical Threshold
+/api/checkout	2000ms	3000ms
+/api/health	200ms	500ms
+/api/search	300ms	800ms
+/api/orders	500ms	1000ms
+* (Default)	1000ms	2000ms
+إذا تجاوز الزمن الـ slowThreshold → توليد PERF_001 (تحذير).
+
+إذا تجاوز الزمن الـ criticalThreshold → توليد PERF_003 (حرج).
+
+إعادة المحاولة (Retry):
+
+إذا كان الخطأ قابل للمحاولة (retryable: true):
+
+تأخير تصاعدي مع Jitter: Math.pow(2, attempts) * 200 + Math.random() * 100.
+
+بعد 3 محاولات فاشلة، يُرمى الخطأ إلى المتصل مع رسالة مناسبة.
+
+القيمة الافتراضية (Fallback):
+
+إذا تم توفير fallbackValue، يُرجعه بدلاً من إسقاط التطبيق.
+
+3.5 Silent Errors Daily Digest 📊
+الهدف: منع إهمال الأخطاء الصامتة تماماً، مع الحفاظ على الـ Observability دون إزعاج الفريق لحظياً.
+
+التنفيذ:
+
+Cron Job يومي (الساعة 08:00 صباحاً).
 
 آلية العمل:
 
-توقيت التنفيذ: يتم تسجيل وقت البداية والنهاية.
+يقرأ الـ Silent Errors المتراكمة في B2 خلال الـ 24 ساعة الماضية.
 
-إعادة المحاولة (Retry): في حال فشل العملية، يتم إعادة المحاولة تلقائياً مع تأخير تصاعدي (Exponential Backoff) إذا كان الخطأ قابلاً للمحاولة (retryable: true).
+يُجمّعها حسب النوع (code).
 
-حارس الزمن (Performance Sentry): إذا تجاوز زمن التنفيذ الحد المسموح (2 ثانية للـ API، 5 ثوانٍ للمهام الخلفية)، يتم توليد خطأ من نوع PERF_001 (تحذير أداء) وإرساله.
+يُرسل تقرير يومي ملخص على قناة التليجرام:
 
-القيمة الافتراضية (Fallback): في حال الفشل النهائي، يتم إرجاع قيمة افتراضية (إن وُجدت) بدلاً من إسقاط التطبيق.
+text
+📊 Silent Errors Summary - 2026-07-07
 
-3.5. Incident Aggregation – منع إغراق التليجرام
-الهدف: تجميع الأخطاء المتشابهة في "حادثة" واحدة لتجنب إغراق قنوات التليجرام.
+📦 Total Silent Errors: 1,247
+🔴 CACHE_001: 1,200 (Cache update failed)
+🟡 PERF_002: 47 (Background task slow)
 
-آلية العمل:
+📌 Recommendation: Review CACHE_001 pattern, 95% of silent errors.
+الميزة: تمنع تراكم الأخطاء الصامتة دون مراقبة، وتوفر رؤية أسبوعية/شهرية لصحة النظام الخلفي.
 
-يتم إنشاء incident_id لكل خطأ جديد (يعتمد على code + category).
+3.6 نظام المراقبة الخارجي (Uptime Robot) – العين الثالثة
+الهدف: مراقبة صحة الـ Worker من خارج بيئة Cloudflare (تجنب نقطة الفشل الواحدة).
 
-في غضون 5 دقائق، أي خطأ جديد بنفس الـ incident_id لا يُرسل إلى تليجرام، بل يزيد فقط عداد الحادثة.
+التنفيذ:
 
-بعد 5 دقائق، يتم إرسال رسالة تلخيصية: "حدث 23 خطأ من نوع DB_001 في آخر 5 دقائق".
+مسار /ping:
 
-3.6. Source Maps – دقة تتبع الأخطاء
+GET /ping → 200 OK (بدون أي منطق معقد).
+
+يستخدم لـ Uptime Robot فقط.
+
+مسار /readiness (اختياري للتوسع):
+
+GET /readiness → يفحص اتصال D1 و Redis.
+
+إذا كان كل شيء سليماً → 200 OK.
+
+إذا فشل أي اتصال → 503 Service Unavailable.
+
+Uptime Robot:
+
+يطرق /ping كل 5 دقائق.
+
+مجاني (يسمح بـ 50 مراقبة).
+
+في حال الفشل (Timeout أو 5xx) → إرسال تنبيه فوري لتليجرام (عبر Webhook).
+
+الميزة التنافسية: حتى لو توقف الـ Worker بالكامل (ولم يعد هناك Worker ليرسل Heartbeat)، فإن Uptime Robot سيكتشف ذلك من الخارج ويُعلمك.
+
+3.7 Source Maps – دقة تتبع الأخطاء
 الهدف: معرفة السطر الحقيقي للخطأ في الكود المصدر.
-التنفيذ: تفعيل upload_source_maps = true في wrangler.toml.
+
+التنفيذ:
+
+في wrangler.toml:
+
+toml
+upload_source_maps = true
 آلية العمل: Cloudflare Workers يرفع Source Maps مع الكود. عند حدوث خطأ، يقوم محرك V8 بفك التشفير وعرض الملف والسطر الحقيقي في الـ Stack Trace.
 
-💾 الباب الرابع: سياسات التخزين والمعالجة الخلفية
-العنصر	مكان التخزين	السبب
-تفاصيل الخطأ الكاملة (Stack Trace)	تُكتب فوراً في R2 (ملف JSON خام).	ضمان عدم فقدان أي بيانات حتى لو تعطل الـ Worker.
-العدادات اليومية (Counters)	Upstash Redis (مفاتيح مثل error:2026-07-06).	للتحليل السريع وعرض الإحصائيات في الـ Dashboard.
-آخر 100 خطأ (للعرض السريع)	Upstash Redis (قائمة error:list).	لعرضها في داشبورد الأدمن (مع Cache).
-الـ Queue للمعالجة الخلفية	غير موجود (نستخدم R2 كـ "Queue" طبيعي).	R2 هو المخزن الدائم، والـ Background Processor يقرأ منه مباشرة.
-DLQ (الفاشلة نهائياً)	تبقى في R2 (مجلد errors/failed/).	ضمان عدم فقدان البيانات حتى لو فشل الإرسال نهائياً.
-Cache الـ Dashboard	Upstash Redis (مع TTL 5 دقائق).	تقليل استهلاك Redis بنسبة 90%.
-قاعدة البيانات (D1)	ممنوع استخدامها لتخزين الأخطاء.	حماية المساحة المجانية للبيانات الأساسية.
+الميزة: بدلاً من رؤية at worker.js:12345، ترى at src/services/order.ts:42.
+
+📊 الباب الرابع: سياسات التخزين والمعالجة الخلفية (محسنة)
+العنصر	مكان التخزين	الـ TTL	السبب
+تفاصيل الخطأ الكاملة (Stack Trace)	B2 - errors/raw/ (مضغوط gzip)	دائم (لا ينتهي)	ضمان عدم فقدان أي بيانات حتى لو تعطل الـ Worker.
+تفاصيل الخطأ الكاملة (بعد المعالجة)	B2 - errors/processed/	دائم (يحذف بعد 30 يوماً)	للتحليل التاريخي والتدقيق.
+الأخطاء الفاشلة نهائياً	B2 - errors/failed/	دائم (يحذف بعد 90 يوماً)	ضمان عدم فقدان البيانات حتى لو فشل الإرسال نهائياً.
+قائمة انتظار المعالجة	Redis List (error_queue)	7 أيام كحد أقصى	تجنب عمليات LIST المكلفة في B2.
+العدادات اليومية	Upstash Redis (error:2026-07-06)	30 يوماً كحد أقصى	للتحليل السريع وعرض الإحصائيات في الـ Dashboard.
+آخر 100 خطأ	Upstash Redis (error:list)	7 أيام كحد أقصى	لعرضها في داشبورد الأدمن (مع Cache).
+Incident Aggregation	Upstash Redis (incident:DB_001:store_123)	5 دقائق	تجميع الأخطاء المتشابهة لتجنب إغراق التليجرام.
+Incident First/Last Sample	Upstash Redis (incident:...:first, :last)	5 دقائق	الاحتفاظ بعينات للتشخيص الدقيق.
+Cache الـ Dashboard	Upstash Redis (مع TTL)	5 دقائق	تقليل استهلاك Redis بنسبة 90%.
+Silent Errors Digest	B2 - errors/silent/	30 يوماً	لتوليد التقارير اليومية.
+قاعدة البيانات (D1)	❌ ممنوع استخدامها لتخزين الأخطاء.	N/A	حماية المساحة المجانية للبيانات الأساسية.
+🔴 قاعدة ذهبية	جميع مفاتيح Redis المؤقتة	≤ 24 ساعة كحد أقصى	حماية حدود الذاكرة (256MB Free Tier).
 🚀 الباب الخامس: التكامل مع البيئة والتشغيل
-5.1. التكامل مع الـ Middleware
+5.1 التكامل مع الـ Middleware
 في middleware.ts:
 
-توليد correlationId جديد لكل طلب.
+توليد correlationId جديد لكل طلب (استخدام crypto.randomUUID()).
 
-تخزينه في AsyncLocalStorage.
+تخزينه في AsyncLocalStorage (للـ Internal Helpers) وتمريره صريحاً عبر Hono.js (c.set('traceContext', ...)).
 
 إضافة breadcrumb تلقائي عند بداية كل طلب: "بدء الطلب: ${path}".
 
-5.2. قنوات التليجرام
+في حالة حدوث خطأ، يُلتقط تلقائياً ويُمرر إلى نظام الأخطاء.
+
+5.2 قنوات التليجرام
 القناة	الغرض	الأخطاء المرسلة
-قروب "إنذار عاجل"	أخطاء خطيرة (Critical)	DB_001 (فشل قاعدة البيانات)، BIZ_001 (تجاوز الباقة)، PERF_001 (بطء شديد)، تنبيهات Uptime Robot.
+قروب "إنذار عاجل"	أخطاء خطيرة (Critical)	DB_001 (فشل قاعدة البيانات)، BIZ_001 (تجاوز الباقة)، PERF_001 (بطء شديد)، RATE_002 (حظر أمني)، تنبيهات Uptime Robot.
 قروب "متابعة عادية"	أخطاء تحذيرية (Warning)	أخطاء بسيطة، محاولات فاشلة، تنبيهات أداء خفيفة.
-5.3. مراقبة صحة النظام (SLO / Error Budget)
+قروب "تجميعي"	تقارير مجمعة	Incident Aggregation Reports (ملخص كل 5 دقائق).
+قروب "تقارير يومية"	تقارير يومية	Silent Errors Daily Digest (كل يوم 08:00 صباحاً).
+5.3 مراقبة صحة النظام (SLO / Error Budget)
 الهدف: تحديد معيار واضح للتحرك بجدية.
+
 التنفيذ:
 
 SLO الافتراضي: 99.9% من الطلبات ناجحة (أقل من 0.1% أخطاء).
@@ -169,37 +541,277 @@ Error Budget: 0.1% من إجمالي الطلبات.
 
 إذا تجاوزت الأخطاء الـ Error Budget، يتم إرسال تنبيه عاجل إلى قروب "إنذار عاجل".
 
-5.4. مسار /ping للمراقبة الخارجية
-الغرض: توفير نقطة نهاية خفيفة جداً لـ Uptime Robot.
+يُحسب يومياً ويُظهر في Dashboard.
 
-التنفيذ: مسار GET /ping يعيد 200 OK فوراً (بدون أي منطق).
+5.4 التكامل مع @opennextjs/cloudflare
+typescript
+// في Server Actions
+import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { safeExecute } from '@/lib/errors';
 
-المراقبة: Uptime Robot يطرق هذا المسار كل 5 دقائق.
+export async function myAction(data: FormData) {
+  const { env } = await getCloudflareContext();
+  
+  return await safeExecute(
+    env,
+    async () => {
+      // المنطق التجاري
+      return await processOrder(env, orderData, idempotencyKey);
+    },
+    {
+      operationName: 'processOrder',
+      fallback: { success: false, message: 'حدث خطأ' },
+      timeoutMs: 5000,
+      retryable: true,
+      route: '/api/checkout', // ✅ لتطبيق الـ Route Threshold المخصص
+    }
+  );
+}
+5.5 Route-based Performance Thresholds
+ملف الإعدادات: lib/errors/config/thresholds.ts
 
-في حال الفشل: يُرسل تنبيهاً فورياً إلى تليجرام.
+typescript
+export interface RouteThreshold {
+  slowThresholdMs: number;    // → توليد PERF_001
+  criticalThresholdMs: number; // → توليد PERF_003
+}
 
-📐 الباب السادس: الخاتمة والميزة التنافسية
-بهذا الدستور، تحصل على نظام أخطاء استثنائي:
+export const ROUTE_THRESHOLDS: Record<string, RouteThreshold> = {
+  '/api/checkout': { slowThresholdMs: 2000, criticalThresholdMs: 3000 },
+  '/api/health': { slowThresholdMs: 200, criticalThresholdMs: 500 },
+  '/api/search': { slowThresholdMs: 300, criticalThresholdMs: 800 },
+  '/api/orders': { slowThresholdMs: 500, criticalThresholdMs: 1000 },
+  '/api/products': { slowThresholdMs: 400, criticalThresholdMs: 900 },
+  // الـ Default
+  '*': { slowThresholdMs: 1000, criticalThresholdMs: 2000 },
+};
+🛡️ الباب السادس: الأمان والحماية المُدمجة
+6.1 حماية البيانات الحساسة
+تنقية تلقائية (sanitizer.ts) لكل ما يمر عبر النظام.
 
-خالد تخزينياً: كل خطأ يُكتب فوراً في R2 قبل أي شيء، مما يضمن عدم فقدان أي بيانات حتى في أسوأ السيناريوهات.
+حذف password، token، cookie، authorization، credit_card، cvv.
 
-صفر تكلفة في الأوقات العادية: لا يُستهلك أي مورد (Redis، QStash) إلا عند حدوث خطأ فعلي.
+حماية الـ Stack Trace من كشف المتغيرات الحساسة.
 
-مُراقب من الخارج: Uptime Robot (خدمة خارجية) يضمن أنك تعلم فوراً إذا توقف الـ Worker، بدون الحاجة لـ Workers إضافية أو تعقيدات.
+6.2 Circuit Breaker للخدمات الخارجية
+الهدف: حماية تليجرام و QStash من الفشل المتكرر.
 
-اقتصادي: استخدام Batch Processing عبر QStash (كل 10 دقائق) يقلل استهلاك Redis و QStash إلى أقل من 5% من الحدود المجانية.
+التنفيذ:
 
-مرن في Edge: يعمل في Cloudflare Workers بفضل AsyncLocalStorage و Source Maps.
+تخزين حالة الخدمة في Redis (circuit:telegram).
 
-ذكي في الإرسال: يستخدم Incident Aggregation لتجنب إغراق التليجرام.
+إذا فشلت 5 محاولات متتالية → فتح الدائرة (لا ترسل لمدة 5 دقائق).
 
-صديق للمستخدم: يفصل بين ما يراه المستخدم (رسائل مفهومة) وما يراه المطور (تفاصيل تقنية).
+بعد 5 دقائق → محاولة نصف (Half-Open).
 
-الميزة التنافسية النهائية:
+إذا نجحت → إغلاق الدائرة.
 
-ينافس Sentry و Datadog، ولكن بـ $0 تكلفة، و خصوصية كاملة، و سرعة فائقة (لأن كل شيء محلي).
+6.3 Rate Limiter لتليجرام
+الهدف: تجنب تجاوز حدود Telegram API (30 رسالة/ثانية).
 
-ضمان عدم فقدان البيانات: R2 يضمن أن كل خطأ يُسجل حتى لو تعطل الـ Worker في نفس الثانية.
+التنفيذ:
 
-مراقبة خارجية: حتى لو تعطلت كل الـ Workers، ستعلم بذلك عبر Uptime Robot.
+كل رسالة تنتظر 50ms على الأقل.
+
+استخدام setTimeout أو waitUntil لتوزيع الإرسال.
+
+6.4 الأخطاء الصامتة (Silent Errors)
+المبدأ: بعض الأخطاء لا تحتاج إلى إزعاج أحد.
+
+التنفيذ:
+
+فلاج silent: true في codes.ts.
+
+تُسجل في B2 فقط (بدون تنبيهات فورية).
+
+يتم إرسال تقرير يومي مُلخص عبر silent-digest.ts.
+
+الأمثلة: فشل تحديث Cache، فشل تسجيل تحليلات، محاولات فاشلة لعمليات غير حرجة.
+
+6.5 إدارة ذاكرة Redis (حماية حدود 256MB)
+القاعدة الذهبية: يجب ألا يتجاوز TTL لأي مفتاح مؤقت في Redis حاجز 24 ساعة كحد أقصى.
+
+نوع المفتاح	TTL	السبب
+error_queue	7 أيام	تُستهلك باستمرار عبر RPOP
+incident:*	5 دقائق	مؤقت جداً للتجميع
+error:YYYY-MM-DD	30 يوماً	تحليلات يومية محدودة
+error:list	7 أيام	آخر 100 خطأ فقط
+circuit:*	5 دقائق	حالة الخدمات الخارجية
+جميع المفاتيح الأخرى	≤ 24 ساعة	سياسة صارمة
+💰 الباب السابع: تحليل التكلفة التشغيلية (المحسَّن)
+الخدمة	الاستخدام الشهري المتوقع	التكلفة
+Backblaze B2 Storage (الأخطاء)	1000 خطأ/يوم × 5KB = 150MB	مجاناً (ضمن 10GB)
+B2 Class B Operations (PUT + GET)	2000 عملية/يوم	مجاناً (ضمن 2,500/يوم)
+B2 Class C Operations (LIST)	0 (تم استبدالها بـ Redis List)	$0
+B2 Downloads	50GB شهرياً	مجاناً عبر Bandwidth Alliance
+Upstash Redis (Counters + Queue + Incidents)	2000 عملية/يوم	مجاناً (ضمن 10k/يوم)
+Upstash QStash (Cron كل 10 دقائق)	4320 طلب/شهر	مجاناً (ضمن 10k/شهر)
+Cloudflare Workers	80,000 طلب/شهر	مجاناً (ضمن 100k/يوم)
+Telegram API	1000 رسالة/شهر	مجاناً
+Uptime Robot	8640 طلب/شهر	مجاناً
+المجموع		$0 ✅
+الميزة التنافسية:
+
+Sentry.io (خطة Pro): $29/شهر لـ 5,000 أخطاء.
+
+Datadog (خطة Pro): $15/شهر للـ Host.
+
+دكاني: $0/شهر لـ 1,000,000 خطأ.
+
+🏆 الباب الثامن: المقارنة مع الحلول التجارية
+الميزة	دكاني Error System	Sentry	Datadog
+التكلفة الشهرية	$0	$29+	$15+
+تخزين الأخطاء	B2 (دائم، مضغوط)	محدود بـ 7 أيام	محدود بـ 15 يوماً
+Source Maps	✅ (مدعوم في Workers)	✅	✅
+Incident Aggregation	✅ (مع First/Last Sample)	✅	✅
+Performance Monitoring	✅ (Route Thresholds)	✅ (سعر إضافي)	✅ (سعر إضافي)
+المراقبة الخارجية	✅ (Uptime Robot)	❌	❌
+الخصوصية	✅ (بياناتك بالكامل)	❌ (تُرسل لسيرفراتهم)	❌ (تُرسل لسيرفراتهم)
+التخصيص	✅ (مفتوح المصدر)	محدود	محدود
+Edge Computing	✅ (Cloudflare Workers)	❌	❌
+الأخطاء الصامتة	✅ (مع تقرير يومي)	❌	❌
+التكامل مع Next.js	✅ (Server Actions + Middleware)	✅	✅
+Route Thresholds	✅ (مخصص لكل مسار)	❌	❌
+Silent Errors Digest	✅ (يومي)	❌	❌
+🧠 الباب التاسع: الخلاصة والميزة التنافسية النهائية
+ما يجعل هذا التصميم فريداً
+الخلود التخزيني القطعي: كل خطأ يُكتب في B2 قبل أي معالجة، مع ضغط gzip لتوفير المساحة. ضمان عدم فقدان أي خطأ حتى في أسوأ السيناريوهات.
+
+قائمة انتظار ذكية في Redis (بدلاً من LIST Operations): تجنب عمليات LIST المكلفة في B2، مما يخفض التكلفة بنسبة 95% ويُسرع المعالجة.
+
+المسار السريع الهجين: إرسال فوري للأخطاء الحرجة مع Retry مدمج، وفشل الإرسال الفوري لا يمنع وصولها لاحقاً عبر المعالج الخلفي.
+
+المراقبة الخارجية (العين الثالثة): استخدام Uptime Robot (خدمة خارجية) لمراقبة صحة الـ Worker، مما يضمن اكتشاف أي توقف حتى لو تعطلت البنية التحتية بالكامل.
+
+Incident Aggregation مع First/Last Sample: تجميع الأخطاء المتشابهة مع TTL 5 دقائق، مع الاحتفاظ بعينات دقيقة لتشخيص السبب الجذري.
+
+الأخطاء الصامتة مع تقرير يومي: تصنيف الأخطاء غير الحرجة لتُسجل فقط، مع تقرير يومي مُلخص لمنع إهمالها تماماً.
+
+Route-based Performance Thresholds: مرونة في تحديد حدود الأداء لكل مسار API، مما يمنع التنبيهات الكاذبة للتطبيقات البطيئة بطبيعتها.
+
+سياسة TTL الصارمة (≤ 24 ساعة): حماية حدود ذاكرة Redis (256MB Free Tier) من التراكم.
+
+Source Maps التلقائي: معرفة السطر الحقيقي للخطأ في الكود المصدر بدلاً من Stack Trace المشفر.
+
+التكلفة الصفرية المطلقة: جميع المكونات ضمن حدود الخدمات المجانية، مع تحسين العمليات لتجنب العمليات المكلفة.
+
+الميزة التنافسية النهائية
+دكاني Error System ينافس Sentry و Datadog في العقلية، لكن بـ $0 تكلفة، وخصوصية كاملة (بياناتك في B2)، وسرعة فائقة (لأن كل شيء على Edge).
+
+ضمان عدم فقدان البيانات: B2 يضمن أن كل خطأ يُسجل حتى لو تعطل الـ Worker في نفس الثانية.
+
+مراقبة خارجية: حتى لو تعطلت كل الـ Workers، ستُعلم بذلك عبر Uptime Robot.
+
+قابلية التوسع: صُمم لخدمة ملايين الأخطاء يومياً مع بقاء التكلفة صفراً.
+
+📌 الباب العاشر: دليل النشر السريع (Checklist)
+10.1 متغيرات البيئة المطلوبة
+env
+# Backblaze B2 Storage
+B2_ENDPOINT=https://s3.us-east-005.backblazeb2.com
+B2_BUCKET_NAME=errors-bucket
+B2_ACCESS_KEY_ID=your_key
+B2_SECRET_ACCESS_KEY=your_secret
+
+# Upstash Redis
+UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your_token
+
+# Upstash QStash
+QSTASH_URL=https://qstash.upstash.io
+QSTASH_TOKEN=your_qstash_token
+
+# Telegram
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CRITICAL_CHAT_ID=chat_id_for_critical
+TELEGRAM_WARNING_CHAT_ID=chat_id_for_warning
+TELEGRAM_DIGEST_CHAT_ID=chat_id_for_daily_digest
+
+# Optional
+ERROR_BUDGET_THRESHOLD=0.1
+10.2 نشر Worker
+bash
+# 1. تثبيت الاعتماديات
+npm install @cloudflare/workers-types upstash-redis aws4fetch
+
+# 2. تفعيل nodejs_compat في wrangler.toml
+# compatibility_flags = ["nodejs_compat"]
+
+# 3. بناء التطبيق
+npm run build
+
+# 4. نشر Worker الرئيسي
+npx wrangler deploy
+
+# 5. جدولة QStash Cron (كل 10 دقائق)
+curl -X POST "https://qstash.upstash.io/v2/schedules" \
+  -H "Authorization: Bearer $QSTASH_TOKEN" \
+  -d '{
+    "destination": "https://your-worker.dev/api/errors/process",
+    "cron": "*/10 * * * *",
+    "method": "POST"
+  }'
+
+# 6. جدولة Silent Errors Daily Digest (08:00 صباحاً)
+curl -X POST "https://qstash.upstash.io/v2/schedules" \
+  -H "Authorization: Bearer $QSTASH_TOKEN" \
+  -d '{
+    "destination": "https://your-worker.dev/api/errors/silent-digest",
+    "cron": "0 8 * * *",
+    "method": "POST"
+  }'
+
+# 7. تفعيل Source Maps في wrangler.toml
+# upload_source_maps = true
+10.3 إعداد Uptime Robot
+سجل في Uptime Robot (مجاني).
+
+أضف مراقبة جديدة (HTTP(s) Monitor).
+
+ضع URL: https://your-worker.dev/ping.
+
+حدد الفاصل الزمني: 5 دقائق.
+
+اختر طريقة الإشعار: Telegram Webhook.
+
+10.4 إعداد Bandwidth Alliance مع Backblaze
+bash
+# في wrangler.toml أو في Cloudflare Dashboard:
+# تأكد من أن نطاقك (domain) يعمل عبر Cloudflare Proxy (Orange Cloud)
+# وسيتم تفعيل Bandwidth Alliance تلقائياً مع Backblaze B2
+🔮 الباب الحادي عشر: الرؤية المستقبلية (v10.0)
+تحليل الأنماط (Pattern Analysis): استخدام الذكاء الاصطناعي لتحديد أنماط الأخطاء المتكررة وتوليد توصيات تلقائية.
+
+التنبؤ بالأعطال (Predictive Failure): تحليل اتجاهات الأخطاء للتنبؤ بالأعطال المحتملة قبل حدوثها.
+
+التكامل مع Grafana/Prometheus: تصدير المقاييس إلى لوحات تحكم خارجية.
+
+تتبع الأخطاء عبر البيئات (Environment Tracking): تمييز الأخطاء حسب البيئة (Development / Staging / Production).
+
+التقارير الآلية (Automated Reports): إرسال تقارير أسبوعية عن صحة النظام ومعدلات الأخطاء.
+
+📋 الباب الثاني عشر: التعديلات المُطبَّقة في الإصدار 9.1
+التعديل	التفاصيل
+استبدال R2 بـ Backblaze B2	استخدام Bandwidth Alliance للتحميل المجاني، وتوفير 10GB تخزين مجاني، مع تكامل مع Cloudflare Workers.
+AsyncLocalStorage + Hybrid Context	تفعيل nodejs_compat مع استخدام Context Passing صريح عبر Hono.js لمنع Cross-request Context Leaks.
+سياسة TTL الصارمة (≤ 24 ساعة)	حماية حدود ذاكرة Redis (256MB Free Tier) من التراكم، مع وضع قواعد واضحة لكل نوع من المفاتيح.
+Silent Errors Daily Digest	إضافة Cron Job يومي (08:00 صباحاً) لتقرير الأخطاء الصامتة المتراكمة.
+First/Last Sample في Incident Aggregation	الاحتفاظ بعينات دقيقة لتشخيص السبب الجذري أثناء تجميع الحوادث.
+Route-based Performance Thresholds	جدول مرن لتحديد حدود الأداء لكل مسار API، مع توليد تنبيهات مخصصة.
+Route Thresholds في config/thresholds.ts	ملف إعدادات منفصل لسهولة التعديل.
+🏛️ نهاية الدستور — الإصدار 9.1 (النسخة المعمارية القطعية النهائية المُحكمة)
+
+هذا الدستور يمثّل مرجعاً معمارياً متكاملاً يجمع بين:
+
+🎯 الرؤية الاستراتيجية (خلود تخزيني، تكلفة صفرية، مراقبة خارجية، أخطاء صامتة).
+
+⚡ التنفيذ العملي (B2, Workers, Redis, QStash, Uptime Robot, Source Maps).
+
+🛡️ الأمان المتعدد الطبقات (تنقية البيانات، Circuit Breaker، Rate Limiter، Silent Errors، TTL صارمة).
+
+📊 المراقبة والمناعة الذاتية (Metrics, Logs, Alerts, Incident Aggregation, SLO, Route Thresholds).
+
+🔒 الخصوصية الكاملة (جميع البيانات في B2 الخاص بك، لا تُرسل لأطراف ثالثة).
+
+دكاني Error System ليس مجرد نظام أخطاء — إنه جهاز عصبي مركزي للمنصة، مبنيّ على أسس معمارية صلبة، جاهز لخدمة ملايين الطلبات بتكلفة صفرية، وأمان لا يُقهر، وشفافية كاملة للمستخدم والمطور. 🚀
 

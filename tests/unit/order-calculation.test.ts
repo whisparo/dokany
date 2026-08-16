@@ -15,11 +15,11 @@ describe('OrderService - Order Totals & Calculations', () => {
     const result = OrderService.calculateOrderTotals(input);
 
     expect(result).toEqual({
-      subtotal: '500.00',
-      shippingCost: '50.00',
-      taxAmount: '70.00',
-      discount: '20.00',
-      total: '600.00', // (500 + 50 + 70) - 20 = 600
+      subtotal: 500,
+      shippingCost: 50,
+      taxAmount: 70,
+      discount: 20,
+      total: 600, // (500 + 50 + 70) - 20 = 600
     });
   });
 
@@ -31,9 +31,9 @@ describe('OrderService - Order Totals & Calculations', () => {
 
     const result = OrderService.calculateOrderTotals(input);
 
-    expect(result.taxAmount).toBe('0.00');
-    expect(result.discount).toBe('0.00');
-    expect(result.total).toBe('280.00'); // 250 + 30
+    expect(result.taxAmount).toBe(0);
+    expect(result.discount).toBe(0);
+    expect(result.total).toBe(280); // 250 + 30
   });
 
   it('توليد رقم طلب (Order Number) بصيغة صحيحة وغير متكررة', () => {
@@ -73,12 +73,12 @@ describe('OrderService - Order Totals & Calculations', () => {
     expect(prepared).toHaveLength(2);
 
     // عنصر 1: 2 * 150 = 300
-    expect(prepared[0].lineTotal).toBe('300.00');
-    expect(prepared[0].netAmount).toBe('300.00');
+    expect(prepared[0].lineTotal).toBe(300);
+    expect(prepared[0].netAmount).toBe(300);
 
     // عنصر 2: 1 * 300 - الخصم 50 = 250
-    expect(prepared[1].lineTotal).toBe('300.00');
-    expect(prepared[1].netAmount).toBe('250.00');
+    expect(prepared[1].lineTotal).toBe(300);
+    expect(prepared[1].netAmount).toBe(250);
   });
 
 });
