@@ -73,6 +73,9 @@ export const stores = sqliteTable(
     currency: text('currency').notNull().default('EGP'),
     paymentGateway: text('payment_gateway').notNull().default('stripe'),
 
+    // 🟢 إضافة عمود إصدار اللقطة/الكاش (snapshotVersion)
+    snapshotVersion: integer('snapshot_version').notNull().default(1),
+
     // ✅ تم إضافة { mode: 'json' } والأنواع البرمجية
     settings: text('settings', { mode: 'json' })
       .$type<StoreSettings>()
@@ -159,6 +162,9 @@ export const stores = sqliteTable(
       .where(sql`${table.deletedAt} IS NULL`),
 
     index('stores_created_idx').on(table.createdAt),
+
+    // 🟢 أندكس سرعة استعلام الكاش بواسطة snapshotVersion
+    index('stores_snapshot_version_idx').on(table.snapshotVersion),
 
     // 🛡️ Check Constraints
     check('chk_store_name_not_empty', sql`${table.name} != ''`),

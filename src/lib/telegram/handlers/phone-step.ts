@@ -84,20 +84,25 @@ export async function handlePhoneStep(ctx: SecureHandlerContext): Promise<Handle
   }
 
   // 4️⃣ بصم التاجر في الداتابيز
+  const now = new Date();
+  
   try {
     if (!dbUser) {
       await db.insert(users).values({
         id: String(ctx.telegramUserId),          
         telegramId: String(ctx.telegramUserId),  
         phoneNumber: phone,                      
-        name: '',                                
-        authMethod: 'telegram',                  
-        updatedAt: new Date(),                   
+        name: 'تاجر جديد', // اسم مؤقت لحين استكماله في خطوة NameStep
+        merchantId: String(ctx.telegramUserId), // إسناد merchantId لتمرير قيد chk_merchant_id_consistency
+        authMethod: 'telegram', 
+        status: 'active',
+        isVerified: true,
+        role: 'merchant',
       });
       console.log(`🎯 [PhoneStep] New user inserted with phone: ${phone}`);
     } else if (!dbUser.phoneNumber) {
       await db.update(users)
-        .set({ phoneNumber: phone, updatedAt: new Date() })
+        .set({ phoneNumber: phone, updatedAt: now })
         .where(eq(users.id, String(ctx.telegramUserId)));
       console.log(`🎯 [PhoneStep] Existing user updated with phone: ${phone}`);
     }

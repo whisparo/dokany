@@ -1,16 +1,18 @@
-// src/featuers/storefront-checkout/action/checkout.actions.ts
+// src/features/storefront-checkout/actions/checkout.actions.ts
 'use server';
 
-import { redirect } from 'next/navigation';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 
-import { processCheckout } from '@/features/storefront-checkout/orchestrators/checkout.orchestrator';
 import { CustomerService } from '@/lib/services/customer.service';
-import { OrderService } from '@/lib/services/order-service'; // تم تعديل المسار لـ orders-service بناءً على ملفك
+import { processOrder, type OrderInput } from '@/lib/services/order-processor';
+import type { RawOrderItemInput } from '@/lib/services/order-service';
 
-// 🛡️ 1. استيراد دالة الحماية والـ Action Error Handler الموحد
 import { enforceRateLimit } from '@/lib/rate-limit-client';
 import { handleActionError } from '@/lib/error-handler';
+
+// ============================================================
+// 📋 Types
+// ============================================================
 
 export interface ShippingAddress {
   street: string;
@@ -29,15 +31,15 @@ export interface CheckoutFormSubmission {
     email?: string;
   };
   shippingAddress: ShippingAddress;
-  // 🟢 تمرير [0] للـ items فقط ليأخذ RawOrderItemInput[]
-  items: Parameters<typeof OrderService.prepareOrderItems>[0]; 
+  items: RawOrderItemInput[];
   shippingCost: number;
   discountAmount?: number;
   taxAmount?: number;
   currency?: string;
   paymentMethod?: string;
   shippingMethod?: string;
-  idempotencyKey?: string;
+  /** ⚠️ إلزامي: لازم ييجي من الـ Client عشان الـ Idempotency يشتغل صح */
+  idempotencyKey: string;
 }
 
 export interface CheckoutActionResult {
@@ -45,103 +47,130 @@ export interface CheckoutActionResult {
   error?: string;
   orderId?: string;
   orderNumber?: string;
+  redirectTo?: string;
 }
+
+// ============================================================
+// 🎯 Main Action
+// ============================================================
 
 export async function handleCheckoutSubmit(
   storeSlug: string,
   storeId: string,
   payload: CheckoutFormSubmission
 ): Promise<CheckoutActionResult> {
-  let redirectUrlTarget: string | null = null;
+  // ✅ Validation مبكر قبل أي عملية
+  if (!payload.idempotencyKey || payload.idempotencyKey.trim() === '') {
+    return {
+      success: false,
+      error: 'معرف العملية مفقود، يرجى تحديث الصفحة والمحاولة مرة أخرى.',
+    };
+  }
+
+  if (!payload.items || payload.items.length === 0) {
+    return { success: false, error: 'سلة الشراء فارغة' };
+  }
 
   try {
-    // 🛡️ 2. تطبيق الـ Rate Limit قبل تنفيذ أي عمليات هامة أو الاتصال بالـ DB
+    // ═══════════════════════════════════════════════════════════
+    // 🛡️ 1. Rate Limiting
+    // ═══════════════════════════════════════════════════════════
     await enforceRateLimit({
       action: 'checkout',
       storeId: storeId,
     });
 
-    // 🟢 استخراج env مباشرة ونظيف بدون Type Casting
-    const { env } = await getCloudflareContext();
+    // ✅ جلب الـ Context كاملاً للاستفادة من waitUntil
+    const cfContext = await getCloudflareContext();
+    const env = cfContext.env;
+    const waitUntil = cfContext.ctx?.waitUntil?.bind(cfContext.ctx);
 
-    // 👤 3. جلب أو إنشاء العميل
+    // ═══════════════════════════════════════════════════════════
+    // 👤 2. جلب أو إنشاء العميل
+    // ═══════════════════════════════════════════════════════════
     const customer = await CustomerService.findOrCreateCustomer(env, {
       name: payload.customer.name,
       phone: payload.customer.phone,
       email: payload.customer.email,
     });
 
-    // 📦 4. تحضير العناصر وحساب الإجماليات
-    const preparedItems = OrderService.prepareOrderItems(payload.items, storeId);
+    // ═══════════════════════════════════════════════════════════
+    // 🧮 3. حساب الإجماليات (بـ Cents للحماية من أخطاء الفاصلة)
+    // ═══════════════════════════════════════════════════════════
+    const subtotalCents = payload.items.reduce((acc, item) => {
+      const price = typeof item.price === 'number' ? item.price : Number(item.price) || 0;
+      const qty = typeof item.orderedQty === 'number' ? item.orderedQty : Number(item.orderedQty) || 0;
+      return acc + Math.round(price * 100 * qty);
+    }, 0);
 
-    if (!preparedItems || preparedItems.length === 0) {
-      return { success: false, error: 'سلة الشراء فارغة' };
-    }
+    const shippingCostCents = Math.round((payload.shippingCost || 0) * 100);
+    const taxAmountCents = Math.round((payload.taxAmount || 0) * 100);
+    const discountCents = Math.round((payload.discountAmount || 0) * 100);
 
-    const subtotalNumber = preparedItems.reduce(
-      (acc, item) => acc + (typeof item.lineTotal === 'number' ? item.lineTotal : Number(item.lineTotal) || 0),
-      0
+    const totalCents = Math.max(
+      0,
+      subtotalCents + shippingCostCents + taxAmountCents - Math.min(discountCents, subtotalCents)
     );
 
-    const totals = OrderService.calculateOrderTotals({
-      subtotal: subtotalNumber,
-      shippingCost: payload.shippingCost,
-      taxAmount: payload.taxAmount,
-      discount: payload.discountAmount,
-    });
+    // ═══════════════════════════════════════════════════════════
+    // 🔑 4. Idempotency Key
+    // ═══════════════════════════════════════════════════════════
+    const idempotencyKey = payload.idempotencyKey;
 
-    const orderId = crypto.randomUUID();
-    const orderNumber = OrderService.generateOrderNumber();
-    const idempotencyKey = payload.idempotencyKey || `chk_${orderId}`;
+    // ═══════════════════════════════════════════════════════════
+    // 📦 5. بناء OrderInput
+    // ═══════════════════════════════════════════════════════════
+    const orderInput: OrderInput = {
+      id: crypto.randomUUID(),
+      storeId: storeId,
+      customerId: customer.id,
+      orderNumber: `ORD-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`,
+      total: totalCents,
+      currency: payload.currency || 'EGP',
+      status: 'pending',
+      paymentStatus: 'pending',
+      paymentMethod: payload.paymentMethod || 'cod',
+      shippingMethod: payload.shippingMethod || 'standard',
+      shippingCost: shippingCostCents,
+      taxAmount: taxAmountCents,
+      discount: Math.min(discountCents, subtotalCents),
+      shippingAddress: payload.shippingAddress,
+      customerName: payload.customer.name,
+      customerPhone: payload.customer.phone,
+      customerEmail: payload.customer.email,
+      rawItems: payload.items,
+    };
 
-    // 🔄 5. التنفيذ عبر الأوركستريتر (تمرير الـ 6 معلمات بالشكل والترتيب الصحيح)
-    const result = await processCheckout(
-      env,                  // 1️⃣ env
-      idempotencyKey,       // 2️⃣ idempotencyKey
-      storeId,              // 3️⃣ trustedStoreId
-      customer.id,          // 4️⃣ trustedCustomerId
-      {                     // 5️⃣ orderInput
-        id: orderId,
-        orderNumber,
-        shippingAddress: payload.shippingAddress,
-        customerName: payload.customer.name,
-        customerPhone: payload.customer.phone,
-        customerEmail: payload.customer.email,
-        currency: payload.currency || 'EGP',
-        shippingCost: totals.shippingCost,
-        taxAmount: totals.taxAmount,
-        discount: totals.discount,
-        paymentMethod: payload.paymentMethod || 'cod',
-        shippingMethod: payload.shippingMethod || 'standard',
-      },
-      preparedItems         // 6️⃣ itemsInput
-    );
+    // ═══════════════════════════════════════════════════════════
+    // 🚀 6. تنفيذ الطلب (مع Idempotency + Atomic Reservation + waitUntil)
+    // ═══════════════════════════════════════════════════════════
+    const createdOrder = await processOrder(env, orderInput, idempotencyKey, waitUntil);
 
-    if (!result.success) {
+    if (!createdOrder) {
       return {
         success: false,
-        error: result.message || 'فشل في إتمام الطلب، يرجى المحاولة لاحقاً',
+        error: 'فشل في إتمام الطلب، يرجى المحاولة لاحقاً',
       };
     }
 
-    // 🎯 توجيه بعد نجاح العملية
+    // ═══════════════════════════════════════════════════════════
+    // 🎯 7. إرجاع URL للـ redirect
+    // ═══════════════════════════════════════════════════════════
     const decodedSlug = decodeURIComponent(storeSlug);
-    redirectUrlTarget = `/${decodedSlug}/order-confirmation?orderId=${result.orderId}&orderNumber=${result.orderNumber}`;
+    const redirectUrl = `/${decodedSlug}/order-confirmation?orderId=${createdOrder.id}&orderNumber=${createdOrder.orderNumber}`;
 
+    return {
+      success: true,
+      orderId: createdOrder.id,
+      orderNumber: createdOrder.orderNumber,
+      redirectTo: redirectUrl,
+    };
   } catch (err: unknown) {
-    console.error('Checkout Submission Error:', err);
+    console.error('[Checkout] Submission Error:', err);
 
-    // 🛠️ 6. معالجة موحدة لكل أنواع الأخطاء عبر handleActionError
     return {
       success: false,
       error: handleActionError(err),
     };
   }
-
-  // 🚀 7. التوجيه الخارجي التلقائي خارج الـ try/catch
-  if (redirectUrlTarget) {
-    redirect(redirectUrlTarget);
-  }
-
-  return { success: true };
 }

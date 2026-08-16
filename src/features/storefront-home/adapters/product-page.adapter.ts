@@ -1,4 +1,4 @@
-// src/lib/adapters/product-page.adapter.ts
+// src/features/storefront-home/adapters/product-page.adapter
 
 import type { Store, Product, Category } from '@/types';
 import { adaptProductGrid } from '@/components/shared/ProductGrid/ProductGrid.adapter';

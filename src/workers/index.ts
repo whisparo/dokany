@@ -19,6 +19,7 @@ import { errorsRouter } from './routes/errors';
 import { cartRouter } from './routes/cart';
 import { couponsRouter } from './routes/coupons';
 import { haggleRouter } from './routes/haggle';
+import { snapshotRouter } from './routes/snapshot'; // 📸 تم استيراد راوتر اللقطة الكاش
 
 // 🏛️ الاستيرادات المعتمدة والدقيقة للمشروع
 import { classifyError } from '@/lib/errors/classifier';
@@ -110,12 +111,17 @@ app.use('*', async (c, next) => {
     allowHeaders: [
       'Content-Type',
       'Authorization',
+      'If-None-Match', // 🟢 مطلوب للتحقق من ETag (304 Not Modified)
       'X-Idempotency-Key',
       'X-Cron-Secret',
       'x-internal-secret',
       'x-store-id',
     ],
-    exposeHeaders: ['Content-Length'],
+    exposeHeaders: [
+      'Content-Length',
+      'ETag', // 🟢 إتاحة ETag للعميل
+      'Cache-Tag', // 🟢 إتاحة Cache-Tag لكاش كلوفلاير
+    ],
     maxAge: 86400,
   });
 
@@ -251,6 +257,7 @@ app.route('/api', errorsRouter);
 app.route('/api', cartRouter);
 app.route('/api', couponsRouter);
 app.route('/api', haggleRouter);
+app.route('/api', snapshotRouter); // 📸 إضافة مسارات Snapshot & Light Version Check
 
 // 🎯 Pass-through Fallback: تمرير باقي طلبات واجهة المستخدم إلى OpenNext
 app.all('*', async (c) => {

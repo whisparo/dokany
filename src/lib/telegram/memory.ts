@@ -3,7 +3,7 @@
 import { eq, and, desc, isNull } from 'drizzle-orm';
 import type { DbInstance } from '@/lib/db';
 import { chatSessions } from '@/lib/db/schema/chat-sessions';
-import type { SessionData, OnboardingSession } from './types';
+import type { OnboardingSession } from './types';
 
 type ChatSessionState = typeof chatSessions.$inferSelect['state'];
 type ChatSessionTimestamps = typeof chatSessions.$inferSelect['timestamps'];
@@ -45,7 +45,6 @@ export async function getSession(
 
     const rawState = record.state as Record<string, unknown>;
 
-    // 🎯 استخراج جميع الحقول بما فيها البريد الإلكتروني (email)
     const sessionState: OnboardingSession = {
       step: (rawState.step as OnboardingSession['step']) || 'phone',
       phone: rawState.phone as string | undefined,
@@ -63,7 +62,7 @@ export async function getSession(
 }
 
 /**
- * دالة loadSession مع الاحتفاظ بالـ Timestamps لضمان التوافق إن تم استخدامها مستقبلاً
+ * loadSession للاحتفاظ بالـ Timestamps إن تم استخدامها
  */
 export async function loadSession(
   db: DbInstance,
@@ -79,7 +78,7 @@ export async function loadSession(
 }
 
 /**
- * حفظ أو تحديث الجلسة (Upsert)
+ * حفظ أو تحديث الجلسة (Upsert) - كود نظيف وبدون Type Hacks
  */
 export async function saveSession(
   db: DbInstance,
@@ -98,6 +97,9 @@ export async function saveSession(
       lastMessageAt: timestamps?.lastActivity ? timestamps.lastActivity.getTime() : now.getTime(),
     };
 
+    const lastActivity = timestamps?.lastActivity ?? now;
+    const createdAt = timestamps?.createdAt ?? now;
+
     await db
       .insert(chatSessions)
       .values({
@@ -106,16 +108,17 @@ export async function saveSession(
         externalId,
         state: dbState,
         timestamps: dbTimestamps,
-        lastActivityAt: timestamps?.lastActivity || now,
-        createdAt: timestamps?.createdAt || now,
+        lastActivityAt: lastActivity,
+        createdAt: createdAt,
         updatedAt: now,
+        deletedAt: null,
       })
       .onConflictDoUpdate({
         target: [chatSessions.platform, chatSessions.externalId],
         set: {
           state: dbState,
           timestamps: dbTimestamps,
-          lastActivityAt: timestamps?.lastActivity || now,
+          lastActivityAt: lastActivity,
           updatedAt: now,
           deletedAt: null,
         },
@@ -149,11 +152,13 @@ export async function deleteSession(
   externalId: string
 ): Promise<void> {
   try {
+    const now = new Date();
+
     await db
       .update(chatSessions)
       .set({
-        deletedAt: new Date(),
-        updatedAt: new Date(),
+        deletedAt: now,
+        updatedAt: now,
       })
       .where(
         and(

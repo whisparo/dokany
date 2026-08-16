@@ -27,16 +27,10 @@ export interface CreateStoreOutput {
   slug: string;
 }
 
-/**
- * 🔗 توليد رابط الدخول المباشر للوحة التحكم
- */
 async function generateLoginLink(userId: string, storeId: string, baseUrl: string): Promise<string> {
   return `${baseUrl}/ar/dashboard?user=${userId}&store=${storeId}`;
 }
 
-/**
- * 🎛️ تثبيت زر "لوحة التحكم" الثابت بأسفل شات تليجرام (Persistent WebApp Menu Button)
- */
 async function attachTelegramMenuButton(
   telegramUserId: string | number,
   botToken: string,
@@ -44,7 +38,7 @@ async function attachTelegramMenuButton(
 ): Promise<void> {
   try {
     const telegramApiUrl = `https://api.telegram.org/bot${botToken}/setChatMenuButton`;
-    const response = await fetch(telegramApiUrl, {
+    await fetch(telegramApiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -56,21 +50,11 @@ async function attachTelegramMenuButton(
         }
       })
     });
-
-    const resData = (await response.json()) as { ok?: boolean; description?: string };
-    if (!resData.ok) {
-      console.warn(`⚠️ [TelegramMenuButton] Non-fatal API response warning: ${resData.description}`);
-    } else {
-      console.log(`✅ [TelegramMenuButton] Persistent dashboard button linked for user: ${telegramUserId}`);
-    }
   } catch (error) {
-    console.error('❌ [TelegramMenuButton] Background execution error:', error);
+    console.error('❌ [TelegramMenuButton] Execution error:', error);
   }
 }
 
-/**
- * 🏪 إنشاء متجر جديد متوافق تماماً مع قيود SQLite و Drizzle Schemas ودعم كامل للعربي
- */
 export async function createStore(
   d1Database: D1Database, 
   data: CreateStoreInput,
@@ -81,24 +65,26 @@ export async function createStore(
 
   const baseUrl = env?.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || 'https://www.dokany.workers.dev';
 
-  // 1️⃣ البحث الذكي والآمن عن المستخدم الحالي
+  // 1️⃣ البحث عن المستخدم أو إنشاؤه
   const searchConditions = [];
   if (data.telegramUserId) {
     searchConditions.push(eq(users.telegramId, String(data.telegramUserId)));
     searchConditions.push(eq(users.id, String(data.telegramUserId)));
   }
-  searchConditions.push(eq(users.phoneNumber, data.phone));
+  if (data.phone) {
+    searchConditions.push(eq(users.phoneNumber, data.phone));
+  }
 
-  const existingUser = await db
-    .select()
-    .from(users)
-    .where(or(...searchConditions))
-    .get();
+  const existingUser = searchConditions.length > 0 
+    ? await db.select().from(users).where(or(...searchConditions)).get()
+    : null;
+
+  const now = new Date();
 
   if (existingUser) {
     userId = existingUser.id;
     const updatePayload: Record<string, any> = {};
-    
+
     if (!existingUser.telegramId && data.telegramUserId) {
       updatePayload.telegramId = String(data.telegramUserId);
     }
@@ -106,50 +92,54 @@ export async function createStore(
       updatePayload.merchantId = existingUser.id;
     }
     if (!existingUser.name || existingUser.name.trim() === '') {
-      updatePayload.name = data.name;
+      updatePayload.name = data.name || 'تاجر جديد';
     }
 
     if (Object.keys(updatePayload).length > 0) {
       try {
         await db
           .update(users)
-          .set({ ...updatePayload, updatedAt: new Date() })
+          .set({ 
+            ...updatePayload, 
+            updatedAt: now
+          })
           .where(eq(users.id, existingUser.id));
-        console.log(`✅ [createStore] Updated user record: ${existingUser.id}`);
       } catch (updateError) {
         console.error(`❌ [createStore] Failed updating user ${existingUser.id}:`, updateError);
       }
     }
   } else {
     try {
-      const generatedId = crypto.randomUUID(); 
-      
+      const generatedId = data.telegramUserId ? String(data.telegramUserId) : crypto.randomUUID(); 
+
       const insertedUsers = await db
         .insert(users)
         .values({
           id: generatedId,
-          name: data.name,
+          name: data.name || 'تاجر جديد',
           phoneNumber: data.phone,
-          authMethod: 'phone',
+          authMethod: 'telegram',
           status: 'active', 
+          role: 'merchant',
           isVerified: true,
           emailVerified: false, 
           telegramId: data.telegramUserId ? String(data.telegramUserId) : null,
           merchantId: generatedId,
+          createdAt: now,
+          updatedAt: now,
         })
         .returning();
-      
+
       const newUser = insertedUsers[0];
       if (!newUser) throw new Error('BIZ_500: Failed to capture newly created user identity');
       userId = newUser.id;
-      console.log(`✅ [createStore] Created brand new user: ${userId}`);
     } catch (insertError) {
       console.error('❌ [createStore] Failed creating new user:', insertError);
       throw classifyError(insertError);
     }
   }
 
-  // 2️⃣ تنظيف وتجهيز الـ Slug واسم المتجر
+  // 2️⃣ تجهيز الـ Slug واسم المتجر
   let cleanStoreName = data.storeName.trim();
   const storePrefixRegex = /^(متجر|shop|store)\s+/i;
   if (storePrefixRegex.test(cleanStoreName)) {
@@ -166,10 +156,6 @@ export async function createStore(
     slugBase = `store-${crypto.randomUUID().slice(0, 5)}`;
   }
 
-  if (slugBase.startsWith('-')) {
-    slugBase = 's' + slugBase;
-  }
-
   const decodedSlug = decodeURIComponent(slugBase);
 
   const existingStore = await db
@@ -182,62 +168,49 @@ export async function createStore(
     ? `${decodedSlug}-${crypto.randomUUID().slice(0, 4)}`
     : decodedSlug;
 
-  // 3️⃣ تخصيص حساب Cloudinary
+  // 3️⃣ تخصيص Cloudinary
   const allocatedAccountIndex = await allocateCloudinaryAccount(d1Database);
 
-  // 4️⃣ Theme Defaults (كائن جافاسكريبت عادي وليس String)
-  const defaultTheme = {
-    colors: {
-      primary: '#2563eb',
-      secondary: '#7c3aed',
-      background: '#ffffff',
-      text: '#111827',
-    },
-    radii: {
-      card: '0.75rem',
-      button: '0.5rem',
-      input: '0.5rem',
-    },
-    fontFamily: 'Cairo, sans-serif',
-  };
+  // 4️⃣ الإدراج المتوافق المباشر مع D1 Schema
+  const storeId = crypto.randomUUID();
 
-  const now = new Date();
-
-  // 5️⃣ إنشاء المتجر
-  const storeToInsert: typeof stores.$inferInsert = {
-    id: crypto.randomUUID(), 
-    ownerId: userId,
-    name: cleanStoreName,
-    slug: slug,
-    currency: 'EGP',
-    country: 'EG',
-    paymentGateway: 'cash', 
-    templateVersion: 'v1',
-    cloudinaryAccountIndex: allocatedAccountIndex, 
-    theme: defaultTheme, // Drizzle يتكفل بعمل الـ Serialization لكونه mode: 'json'
-    isActive: true,
-    isVerified: false,
-    isFeatured: false,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  const insertedStores = await db
-    .insert(stores)
-    .values(storeToInsert)
-    .returning();
-
-  const newStore = insertedStores[0];
-  if (!newStore) {
-    throw classifyError(
-      new Error('BIZ_500: Failed to create and verify new store setup')
-    );
+  try {
+    await db.insert(stores).values({
+      id: storeId,
+      ownerId: userId,
+      name: cleanStoreName,
+      slug: slug,
+      phone: data.phone || null,
+      country: 'EG',
+      currency: 'EGP',
+      paymentGateway: 'cash',
+      snapshotVersion: 1,
+      settings: JSON.stringify({
+        allowGuestCheckout: true,
+        enableReviews: true,
+        autoApproveOrders: true,
+      }) as any,
+      theme: JSON.stringify({
+        primaryColor: '#2563eb',
+        secondaryColor: '#7c3aed',
+        fontFamily: 'Cairo, sans-serif',
+      }) as any,
+      templateVersion: 'v1',
+      cloudinaryAccountIndex: allocatedAccountIndex,
+      isActive: true,
+      isVerified: false,
+      isFeatured: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+  } catch (storeInsertErr) {
+    console.error('❌ [createStore] Store insertion failed:', storeInsertErr);
+    throw classifyError(storeInsertErr);
   }
 
   console.log(`✅ [createStore] Store successfully deployed with slug: ${slug}`);
 
-  // 6️⃣ إعداد الروابط واستدعاء Menu Button بشكل خلفي
-  const dashboardLink = await generateLoginLink(userId, newStore.id, baseUrl);
+  const dashboardLink = await generateLoginLink(userId, storeId, baseUrl);
 
   if (data.telegramUserId && env?.TELEGRAM_BOT_TOKEN) {
     attachTelegramMenuButton(data.telegramUserId, env.TELEGRAM_BOT_TOKEN, dashboardLink);
@@ -246,7 +219,7 @@ export async function createStore(
   return {
     url: `${baseUrl}/${slug}`,
     dashboardLink,
-    storeId: newStore.id,
+    storeId,
     slug,
   };
 }

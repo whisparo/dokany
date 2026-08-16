@@ -14,7 +14,7 @@
   "components\\shared\\ProductCard\\ProductCard.tsx -> @/features/storefront-home/components/AddToCartButton": {
     "id": 2604,
     "files": [
-      "static/chunks/604.59721ec5ebb54c68.js"
+      "static/chunks/604.8c84271814bf1841.js"
     ]
   },
   "features\\storefront-home\\components\\CartDrawerWrapper.tsx -> ./ClientCartDrawer": {
@@ -28,6 +28,14 @@
     "files": [
       "static/chunks/239-d33310ddfa6356f4.js",
       "static/chunks/146.849c653b164f1f92.js"
+    ]
+  },
+  "features\\storefront-home\\components\\StorePageClient.tsx -> @/components/shared/ProductGrid": {
+    "id": 3260,
+    "files": [
+      "static/chunks/384.dca4d9e50fd95fe2.js",
+      "static/chunks/615-069ea1f17e94fe84.js",
+      "static/chunks/260.249c2576d74d3792.js"
     ]
   }
 }

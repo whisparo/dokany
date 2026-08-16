@@ -8,7 +8,6 @@ import Button from '@/components/shared/Button';
 import { getProductGridTheme } from './ProductGrid.theme';
 import type { ProductGridAdapterResult } from './ProductGrid.adapter';
 import { cn } from '@/lib/utils';
-import { LocalReloadButton } from './LocalReloadButton'; // ✅ استورد الزر
 
 export interface ProductGridProps {
   data: ProductGridAdapterResult;
@@ -63,7 +62,6 @@ export function ProductGrid({
               </Link>
             </Button>
           )}
-          <LocalReloadButton />
         </div>
       </div>
     );

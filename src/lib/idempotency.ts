@@ -1,49 +1,114 @@
 // src/lib/idempotency.ts
 
 import { getDb } from '@/lib/db';
+import type { Env } from '@/lib/env';
 import { idempotency as idempotencyTable } from '@/lib/db/schema/idempotency';
 import { eq, and, lte } from 'drizzle-orm';
 import { SystemError } from '@/lib/errors/types';
-import type { D1Database } from '@cloudflare/workers-types';
+import { Redis } from '@upstash/redis';
 
-const DEFAULT_LOCK_TTL_MS = 5 * 60 * 1000; // 300 ثانية (5 دقائق)
+const DEFAULT_LOCK_TTL_MS = 30 * 1000; // 30 ثانية
+const HEARTBEAT_INTERVAL_MS = 10 * 1000; // تجديد القفل كل 10 ثواني
+
+// ============================================================
+// 📜 Lua Scripts (Atomic Redis Operations)
+// ============================================================
+
+/**
+ * Atomic Compare-and-Delete
+ * بيحذف القفل فقط لو الـ token يطابق المالك الحالي
+ * بيمنع Lock Theft لو الـ TTL خلص قبل الحذف
+ */
+const LUA_RELEASE_LOCK = `
+local key = KEYS[1]
+local token = ARGV[1]
+local current = redis.call('GET', key)
+if current == token then
+    return redis.call('DEL', key)
+else
+    return 0
+end
+`;
+
+/**
+ * Atomic Renew (TTL Extension)
+ * بيحدث TTL فقط لو الـ token يطابق المالك الحالي
+ * يُستخدم في الـ Heartbeat للعمليات الطويلة
+ */
+const LUA_RENEW_LOCK = `
+local key = KEYS[1]
+local token = ARGV[1]
+local ttl = tonumber(ARGV[2])
+local current = redis.call('GET', key)
+if current == token then
+    return redis.call('EXPIRE', key, ttl)
+else
+    return 0
+end
+`;
+
+// ============================================================
+// 🔌 Redis Client (Singleton per Isolate)
+// ============================================================
+let redisClient: Redis | null = null;
+
+function getRedisClient(env: {
+  UPSTASH_REDIS_REST_URL?: string;
+  UPSTASH_REDIS_REST_TOKEN?: string;
+}): Redis | null {
+  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
+    return null;
+  }
+  if (!redisClient) {
+    redisClient = new Redis({
+      url: env.UPSTASH_REDIS_REST_URL,
+      token: env.UPSTASH_REDIS_REST_TOKEN,
+    });
+  }
+  return redisClient;
+}
+
+// ============================================================
+// 🔒 Idempotency Engine
+// ============================================================
 
 interface IdempotencyOptions {
   /** مدة القفل بالمللي ثانية (افتراضي: 30 ثانية) */
   lockTTLMs?: number;
+  /** تفعيل Heartbeat للعمليات الطويلة (افتراضي: true) */
+  enableHeartbeat?: boolean;
 }
 
 export const idempotency = {
   async execute<T>(
-    env: { DB: D1Database; UPSTASH_REDIS_REST_URL?: string; UPSTASH_REDIS_REST_TOKEN?: string },
+    env: Env,
     key: string,
     fn: () => Promise<T>,
     options: IdempotencyOptions = {}
   ): Promise<T> {
-    const { lockTTLMs = DEFAULT_LOCK_TTL_MS } = options;
-    const db = getDb(env as any);
+    const {
+      lockTTLMs = DEFAULT_LOCK_TTL_MS,
+      enableHeartbeat = true,
+    } = options;
+
+    const db = getDb(env);
     const now = new Date();
     const lockExpiry = new Date(now.getTime() + lockTTLMs);
-    
-    // معرف فريد للعملية لمنع Lock Theft في Redis
     const lockToken = crypto.randomUUID();
 
-    // 🔒 1. محاولة القفل عبر Redis
+    // ═══════════════════════════════════════════════════════════
+    // 1️⃣ محاولة القفل عبر Redis
+    // ═══════════════════════════════════════════════════════════
     let redisLockAcquired = false;
-    if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
+    const redis = getRedisClient(env);
+
+    if (redis) {
       try {
-        const { Redis } = await import('@upstash/redis');
-        const redis = new Redis({
-          url: env.UPSTASH_REDIS_REST_URL,
-          token: env.UPSTASH_REDIS_REST_TOKEN,
-        });
-        
-        // يخزن token فريد بدلاً من نص ثابت 'pending'
         const result = await redis.set(`lock:idempotency:${key}`, lockToken, {
           nx: true,
           ex: Math.ceil(lockTTLMs / 1000),
         });
-        
+
         redisLockAcquired = !!result;
         if (!redisLockAcquired) {
           throw new SystemError({
@@ -58,13 +123,41 @@ export const idempotency = {
         }
       } catch (redisError) {
         if (redisError instanceof SystemError) throw redisError;
-        console.warn('⚠️ Redis lock failed, falling back to D1:', redisError);
+        console.warn('⚠️ Redis lock failed, falling back to D1 only:', redisError);
         redisLockAcquired = false;
       }
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // 🫀 Heartbeat Setup (للعمليات الطويلة)
+    // ═══════════════════════════════════════════════════════════
+    let heartbeatInterval: NodeJS.Timeout | null = null;
+    let isExecuting = true; // flag لإيقاف الـ heartbeat
+
+    if (redisLockAcquired && redis && enableHeartbeat) {
+      heartbeatInterval = setInterval(async () => {
+        if (!isExecuting) {
+          if (heartbeatInterval) clearInterval(heartbeatInterval);
+          return;
+        }
+
+        try {
+          // ✅ Atomic renew باستخدام Lua Script
+          await redis.eval(
+            LUA_RENEW_LOCK,
+            [`lock:idempotency:${key}`],
+            [lockToken, Math.ceil(lockTTLMs / 1000)]
+          );
+        } catch (error) {
+          console.warn(`⚠️ Heartbeat failed for key ${key}:`, error);
+        }
+      }, HEARTBEAT_INTERVAL_MS);
+    }
+
     try {
+      // ═══════════════════════════════════════════════════════════
       // 2️⃣ محاولة الإدراج الذرية في D1
+      // ═══════════════════════════════════════════════════════════
       const insertResult = await db
         .insert(idempotencyTable)
         .values({
@@ -76,7 +169,9 @@ export const idempotency = {
         .onConflictDoNothing()
         .returning({ key: idempotencyTable.key });
 
+      // ═══════════════════════════════════════════════════════════
       // 3️⃣ التعامل مع حالة وجود السجل مسبقاً (Conflict)
+      // ═══════════════════════════════════════════════════════════
       if (insertResult.length === 0) {
         const [record] = await db
           .select()
@@ -100,24 +195,33 @@ export const idempotency = {
         if (record.status === 'completed') {
           if (record.result) {
             try {
-              return JSON.parse(record.result) as T;
+              const parsed = JSON.parse(record.result) as T;
+              // ✅ تأكيد نجاح الـ parse قبل الإرجاع
+              if (parsed !== null && parsed !== undefined) {
+                return parsed;
+              }
             } catch {
-              console.warn(`⚠️ Invalid JSON in idempotency result for key ${key}`);
+              // ⚠️ JSON فاسد - نعيد التنفيذ بدلاً من رمي error
+              console.warn(`⚠️ Invalid JSON in idempotency result for key ${key}, will re-execute`);
+              // نتابع للـ takeover (زي الـ failed)
             }
+          } else {
+            // نتيجة فاضية (null/undefined صحيحة)
+            throw new SystemError({
+              code: 'IDEM_409',
+              userMessage: 'تم تنفيذ هذا الطلب بنجاح مسبقاً.',
+              category: 'business',
+              severity: 'info',
+              retryable: false,
+              shouldAlert: false,
+              technicalMessage: `Completed result exists for key: ${key}`,
+            });
           }
-          throw new SystemError({
-            code: 'IDEM_409',
-            userMessage: 'تم تنفيذ هذا الطلب بنجاح مسبقاً.',
-            category: 'business',
-            severity: 'info',
-            retryable: false,
-            shouldAlert: false,
-            technicalMessage: `Completed result exists for key: ${key}`,
-          });
         }
 
-        // 🟠 3.2 القفل منتهي الصلاحية أو العملية سقطت سابقاً (Expired / Failed Takeover)
-        const isExpired = record.status === 'pending' && (record.expiresAt?.getTime() ?? 0) <= now.getTime();
+        // 🟠 3.2 القفل منتهي الصلاحية أو العملية سقطت (Expired / Failed Takeover)
+        const recordExpiry = record.expiresAt ? new Date(record.expiresAt) : new Date(0);
+        const isExpired = record.status === 'pending' && recordExpiry.getTime() <= now.getTime();
         const isFailed = record.status === 'failed';
 
         if (isExpired || isFailed) {
@@ -139,7 +243,7 @@ export const idempotency = {
             )
             .returning({ key: idempotencyTable.key });
 
-          // 🛑 إذا فشل التنافس على استعادة القفل، ارمِ الخطأ وتوقف فوراً!
+          // 🛑 فشل التنافس على استعادة القفل
           if (updateResult.length === 0) {
             throw new SystemError({
               code: 'IDEM_409',
@@ -165,10 +269,14 @@ export const idempotency = {
         }
       }
 
+      // ═══════════════════════════════════════════════════════════
       // 4️⃣ تنفيذ المنطق التجاري (Business Logic Execution)
+      // ═══════════════════════════════════════════════════════════
       const result = await fn();
 
+      // ═══════════════════════════════════════════════════════════
       // 5️⃣ حفظ النتيجة وتعليم العملية كـ Completed
+      // ═══════════════════════════════════════════════════════════
       await db
         .update(idempotencyTable)
         .set({
@@ -178,16 +286,17 @@ export const idempotency = {
         })
         .where(eq(idempotencyTable.key, key));
 
-      // 🔓 تحرير آمن لقفل Redis (Safe Lock Release)
-      if (redisLockAcquired) {
-        await releaseRedisLock(env, key, lockToken);
+      // 🔓 تحرير آمن لقفل Redis (Atomic Release via Lua Script)
+      if (redisLockAcquired && redis) {
+        await releaseRedisLockAtomic(redis, key, lockToken);
       }
 
       return result;
 
     } catch (error) {
       // 🛑 حماية: عدم تعديل حالة D1 إذا كان الخطأ هو رفض التكرار (IDEM_409)
-      const isConcurrencyConflict = error instanceof SystemError && error.code === 'IDEM_409';
+      const isConcurrencyConflict =
+        error instanceof SystemError && error.code === 'IDEM_409';
 
       if (!isConcurrencyConflict) {
         try {
@@ -205,9 +314,9 @@ export const idempotency = {
         }
       }
 
-      // 🔓 تحرير قفل Redis عند الفشل
-      if (redisLockAcquired) {
-        await releaseRedisLock(env, key, lockToken);
+      // 🔓 تحرير قفل Redis عند الفشل (Atomic Release)
+      if (redisLockAcquired && redis) {
+        await releaseRedisLockAtomic(redis, key, lockToken);
       }
 
       if (error instanceof SystemError && error.code.startsWith('IDEM_')) {
@@ -221,33 +330,53 @@ export const idempotency = {
         severity: 'critical',
         retryable: true,
         shouldAlert: true,
-        technicalMessage: error instanceof Error ? error.message : 'Unknown idempotency execution error',
+        technicalMessage:
+          error instanceof Error ? error.message : 'Unknown idempotency execution error',
         cause: error,
         metadata: { key },
       });
+    } finally {
+      // 🛑 إيقاف الـ Heartbeat
+      isExecuting = false;
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+      }
     }
   },
 };
 
-// 🛠️ دالة تحرير القفل الآمنة لمنع Lock Theft
-async function releaseRedisLock(
-  env: { UPSTASH_REDIS_REST_URL?: string; UPSTASH_REDIS_REST_TOKEN?: string },
+// ============================================================
+// 🔓 Atomic Redis Lock Release (Lua Script)
+// ============================================================
+
+/**
+ * تحرير القفل بشكل ذري (Compare-and-Delete)
+ * 
+ * يحمي من Lock Theft:
+ * - لو الـ TTL خلص و worker تاني أخذ القفل
+ * - الـ token مش هيطابق، ومش هنحذف القفل بتاعه
+ */
+async function releaseRedisLockAtomic(
+  redis: Redis,
   key: string,
   lockToken: string
-) {
+): Promise<void> {
   try {
-    const { Redis } = await import('@upstash/redis');
-    const redis = new Redis({
-      url: env.UPSTASH_REDIS_REST_URL!,
-      token: env.UPSTASH_REDIS_REST_TOKEN!,
-    });
-    
-    // التحقق من أن القفل المملوك هو نفس الـ lockToken قبل الحذف
-    const currentToken = await redis.get<string>(`lock:idempotency:${key}`);
-    if (currentToken === lockToken) {
-      await redis.del(`lock:idempotency:${key}`);
+    const released = await redis.eval(
+      LUA_RELEASE_LOCK,
+      [`lock:idempotency:${key}`],
+      [lockToken]
+    );
+
+    if (released === 1) {
+      // تم التحرير بنجاح
+    } else {
+      // القفل مش ملكنا (TTL خلص و worker تاني أخده) - ده طبيعي
+      console.log(`ℹ️ Lock for key ${key} was not owned (already expired/taken over)`);
     }
   } catch (redisError) {
-    console.warn('⚠️ Failed to release Redis lock:', redisError);
+    // مش نرمي error هنا لأن الـ D1 record هو المصدر الحقيقي للحالة
+    console.warn('⚠️ Failed to release Redis lock (non-critical):', redisError);
   }
 }

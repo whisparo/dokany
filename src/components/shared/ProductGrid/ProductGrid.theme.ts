@@ -18,7 +18,6 @@ interface ThemeProps {
 const columnsMap: Record<number, string> = {
   1: 'grid-cols-1',
   2: 'grid-cols-2',
-  // 🌟 هنا ضبطنا الـ md عشان لما المتصفح يصغر لنص الشاشة يعرض 3 كروت ملمومين بدال ما يفرشوا
   3: 'grid-cols-2 md:grid-cols-3',
   4: 'grid-cols-2 md:grid-cols-3 xl:grid-cols-4',
   5: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5',
@@ -34,55 +33,56 @@ export function getProductGridTheme({
   animated = true,
 }: ThemeProps) {
   return {
-    // ✅ الحاوية الرئيسية (Grid الموزون بالمسطرة)
+    // ✅ الحاوية الرئيسية
     container: cn(
       'grid w-full',
       columnsMap[columns],
-      
-      // مسافات متناسقة مع أبعاد الـ Card الجديدة
       'gap-3.5 sm:gap-6', 
-      
       animated && 'transition-all duration-500 ease-out',
       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
       className
     ),
     
-    // ✅ الـ Empty State (سايح ونظيف مع الصفحة بدون حدود أو مربع أو أنيميشن مزعج)
+    // ✅ الـ Empty State (تم ضبط التباين ليطابق WCAG AA)
     emptyState: {
       container: cn(
         'w-full flex flex-col items-center justify-center',
         'py-16 md:py-24 px-6 text-center'
       ),
-      icon: 'mb-3 text-4xl sm:text-5xl text-slate-300 dark:text-slate-700',
-      // ⚡ تنسيق ممتاز للـ paragraph ليظهر كعنوان بارز
-      title: 'm-0 text-lg sm:text-xl font-bold text-slate-800 dark:text-slate-200 tracking-tight',
+      icon: 'mb-3 text-4xl sm:text-5xl text-slate-400 dark:text-slate-500', // 🎨 رفعت درجة الأيقونة من 300/700
+      title: 'm-0 text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight',
+      
+      // 🎯 التعديل الرئيسي هنا: تغيير slate-400/500 إلى slate-600/300
       description: cn(
-        'mt-2 mb-6 text-slate-400 dark:text-slate-500',
+        'mt-2 mb-6 text-slate-600 dark:text-slate-300',
         'max-w-sm mx-auto text-xs sm:text-sm leading-relaxed'
       ),
       actions: 'flex flex-wrap gap-3 justify-center items-center',
     },
     
-    // ✅ الـ Footer (تم تطهيره وحذف الخطوط القاطعة ليصبح سايح تماماً)
+    // ✅ الـ Footer (تم رفع تباين النص أيضاً)
     footer: {
       container: cn(
         'mt-8 text-center',
-        'text-xs sm:text-sm text-slate-400 dark:text-slate-500'
+        'text-xs sm:text-sm text-slate-600 dark:text-slate-400' // 🎨 تم التعديل من 400/500
       ),
       text: 'font-medium tracking-tight',
     },
     
-    // ✅ الـ Header (عنوان القسم أو المجموعة)
+    // ✅ الـ Header
     header: {
       container: cn(
         'mb-6 flex flex-col sm:flex-row items-start sm:items-end justify-between',
-        'gap-3 pb-4 border-b border-slate-50 dark:border-slate-900/60'
+        'gap-3 pb-4 border-b border-slate-200 dark:border-slate-800' // 🎨 تقوية الحدود قليلاً
       ),
-      title: 'text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight',
-      description: 'mt-1 text-slate-400 dark:text-slate-500 text-xs sm:text-sm',
+      title: 'text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight',
+      
+      // 🎯 رفع تباين وصف الترويسة
+      description: 'mt-1 text-slate-600 dark:text-slate-300 text-xs sm:text-sm',
+      
       viewAllButton: cn(
         'rounded-xl px-4 h-9 flex items-center justify-center text-xs font-semibold',
-        'text-primary-600 dark:text-primary-400 border border-slate-100 dark:border-slate-800 bg-card',
+        'text-primary-700 dark:text-primary-300 border border-slate-200 dark:border-slate-800 bg-card', // 🎨 رفع تباين لون النص والحدود
         'hover:bg-primary-50/50 dark:hover:bg-primary-950/20 hover:border-primary-500/20',
         'transition-all duration-300',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500'

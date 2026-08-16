@@ -16,14 +16,12 @@ import { requireAuth } from '@/workers/middleware/auth';
  * 🛠️ TYPES & ENVS DECLARATIONS
  * ============================================================================ */
 
-// ✅ نوع بيانات المستخدم للـ Context
 export interface UserContext {
   id: string;
   email?: string;
   role?: string;
 }
 
-// ✅ تعريف بيئة Hono شاملة الـ Bindings والـ Variables
 export interface AppEnv {
   Bindings: Env;
   Variables: {
@@ -52,13 +50,14 @@ const shippingAddressSchema = z.object({
 const createOrderItemSchema = z.object({
   productId: z.string().min(1, 'معرف المنتج مطلوب'),
   quantity: z.number().int().positive('الكمية يجب أن تكون أكبر من صفر'),
-  price: z.number().int().nonnegative().optional(),
   options: z.record(z.string(), z.unknown()).optional(),
   variantSku: z.string().optional(),
 });
 
 const createOrderSchema = z.object({
-  customerId: z.string().min(1, 'معرف العميل مطلوب'),
+  // ⚠️ customerId مقبول هنا فقط للـ Frontend compatibility، لكن السيرفر يتجاهله تماماً
+  // customerId الفعلي يُستخرج فقط من الجلسة الموثوقة (user?.id) أو يُنشأ كـ guest UUID
+  customerId: z.string().optional(),
   customerName: z.string().min(1, 'اسم العميل مطلوب'),
   customerPhone: z.string().min(1, 'رقم هاتف العميل مطلوب'),
   customerEmail: z.string().email('البريد الإلكتروني غير صالح').optional().nullable(),
@@ -162,22 +161,26 @@ async function getStoreBySlugOrThrow(
  * 🌐 ROUTER IMPLEMENTATION
  * ============================================================================ */
 
-// ✅ استخدام AppEnv لتحديد الـ Variables والـ Bindings بشكل استثنائي وصحيح
 export const ordersRouter = new Hono<AppEnv>();
 
 // ============================================================
-// 🟢 GET Routes (عرض الطلبات)
+// 🟢 GET Routes (عرض الطلبات - محمية لصاحب المتجر)
 // ============================================================
 
-ordersRouter.get('/store/:slug/orders', (c) =>
+/**
+ * GET /api/store/:slug/orders
+ * 🛡️ SECURITY FIX: إضافة requireAuth وفحص ملكية المتجر للحد من ثغرات التسريب IDOR
+ */
+ordersRouter.get('/store/:slug/orders', requireAuth, (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
+    const user = c.get('user');
     const limit = Math.min(Math.max(Number(c.req.query('limit')) || 20, 1), 100);
     const offset = Math.max(Number(c.req.query('offset')) || 0, 0);
     const status = c.req.query('status');
 
     const db = getDb({ DB: c.env.DB });
-    const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
+    const store = await getStoreBySlugOrThrow(db, slug, c.req.path, user?.id);
 
     const conditions = [
       eq(schema.orders.storeId, store.id),
@@ -216,13 +219,18 @@ ordersRouter.get('/store/:slug/orders', (c) =>
   })
 );
 
-ordersRouter.get('/store/:slug/orders/:id', (c) =>
+/**
+ * GET /api/store/:slug/orders/:id
+ * 🛡️ SECURITY FIX: إضافة requireAuth وفحص ملكية المتجر
+ */
+ordersRouter.get('/store/:slug/orders/:id', requireAuth, (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
     const id = c.req.param('id');
+    const user = c.get('user');
 
     const db = getDb({ DB: c.env.DB });
-    const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
+    const store = await getStoreBySlugOrThrow(db, slug, c.req.path, user?.id);
 
     const order = await db
       .select()
@@ -270,6 +278,7 @@ ordersRouter.post('/store/:slug/orders', (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
     const rawBody = await c.req.json();
+    const user = c.get('user'); // قد يكون undefined (زائر) أو UserContext (عميل مسجل)
 
     const parsed = createOrderSchema.safeParse(rawBody);
     if (!parsed.success) {
@@ -289,6 +298,12 @@ ordersRouter.post('/store/:slug/orders', (c) =>
     const db = getDb({ DB: c.env.DB });
     
     const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
+
+    // 🛡️ SECURITY FIX: customerId يُستخرج فقط من:
+    //   1. الجلسة الموثوقة (user?.id) — للعملاء المسجلين
+    //   2. guest UUID فريد — للزوار
+    // body.customerId يتم تجاهله تماماً لمنع التزوير (never trust client-supplied customerId)
+    const effectiveCustomerId = user?.id ?? `guest_${crypto.randomUUID()}`;
 
     const result = await db.transaction(async (tx) => {
       let subtotalCents = 0;
@@ -333,7 +348,8 @@ ordersRouter.post('/store/:slug/orders', (c) =>
           });
         }
 
-        const unitPriceCents = item.price !== undefined ? item.price : product.price;
+        // 🛡️ SECURITY FIX: السعر يُجلب دائماً من قاعدة البيانات، وليس من بيانات العميل
+        const unitPriceCents = product.price;
         const lineTotalCents = unitPriceCents * item.quantity;
 
         subtotalCents += lineTotalCents;
@@ -365,6 +381,7 @@ ordersRouter.post('/store/:slug/orders', (c) =>
           netAmountCents: lineTotalCents,
         });
 
+        // 🛡️ Atomic stock decrement with race condition protection
         const updatedProducts = await tx
           .update(schema.products)
           .set({ stock: sql`${schema.products.stock} - ${item.quantity}` })
@@ -424,7 +441,7 @@ ordersRouter.post('/store/:slug/orders', (c) =>
         id: orderId,
         orderNumber: generatedOrderNumber,
         storeId: store.id,
-        customerId: body.customerId,
+        customerId: effectiveCustomerId, // 🛡️ الهوية المحمية
         addressId: body.addressId ?? null,
         customerName: body.customerName.trim(),
         customerPhone: body.customerPhone.trim(),
@@ -500,13 +517,12 @@ ordersRouter.post('/store/:slug/orders', (c) =>
 
 /**
  * PUT /api/store/:slug/orders/:id/status
- * ✅ محمي بـ requireAuth + TypeScript Type safe مع user?.id
  */
 ordersRouter.put('/store/:slug/orders/:id/status', requireAuth, (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
     const id = c.req.param('id');
-    const user = c.get('user'); // ✅ TypeScript ينص الآن بوضوح أنه UserContext | undefined
+    const user = c.get('user');
     const rawBody = await c.req.json();
 
     const parsed = updateOrderStatusSchema.safeParse(rawBody);
@@ -608,13 +624,12 @@ ordersRouter.put('/store/:slug/orders/:id/status', requireAuth, (c) =>
 
 /**
  * DELETE /api/store/:slug/orders/:id (Soft Delete)
- * ✅ محمي بـ requireAuth + TypeScript Type safe مع user?.id
  */
 ordersRouter.delete('/store/:slug/orders/:id', requireAuth, (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
     const id = c.req.param('id');
-    const user = c.get('user'); // ✅ تم التعرف عليه بدون مشاكل
+    const user = c.get('user');
 
     const db = getDb({ DB: c.env.DB });
     

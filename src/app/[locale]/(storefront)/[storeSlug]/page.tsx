@@ -1,9 +1,13 @@
 // src/app/[locale]/(storefront)/[storeSlug]/page.tsx
-import { StorefrontOrchestrator } from '@/features/storefront-home/orchestrators/storefront-orchestrator';
-import { Hero } from '@/features/storefront-home/components/Hero/Hero';
-import { ProductGrid } from '@/components/shared/ProductGrid/ProductGrid';
+
+import { notFound } from 'next/navigation';
+import type { Metadata } from 'next';
+import { cache } from 'react';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { Env } from '@/lib/env';
+
+import { getStoreRawData } from '@/features/storefront-home/data/store-data-fetcher';
+import { StorePageClient } from '@/features/storefront-home/components/StorePageClient';
 
 interface StorePageProps {
   params: Promise<{ locale: string; storeSlug: string }>;
@@ -12,31 +16,93 @@ interface StorePageProps {
 
 export const revalidate = 60;
 
+// 🎯 تحسين الأداء: تغليف الجلب بـ React cache لمنع الاتصال المزدوج بـ D1 بنفس الطلب
+const fetchCachedStoreData = cache(
+  async (decodedStoreSlug: string, env: Env, page: number) => {
+    try {
+      return await getStoreRawData(decodedStoreSlug, env, { page, limit: 20 });
+    } catch (error) {
+      console.error('[StorePage Fetch Error]:', error);
+      return null;
+    }
+  }
+);
+
+export async function generateMetadata({ params, searchParams }: StorePageProps): Promise<Metadata> {
+  const { storeSlug } = await params;
+  const sParams = await searchParams;
+  const decodedStoreSlug = decodeURIComponent(storeSlug || '');
+
+  const pageNumber = sParams.page ? parseInt(sParams.page, 10) : 1;
+  const validPage = Number.isNaN(pageNumber) || pageNumber < 1 ? 1 : pageNumber;
+
+  const fallbackTitle = decodedStoreSlug
+    ? decodedStoreSlug.charAt(0).toUpperCase() + decodedStoreSlug.slice(1)
+    : 'متجرنا';
+  const fallbackDescription = `تسوق أحدث المنتجات والعروض المميزة حصرياً من ${fallbackTitle}.`;
+
+  try {
+    const { env } = getCloudflareContext<{ env: Env }>();
+    const storeData = await fetchCachedStoreData(decodedStoreSlug, env, validPage);
+
+    const storeName = storeData?.store?.shopName || storeData?.store?.name || fallbackTitle;
+    const rawDescription = storeData?.store?.description?.trim();
+
+    const storeDescription =
+      rawDescription && rawDescription.length > 5
+        ? rawDescription
+        : `تسوق أحدث المنتجات والعروض المميزة حصرياً من ${storeName}.`;
+
+    const coverImages = storeData?.store?.coverImage ? [storeData.store.coverImage] : [];
+
+    return {
+      title: storeName,
+      description: storeDescription,
+      openGraph: {
+        title: storeName,
+        description: storeDescription,
+        images: coverImages,
+        type: 'website',
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title: storeName,
+        description: storeDescription,
+        images: coverImages,
+      },
+      robots: {
+        index: true,
+        follow: true,
+      },
+    };
+  } catch {
+    return {
+      title: fallbackTitle,
+      description: fallbackDescription,
+    };
+  }
+}
+
 export default async function StorePage({ params, searchParams }: StorePageProps) {
   const { storeSlug } = await params;
   const sParams = await searchParams;
   const decodedStoreSlug = decodeURIComponent(storeSlug);
 
-  // تمرير Env للـ Generic كـ Context صريح ونظيف
-  const { env } = await getCloudflareContext<{ env: Env }>();
+  const pageNumber = sParams.page ? parseInt(sParams.page, 10) : 1;
+  const validPage = Number.isNaN(pageNumber) || pageNumber < 1 ? 1 : pageNumber;
 
-  const payload = await StorefrontOrchestrator.fetchPagePayload(
-    decodedStoreSlug, 
-    env, 
-    sParams
-  );
+  const { env } = await getCloudflareContext<{ env: Env }>();
+  const initialData = await fetchCachedStoreData(decodedStoreSlug, env, validPage);
+
+  if (!initialData || !initialData.store) {
+    notFound();
+  }
 
   return (
-    <div className="w-full flex flex-col">
-      <Hero payload={payload.hero} />
-      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-12 pb-16">
-        <ProductGrid
-          data={payload.productGrid}
-          storeSlug={decodedStoreSlug}
-          title="منتجات المتجر"
-          description="تصفح أحدث المنتجات المضافة"
-        />
-      </div>
-    </div>
+    <StorePageClient
+      storeSlug={decodedStoreSlug}
+      initialData={initialData}
+      page={validPage}
+    />
   );
 }

@@ -3,4 +3,3 @@ export { ProductGrid } from './ProductGrid';
 export { adaptProductGrid } from './ProductGrid.adapter';
 export { getProductGridTheme } from './ProductGrid.theme';
 export type { ProductGridAdapterResult } from './ProductGrid.adapter';
-export { LocalReloadButton } from './LocalReloadButton';

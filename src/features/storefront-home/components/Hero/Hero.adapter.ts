@@ -25,13 +25,6 @@ export interface HeroAdapterOptions {
   showCta?: boolean;
 }
 
-// ⚡ صور افتراضية مضمونة 100% من Unsplash كبديل آمن وسريع في حالة عدم وجود صورة بالمتجر
-const FALLBACK_HERO_IMAGES = [
-  "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=1200&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1200&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1200&auto=format&fit=crop"
-];
-
 function optimizeImageUrl(url: string, width = 1200): string {
   if (!url || typeof url !== 'string') return url;
 
@@ -59,18 +52,16 @@ export function adaptHero(
     showCta = true,
   } = options;
 
-  // 1. تحديد الصورة الرئيسية
-  const mainImage = optimizeImageUrl(
-    store.coverImage || FALLBACK_HERO_IMAGES[0]
-  );
+  // 1. تحديد الصور الخاصة بالمتجر فقط (بدون Unsplash)
+  const hasCover = Boolean(store.coverImage);
+  const mainImage = hasCover ? optimizeImageUrl(store.coverImage!, 1200) : '';
 
-  // 2. تجميع صور الديسكتوب والموبايل مع الضمان ألا تكون المصفوفة فارغة أبداً
   const rawDesktopImages = 
     store.desktopImages && store.desktopImages.length > 0
       ? store.desktopImages
-      : store.coverImage
-      ? [store.coverImage]
-      : FALLBACK_HERO_IMAGES;
+      : hasCover
+      ? [store.coverImage!]
+      : [];
 
   const rawMobileImages = 
     store.mobileImages && store.mobileImages.length > 0

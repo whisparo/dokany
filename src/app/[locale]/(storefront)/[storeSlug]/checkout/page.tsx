@@ -5,7 +5,7 @@ import { Checkout } from '@/features/storefront-checkout/components/Checkout';
 
 import { getCheckoutRawData, getSessionId } from '@/features/storefront-checkout/data/checkout-data-fetcher';
 import { getStoreRawData } from '@/features/storefront-home/data/store-data-fetcher';
-import { handleCheckoutSubmit, type CheckoutFormSubmission } from '@/features/storefront-checkout/actions/checkout.actions';
+import { handleCheckoutSubmit, type CheckoutFormSubmission, type ShippingAddress } from '@/features/storefront-checkout/actions/checkout.actions';
 
 import type { Metadata } from 'next';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
@@ -39,9 +39,9 @@ export default async function CheckoutPage({
   // ✅ فك تشفير الـ slug لدعم الأسماء العربية
   const decodedStoreSlug = decodeURIComponent(storeSlug);
 
-  // ✅ جلب الـ Context بأمان عبر await
+  // ✅ جلب الـ Context ومطابقة التايب صراحة مع Env
   const { env } = await getCloudflareContext();
-  const cfEnv = env as unknown as Env;
+  const cfEnv = env as Env;
 
   if (!cfEnv?.DB) {
     console.error('❌ D1 Database binding not available in CheckoutPage');
@@ -49,7 +49,6 @@ export default async function CheckoutPage({
   }
 
   // 🏪 جلب بيانات المتجر
-  // ✅ تمرير cfEnv كـ argument ثاني + options كـ argument تالت
   const storeRaw = await getStoreRawData(decodedStoreSlug, cfEnv, { page: 1, limit: 1 });
   if (!storeRaw) notFound();
 
@@ -59,23 +58,28 @@ export default async function CheckoutPage({
   // 🛒 جلب بيانات الدفع
   const rawData = await getCheckoutRawData(storeId, cfEnv, undefined, sessionId);
   
-  // ✅ حماية من null
   if (!rawData) {
     notFound();
   }
 
-  // ⚡ دالة التغليف لتكييف الأنواع بين المكون والـ Server Action
+  // ⚡ دالة التغليف لتكييف الأنواع وتوليد الـ idempotencyKey بأمان
   const handleSubmitWrapper = async (
     data: Parameters<NonNullable<React.ComponentProps<typeof Checkout>['onSubmit']>>[0]
   ): Promise<void> => {
+    // ✅ التأكد من استلام idempotencyKey من الفورم أو إنشائه حركياً
+    const idempotencyKey =
+      (data as { idempotencyKey?: string }).idempotencyKey ||
+      `chk_${crypto.randomUUID()}`;
+
     const payload: CheckoutFormSubmission = {
       customer: data.customer,
-      shippingAddress: data.shippingAddress as any,
+      shippingAddress: data.shippingAddress as ShippingAddress,
       items: data.items,
       shippingCost: data.shippingCost,
       paymentMethod: data.paymentMethod,
       shippingMethod: data.shippingMethod,
       currency: data.currency,
+      idempotencyKey: idempotencyKey,
     };
 
     const result = await handleCheckoutSubmit(decodedStoreSlug, storeId, payload);

@@ -1,15 +1,13 @@
 // src/lib/db/schema/users.ts
+// src/lib/db/schema/users.ts
 import { sqliteTable, text, integer, index, uniqueIndex, check, foreignKey } from 'drizzle-orm/sqlite-core';
 import { sql, type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 
-// ============================================
-// 📋 1. جدول المستخدمين الرئيسي (user)
-// ============================================
 export const users = sqliteTable(
-  'user', // ✅ Better Auth expects singular 'user'
+  'user',
   {
     id: text('id').primaryKey(),
-    name: text('name').notNull(),
+    name: text('name').notNull().default(''), // السماح بإنشاء الحساب قبل خطوة الاسم
     email: text('email'),
     emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
     image: text('image'),
@@ -21,21 +19,20 @@ export const users = sqliteTable(
     telegramChatId: text('telegram_chat_id'),
     merchantId: text('merchant_id'),
     preferences: text('preferences').notNull().default(sql`'{}'`),
-    lastLoginAt: integer('last_login_at', { mode: 'timestamp' }),
+    lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }),
     lastIp: text('last_ip'),
-    lastActiveAt: integer('last_active_at', { mode: 'timestamp' }),
+    lastActiveAt: integer('last_active_at', { mode: 'timestamp_ms' }),
     status: text('status').notNull().default('active'),
     isVerified: integer('is_verified', { mode: 'boolean' }).notNull().default(false),
     role: text('role').notNull().default('merchant'),
     authMethod: text('auth_method').notNull().default('telegram'),
-    deletedAt: integer('deleted_at', { mode: 'timestamp' }),
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
     deletedBy: text('deleted_by'),
 
-    // ✅ تم التوحيد: استخدام (unixepoch() * 1000) الأسرع أداءً في D1
-    createdAt: integer('created_at', { mode: 'timestamp' })
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .notNull()
       .default(sql`(unixepoch() * 1000)`),
-    updatedAt: integer('updated_at', { mode: 'timestamp' })
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
       .notNull()
       .default(sql`(unixepoch() * 1000)`),
   },
@@ -63,28 +60,22 @@ export const users = sqliteTable(
     index('user_created_at_idx').on(table.createdAt),
 
     check('chk_identity_exists', sql`(${table.email} IS NOT NULL OR ${table.phoneNumber} IS NOT NULL OR ${table.telegramId} IS NOT NULL)`),
-    check('chk_name_not_empty', sql`${table.name} != ''`),
     check('chk_deleted_by_consistency', sql`(${table.deletedAt} IS NULL OR ${table.deletedBy} IS NOT NULL)`),
-    check('chk_merchant_id_consistency', sql`(${table.role} != 'merchant' OR ${table.merchantId} IS NOT NULL)`),
   ]
 );
 
-// ============================================
-// 📊 2. جدول إحصائيات المستخدم (user_stats)
-// ============================================
 export const userStats = sqliteTable(
   'user_stats',
   {
     id: text('id').primaryKey(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
     loginCount: integer('login_count').notNull().default(0),
-    lastLoginAt: integer('last_login_at', { mode: 'timestamp' }),
+    lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }),
     totalSessions: integer('total_sessions').notNull().default(0),
     lastIp: text('last_ip'),
-    firstLoginAt: integer('first_login_at', { mode: 'timestamp' }),
+    firstLoginAt: integer('first_login_at', { mode: 'timestamp_ms' }),
 
-    // ✅ تم التوحيد
-    updatedAt: integer('updated_at', { mode: 'timestamp' })
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
       .notNull()
       .default(sql`(unixepoch() * 1000)`),
   },
@@ -94,9 +85,6 @@ export const userStats = sqliteTable(
   ]
 );
 
-// ============================================
-// 📝 3. جدول روابط السحر (magic_tokens)
-// ============================================
 export const magicTokens = sqliteTable(
   'magic_tokens',
   {
@@ -104,11 +92,10 @@ export const magicTokens = sqliteTable(
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
     token: text('token').notNull(),
     type: text('type').notNull(),
-    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
-    usedAt: integer('used_at', { mode: 'timestamp' }),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    usedAt: integer('used_at', { mode: 'timestamp_ms' }),
 
-    // ✅ تم التوحيد
-    createdAt: integer('created_at', { mode: 'timestamp' })
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .notNull()
       .default(sql`(unixepoch() * 1000)`),
     ipAddress: text('ip_address'),
@@ -123,9 +110,6 @@ export const magicTokens = sqliteTable(
   ]
 );
 
-// ============================================
-// 🔐 4. جدول تغييرات كلمات المرور (password_history)
-// ============================================
 export const passwordHistory = sqliteTable(
   'password_history',
   {
@@ -133,8 +117,7 @@ export const passwordHistory = sqliteTable(
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
     passwordHash: text('password_hash').notNull(),
 
-    // ✅ تم التوحيد
-    changedAt: integer('changed_at', { mode: 'timestamp' })
+    changedAt: integer('changed_at', { mode: 'timestamp_ms' })
       .notNull()
       .default(sql`(unixepoch() * 1000)`),
     changedBy: text('changed_by'),
@@ -152,9 +135,6 @@ export const passwordHistory = sqliteTable(
   ]
 );
 
-// ============================================
-// 📦 أنواع TypeScript
-// ============================================
 export type User = InferSelectModel<typeof users>;
 export type NewUser = InferInsertModel<typeof users>;
 export type UserStats = InferSelectModel<typeof userStats>;

@@ -15,7 +15,8 @@ export function Footer({ payload, className }: FooterProps) {
   const footerTheme = getFooterTheme({ theme, className });
 
   const currentYear = new Date().getFullYear();
-  const displayCopyright = copyrightText || `جميع الحقوق محفوظة © ${currentYear} ${storeName || ''}`;
+  // ✅ حل التكرار: إذا لم يتوفر نص حقوق مخصص، نعرض حقوق الملكية السليمة دون تكرار اسم المتجر إذا كان معروضاً كـ Brand
+  const displayCopyright = copyrightText || `© ${currentYear} جميع الحقوق محفوظة.`;
 
   return (
     <footer 
@@ -31,7 +32,7 @@ export function Footer({ payload, className }: FooterProps) {
           {storeName && (
             <span 
               className={footerTheme.brandName}
-              style={{ color: theme?.colors?.primary ?? '#D4AF37' }}
+              style={{ color: theme?.colors?.primary ? theme.colors.primary : 'var(--color-foreground)' }}
             >
               {storeName}
             </span>
@@ -61,14 +62,14 @@ export function Footer({ payload, className }: FooterProps) {
             </Link>
           </nav>
 
-          {/* ⚡ توقيع منصة دكاني الراقي */}
+          {/* ⚡ توقيع منصة دكاني */}
           <div className={footerTheme.poweredBy}>
             <span>تم الإنشاء بواسطة</span>
             <a 
               href="https://dokkani.com" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="font-bold text-slate-700 dark:text-slate-300 hover:text-[#D4AF37] dark:hover:text-[#D4AF37] transition-colors"
+              className="font-bold text-slate-700 dark:text-slate-300 hover:text-primary transition-colors"
             >
               دكاني⚡
             </a>

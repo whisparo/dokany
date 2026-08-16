@@ -11,6 +11,7 @@ interface SecureHandlerContext extends HandlerContext {
   env: { 
     DB: D1Database;
     NEXT_PUBLIC_APP_URL?: string;
+    TELEGRAM_BOT_TOKEN?: string; // 👈 إضافة التوكن للـ Interface
   };
 }
 
@@ -82,25 +83,28 @@ export async function handleNicheStep(ctx: SecureHandlerContext): Promise<Handle
   try {
     const merchantName = ctx.session?.name || 'تاجرنا العزيز';
 
-    const result = await createStore(ctx.env.DB, {
-      phone: ctx.session?.phone || '',
-      name: ctx.session?.name || '',
-      storeName: realStoreName,
-      telegramUserId: ctx.telegramUserId,
-    });
+    // 🟢 التعديل الرئيسي: تمرير ctx.env كبارامتر ثالث هنا!
+    const result = await createStore(
+      ctx.env.DB, 
+      {
+        phone: ctx.session?.phone || '',
+        name: ctx.session?.name || '',
+        storeName: realStoreName,
+        telegramUserId: ctx.telegramUserId,
+      },
+      ctx.env // 👈 تم التمرير هنا
+    );
 
     const countryCode = extractCountryCode(ctx.session?.phone || '');
     const geoInfo = CODE_TO_GEO[countryCode] || { country: 'غير محدد', currency: 'العملة المحلية' };
 
     const baseUrl = ctx.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || 'https://www.dokany.workers.dev';
-    const storeUrl = result.url || `${baseUrl}/store/${result.storeId}`;
+    const storeUrl = result.url || `${baseUrl}/${result.slug}`;
     const magicDashboardUrl = result.dashboardLink || `${baseUrl}/ar/dashboard?store=${result.storeId}`;
 
     return {
-      // 🎯 وضع الروابط نصياً بشكل مباشر أزرق قابل للضغط لضمان عدم اختفائها إطلاقاً
       reply: `🎉 مبروك يا ${merchantName}! تم إنشاء متجرك بنجاح وتخصيصه على نشاط [${selectedNiche}].\n\n🏪 **اسم المتجر:** ${realStoreName}\n🌍 **الدولة:** ${geoInfo.country}\n🪙 **العملة:** ${geoInfo.currency}\n\n🚀 **رابط دخول لوحة التحكم المباشر:**\n${magicDashboardUrl}\n\n🌍 **رابط المتجر:**\n${storeUrl}`,
       
-      // 🎯 تثبيت الزر السفلي المربع لوحة التحكم
       persistentButtons: [
         [{ text: '🎛️ لوحة التحكم', value: '🎛️ لوحة التحكم' }]
       ],

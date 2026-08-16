@@ -1,12 +1,62 @@
 /* ═══════════════════════════════════════════════════════════
    🎨 DOKANY DESIGN SYSTEM — globals.css
-   الإصدار 4.0 (نسخة أغسطس 2026 المُحكَمة)
-   Tailwind v4 • oklch • Runtime Themes • Native 2026 Motion
+   الإصدار 5.0 (نسخة أغسطس 2026 النهائية - 2026 Web Standards)
+   Tailwind v4 • oklch • View Transitions • Container Queries
    ═══════════════════════════════════════════════════════════ */
 
 @import "tailwindcss";
 
 @custom-variant dark (&:is([data-theme="dark"] *));
+
+/* ═══════════════════════════════════════════════════════════
+   🆕 0) @property — Type-safe Custom Properties (2026 Standard)
+   ═══════════════════════════════════════════════════════════ */
+@property --mesh-float-x {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 20px;
+}
+
+@property --mesh-float-y {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: -20px;
+}
+
+@property --mesh-scale {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1.05;
+}
+
+@property --shimmer-pos {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: -200%;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   🆕 View Transitions API (Next.js App Router + 2026 Browsers)
+   ═══════════════════════════════════════════════════════════ */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root) {
+  animation: fade-out 0.2s ease-out forwards;
+}
+
+::view-transition-new(root) {
+  animation: fade-in 0.3s ease-out forwards;
+}
+
+::view-transition-old(page-content) {
+  animation: slide-out 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+::view-transition-new(page-content) {
+  animation: slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
 
 /* ═══════════════════════════════════════════════════════════
    1) @theme — القيم الثابتة فقط (Palettes / Radii / Fonts)
@@ -62,7 +112,10 @@
 
   /* ✅ Motion Tokens (تولّد utilities: animate-fade-in ...) */
   --animate-fade-in: fade-in 0.4s ease-out forwards;
+  --animate-fade-out: fade-out 0.2s ease-out forwards;
   --animate-slide-up: slide-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-slide-in: slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-slide-out: slide-out 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   --animate-shimmer: shimmer 3s linear infinite;
   --animate-mesh-float: mesh-float 20s cubic-bezier(0.16, 1, 0.3, 1) infinite;
   --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
@@ -71,7 +124,6 @@
 
 /* ═══════════════════════════════════════════════════════════
    2) @theme inline — أي token قيمته var() يعيش هنا حتماً
-   (ضمان التقاط overrides الثيمات في أي مستوى DOM)
    ═══════════════════════════════════════════════════════════ */
 @theme inline {
   --color-primary: var(--accent-primary);
@@ -111,13 +163,28 @@
    3) THEME DEFINITIONS (Runtime Variables)
    ═══════════════════════════════════════════════════════════ */
 :root {
-  /* shimmer افتراضي — يعمل في أي ثيم حتى لو ما عُرفش محلياً */
+  color-scheme: light;
   --pearl-shimmer: linear-gradient(110deg, transparent 20%, rgba(255,255,255,0.5) 40%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0.5) 60%, transparent 80%);
   --primary-foreground: #ffffff;
   --secondary-foreground: #ffffff;
   --accent-foreground: #ffffff;
-  /* 2026: السماح بانتقال height إلى auto */
-  interpolate-size: allow-keywords;
+
+  --mesh-float-x: 20px;
+  --mesh-float-y: -20px;
+  --mesh-scale: 1.05;
+
+  --slide-in-start-x: 20px;
+
+  @supports (interpolate-size: allow-keywords) {
+    interpolate-size: allow-keywords;
+  }
+
+  /* 🆕 View Transition name للـ main content */
+  view-transition-name: page-content;
+}
+
+[dir="rtl"] {
+  --slide-in-start-x: -20px;
 }
 
 [data-theme="dark"] {
@@ -150,6 +217,10 @@
   --glow-accent: 0 4px 25px rgba(168, 85, 247, 0.12);
 
   --pearl-shimmer: linear-gradient(110deg, #fff 20%, rgba(168,85,247,0.8) 40%, #fff 50%, rgba(99,102,241,0.8) 60%, #fff 80%);
+
+  --mesh-float-x: 25px;
+  --mesh-float-y: -25px;
+  --mesh-scale: 1.08;
 }
 
 [data-theme="pearly"] {
@@ -182,13 +253,18 @@
   --glow-accent: 0 4px 25px rgba(168, 85, 247, 0.06);
 
   --pearl-shimmer: linear-gradient(110deg, transparent 20%, rgba(255,255,255,0.6) 40%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0.6) 60%, transparent 80%);
+
+  --mesh-float-x: 15px;
+  --mesh-float-y: -15px;
+  --mesh-scale: 1.03;
 }
 
-/* ── Store Themes (تُركّب على غلاف المتجر) ── */
+/* ── Store Themes (تحسين التباين) ── */
 [data-store-theme="emerald"] {
-  --accent-primary: #10b981;
+  --accent-primary: #34d399;
   --accent-secondary: #059669;
-  --primary-foreground: #04281c; /* كونتراست آمن على الزمردي */
+  --primary-foreground: #022c22;
+  --secondary-foreground: #ffffff;
   --radius-lg: 4px;
 }
 
@@ -196,23 +272,59 @@
   color-scheme: dark;
   --accent-primary: #d4af37;
   --accent-secondary: #1c1c1c;
-  --primary-foreground: #1c1c1c; /* نص غامق على الذهبي */
+  --primary-foreground: #000000;
+  --secondary-foreground: #ffffff;
   --bg-base: #0a0a0a;
   --border-glow: rgba(212, 175, 55, 0.4);
   --radius-lg: 20px;
+}
+
+/* ✨ prefers-color-scheme fallback before JS */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg-base: #000000;
+    --bg-elevated: rgba(10, 10, 12, 0.75);
+    --bg-glass: rgba(12, 12, 16, 0.45);
+    --bg-glass-hover: rgba(22, 22, 28, 0.65);
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --border-glow: rgba(99, 102, 241, 0.45);
+    --text-primary: #ffffff;
+    --text-secondary: #f3f4f6;
+    --text-tertiary: #a1a1aa;
+    --text-muted: #71717a;
+    --accent-primary: #6366f1;
+    --accent-secondary: #a855f7;
+    --accent-tertiary: #ec4899;
+    --accent-success: #10b981;
+    --accent-warning: #f59e0b;
+    --accent-danger: #ef4444;
+    --primary-foreground: #ffffff;
+    --glow-primary: 0 4px 20px rgba(99, 102, 241, 0.15);
+    --glow-accent: 0 4px 25px rgba(168, 85, 247, 0.12);
+    --pearl-shimmer: linear-gradient(110deg, #fff 20%, rgba(168,85,247,0.8) 40%, #fff 50%, rgba(99,102,241,0.8) 60%, #fff 80%);
+    --mesh-float-x: 25px;
+    --mesh-float-y: -25px;
+    --mesh-scale: 1.08;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
    4) BASE STYLES
    ═══════════════════════════════════════════════════════════ */
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   html, body {
     background-color: var(--bg-base);
     color: var(--text-primary);
     font-family: var(--font-arabic);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    overflow-x: clip; /* 2026: يقصّ دون كسر sticky ودون scroll container */
+    overflow-x: clip;
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -220,19 +332,21 @@
     font-family: var(--font-sans);
   }
 
-  /* عناوين متوازنة بدل السطر اليتيم */
   h1, h2, h3, h4, h5, h6 {
     text-wrap: balance;
+    /* 🆕 2026 Typography: trim cap height for cleaner alignment */
+    @supports (text-box-trim: both) {
+      text-box-trim: trim-both;
+      text-box-edge: cap alphabetic;
+    }
   }
 
-  /* ⚡ transitions للعناصر التفاعلية فقط — حماية الـ Main Thread */
   a, button, input, select, textarea, [role="button"] {
     transition-property: background-color, border-color, color, opacity;
     transition-duration: 0.2s;
     transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  /* Scrollbar: قياسي + Webkit */
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--border-strong) transparent;
@@ -241,13 +355,11 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 10px; }
 
-  /* Focus: outline أصلب من box-shadow (لا يُقصّ مع overflow) ويلف مع الـ radius */
   :focus-visible {
     outline: 2px solid var(--accent-primary);
     outline-offset: 2px;
   }
 
-  /* Selection حيّ يتبع الثيم */
   ::selection {
     background-color: color-mix(in oklab, var(--accent-primary) 25%, transparent);
     color: inherit;
@@ -257,88 +369,117 @@
     caret-color: var(--accent-primary);
   }
 
-  /* 🌿 حارس الحركة: احترام تفضيل المستخدم أولاً */
+  /* 🆕 Improved reduced motion (2026 Best Practices) */
   @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
     *, *::before, *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
+      will-change: auto !important;
+      translate: none !important;
+      view-transition-name: none !important;
+    }
+  }
+
+  /* 🆕 High Contrast Mode support */
+  @media (prefers-contrast: more) {
+    :root {
+      --border-subtle: rgba(0, 0, 0, 0.3);
+      --border-strong: rgba(0, 0, 0, 0.5);
+      --text-secondary: var(--text-primary);
+    }
+    [data-theme="dark"] {
+      --border-subtle: rgba(255, 255, 255, 0.3);
+      --border-strong: rgba(255, 255, 255, 0.5);
     }
   }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   5) UTILITIES (@utility — تعمل مع md: / rtl: / dark: ...)
+   5) UTILITIES
    ═══════════════════════════════════════════════════════════ */
-@utility glass {
-  background-color: var(--bg-glass);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-subtle);
-}
+@layer utilities {
+  .glass {
+    background-color: var(--bg-glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border-subtle);
+  }
 
-@utility glass-elevated {
-  background-color: var(--bg-elevated);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-strong);
-}
+  .glass-elevated {
+    background-color: var(--bg-elevated);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-strong);
+  }
 
-@utility glass-hover {
-  transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1),
-              border-color 0.3s, box-shadow 0.3s, translate 0.3s;
-  &:hover {
-    background-color: var(--bg-glass-hover);
-    border-color: var(--border-glow);
-    box-shadow: var(--glow-primary);
-    translate: 0 -2px;
+  .glass-hover {
+    transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.3s, box-shadow 0.3s, translate 0.3s;
+    &:hover {
+      background-color: var(--bg-glass-hover);
+      border-color: var(--border-glow);
+      box-shadow: var(--glow-primary);
+      translate: 0 -2px;
+    }
+  }
+
+  .mesh-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(40px);
+    animation: var(--animate-mesh-float);
+    pointer-events: none;
+    will-change: transform;
+    transform: translateZ(0);
+  }
+
+  .shimmer-text {
+    background: var(--pearl-shimmer);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: var(--animate-shimmer);
+  }
+
+  [dir="rtl"] .shimmer-text {
+    background-position: 200% 0;
+  }
+
+  .stat-number {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  /* 🆕 Container query utilities */
+  .container-cards {
+    container-type: inline-size;
+    container-name: cards;
   }
 }
 
-@utility mesh-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(40px);
-  animation: var(--animate-mesh-float);
-  pointer-events: none;
-  will-change: transform;
-}
-
-@utility shimmer-text {
-  background: var(--pearl-shimmer);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: var(--animate-shimmer);
-}
-
-@utility stat-number {
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
-}
-
 /* ═══════════════════════════════════════════════════════════
-   6) NATIVE 2026 MOTION — دخول/خروج بالـ CSS الخالص
-   (اترك العنصر mounted وبدّل data-state — وداعاً لـ JS hacks)
+   6) NATIVE 2026 MOTION — CSS-only enter/exit
    ═══════════════════════════════════════════════════════════ */
 @layer components {
-  /* Drawer (مثالي لـ CartDrawer — متوافق مع نمط data-state في vaul) */
   [data-drawer] {
     --slide-from: 100%;
     translate: var(--slide-from) 0;
     transition: translate 0.45s cubic-bezier(0.16, 1, 0.3, 1),
                 display 0.45s allow-discrete;
   }
-  [dir="rtl"] [data-drawer] { --slide-from: -100%; } /* انعكاس تلقائي RTL */
+  [dir="rtl"] [data-drawer] { --slide-from: -100%; }
   [data-drawer][data-state="closed"] { display: none; }
   [data-drawer][data-state="open"] { translate: 0 0; }
   @starting-style {
     [data-drawer][data-state="open"] { translate: var(--slide-from) 0; }
   }
 
-  /* Dialog / Sheet (مثالي لـ CartSheet و Modals) */
   [data-dialog] {
     opacity: 0;
     scale: 0.96;
@@ -350,19 +491,74 @@
   @starting-style {
     [data-dialog][data-state="open"] { opacity: 0; scale: 0.96; }
   }
+
+  /* 🆕 Store Product Card responsive via Container Queries */
+  @container cards (min-width: 600px) {
+    .product-card {
+      --card-padding: 1.5rem;
+    }
+  }
+
+  @container cards (min-width: 900px) {
+    .product-card {
+      --card-padding: 2rem;
+    }
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   7) KEYFRAMES (خارج @theme عمداً — تستخدمها @utility مخصصة)
+   7) PRINT STYLES
+   ═══════════════════════════════════════════════════════════ */
+@media print {
+  .glass, .glass-elevated, .glass-hover {
+    background: white !important;
+    backdrop-filter: none !important;
+    border-color: #ccc !important;
+    box-shadow: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .mesh-orb, .shimmer-text {
+    display: none !important;
+  }
+  nav, header, footer, [data-drawer], [data-dialog] {
+    display: none !important;
+  }
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #666;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   8) KEYFRAMES
    ═══════════════════════════════════════════════════════════ */
 @keyframes fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
 
+@keyframes fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(15px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(var(--slide-in-start-x, 20px)); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(20px); }
 }
 
 @keyframes scale-in {
@@ -377,8 +573,8 @@
 
 @keyframes mesh-float {
   0%, 100% { transform: translate(0, 0) scale(1); }
-  33%      { transform: translate(20px, -20px) scale(1.05); }
-  66%      { transform: translate(-15px, 15px) scale(0.98); }
+  33%      { transform: translate(var(--mesh-float-x), var(--mesh-float-y)) scale(var(--mesh-scale)); }
+  66%      { transform: translate(calc(var(--mesh-float-x) * -1), calc(var(--mesh-float-y) * -1)) scale(0.98); }
 }
 
 @keyframes pulse-glow {
