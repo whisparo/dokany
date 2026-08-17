@@ -4,7 +4,7 @@ import { eq, sql, and, gte, isNull, inArray } from 'drizzle-orm';
 import { Redis } from '@upstash/redis';
 import { schema, type D1Transaction } from '@/lib/db';
 import { getDb } from '@/lib/db/db';
-import { SystemError } from '@/lib/errors/types';
+import { SystemError } from '@/lib/errors';
 import { AlertService } from '@/lib/services/alert-service';
 import type { Env } from '@/lib/env';
 

@@ -4,7 +4,7 @@ import { getDb, schema, type D1Transaction } from '@/lib/db';
 import { eq, sql } from 'drizzle-orm';
 import { Redis } from '@upstash/redis';
 import type { Env } from '@/lib/env';
-import { SystemError } from '@/lib/errors/types';
+import { SystemError } from '@/lib/errors';
 
 /**
  * دالة مساعدة لحذف مفاتيح الكاش من Redis بعد أي عملية تحديث
@@ -26,7 +26,7 @@ async function invalidateStatsCache(env: Env, keys: string[]) {
 
 /**
  * تحديث إحصائيات المتجر الإجمالية بعد إنشاء أو تعديل طلب
- * @param orderTotalAmountالمبلغ بالهللات/السنتات (Integer Cents)
+ * @param orderTotalAmount المبلغ بالهللات/السنتات (Integer Cents)
  */
 export async function updateStoreStatsAfterOrder(
   env: Env,

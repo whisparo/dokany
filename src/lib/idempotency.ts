@@ -4,7 +4,7 @@ import { getDb } from '@/lib/db';
 import type { Env } from '@/lib/env';
 import { idempotency as idempotencyTable } from '@/lib/db/schema/idempotency';
 import { eq, and, lte } from 'drizzle-orm';
-import { SystemError } from '@/lib/errors/types';
+import { SystemError } from '@/lib/errors';
 import { Redis } from '@upstash/redis';
 
 const DEFAULT_LOCK_TTL_MS = 30 * 1000; // 30 ثانية

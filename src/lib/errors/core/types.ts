@@ -1,7 +1,9 @@
 // lib/errors/core/types.ts
 
+import type { Env } from '@/lib/env';
+
 /**
- * 🎯 نظام الأخطاء — الأننوع والأنماط الأساسية (Core Types & SystemError Class)
+ * 🎯 نظام الأخطاء — الأنواع والأنماط الأساسية (Core Types & SystemError Class)
  * 
  * هذا الملف يُعرّف الهيكل البنائي والنموذج القطعي لكائنات الأخطاء وفقاً للدستور v9.1.
  */
@@ -26,6 +28,15 @@ export type ErrorCategory =
 export type ErrorContextData = Record<string, unknown>;
 
 // ============================================================
+// 🌍 بيئة النظام (System Environment)
+// ============================================================
+
+/**
+ * مرونة كاملة لدعم Env الخاصة بـ Cloudflare/Hono بدون الحاجة لـ Casting بشع
+ */
+export type SystemEnvironment = Env | Record<string, unknown>;
+
+// ============================================================
 // 🧵 سياق الخطأ (Error Context)
 // ============================================================
 
@@ -38,6 +49,16 @@ export interface ErrorContext {
   path?: string;
   method?: string;
   ip?: string;
+}
+
+/**
+ * خيارات معالجة الخطأ عند استدعاء captureException
+ */
+export interface HandleErrorOptions {
+  storeId?: string;
+  userId?: string;
+  metadata?: Record<string, unknown>;
+  breadcrumbs?: string[];
 }
 
 // ============================================================

@@ -237,6 +237,24 @@ export class CircuitBreaker {
   // ═══════════════════════════════════════════════════════════════
 
   /**
+   * تغليف استدعاءات Redis بمهلة زناية (Timeout) لتفادي التعليق
+   */
+  private async withTimeout<T>(promise: Promise<T>): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Redis operation timed out after ${this.config.redisTimeoutMs}ms`));
+      }, this.config.redisTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutId!);
+    }
+  }
+
+  /**
    * مزامنة الحالة مع Redis (إن كان التخزين مفعلاً)
    */
   private async syncState(env?: RedisEnv): Promise<void> {
@@ -258,7 +276,7 @@ export class CircuitBreaker {
         return;
       }
 
-      const state = await this.loadFromRedis(redis);
+      const state = await this.withTimeout(this.loadFromRedis(redis));
       if (state) {
         this.cachedState = state.state;
         this.cachedFailureCount = state.failureCount;
@@ -323,7 +341,7 @@ export class CircuitBreaker {
         ? Math.max(60, Math.ceil((this.cachedOpenUntil - Date.now()) / 1000) + 10)
         : 3600; // ساعة واحدة للحالتين closed و half-open
 
-      await redis.set(this.redisKey, JSON.stringify(data), { ex: ttl });
+      await this.withTimeout(redis.set(this.redisKey, JSON.stringify(data), { ex: ttl }));
     } catch (error) {
       console.warn(`[CircuitBreaker] Failed to persist state to Redis for ${this.config.serviceName}:`, error);
     }

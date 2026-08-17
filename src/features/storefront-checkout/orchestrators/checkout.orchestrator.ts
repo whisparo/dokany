@@ -7,7 +7,7 @@ import type { CheckoutPayload } from '@/features/storefront-checkout/adapters/ch
 import { processOrder, type OrderInput } from '@/lib/services/order-processor';
 import { prepareOrderItems, type RawOrderItemInput } from '@/lib/services/order-service';
 import type { ShippingAddress } from '@/lib/db/schema/orders';
-import { SystemError } from '@/lib/errors/types';
+import { SystemError } from '@/lib/errors';
 
 import type { Env } from '@/lib/env';
 

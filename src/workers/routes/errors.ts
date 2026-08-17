@@ -2,60 +2,85 @@
 
 import { Hono } from 'hono';
 import type { Env } from '@/lib/env';
-import { classifyError } from '@/lib/errors/classifier';
-import { sendErrorToTelegram } from '@/lib/errors/notifier';
-import type { ErrorContext } from '@/lib/errors/types';
+import { safeExecute, SystemError } from '@/lib/errors';
 
 export const errorsRouter = new Hono<{ Bindings: Env }>();
 
-/**
- * واجهة طلب تقرير الأخطاء المباشرة لتجنب استخدام any
- */
-interface ReportErrorPayload {
-  rawError?: unknown;
-  context?: Partial<ErrorContext> & {
-    storeSlug?: string;
-  };
-}
-
-errorsRouter.post('/errors/report', async (c) => {
-  try {
-    const body = await c.req.json<ReportErrorPayload>();
-    const { rawError, context } = body;
-
-    if (!context) {
-      return c.json({ success: false, error: 'MISSING_CONTEXT' }, 400);
-    }
-
-    // استخراج معرف المتجر سواء كان ID أو Slug بدون استخدام any
-    const storeIdOrSlug = context.storeId || context.storeSlug;
-
-    if (!storeIdOrSlug || typeof storeIdOrSlug !== 'string' || storeIdOrSlug.trim() === '') {
-      return c.json({ success: false, error: 'MISSING_STORE_IDENTIFIER' }, 400);
-    }
-
-    const normalizedContext: ErrorContext = {
-      ...context,
-      storeId: storeIdOrSlug.trim(),
-      path: context.path || c.req.path || '/',
-      userAgent: context.userAgent || c.req.header('user-agent') || 'Unknown',
+errorsRouter.get('/errors/test-telegram', (c) =>
+  safeExecute(async () => {
+    // 1. تجهيز بيئة تليجرام للتأكد من المكونات
+    const telegramEnv = {
+      ERROR_BOT_TOKEN: c.env.ERROR_BOT_TOKEN,
+      ERROR_CHANNEL_ID: c.env.ERROR_CHANNEL_ID || '-1003855373399',
     };
 
-    const systemError = classifyError(rawError, normalizedContext);
+    // 2. إنشاء خطأ اختبار مطبق عليه بنية SystemError القياسية
+    const testError = new SystemError({
+      code: 'SYSTEM_HEALTH_CHECK',
+      userMessage: 'اختبار الإرسال المباشر وتخزين B2',
+      technicalMessage: 'Testing error endpoint delivery and B2 storage integration',
+      category: 'system',
+      severity: 'critical',
+      retryable: false,
+      shouldAlert: true,
+      storeId: 'test-store-999',
+      metadata: {
+        path: c.req.path,
+        source: 'telegram-test-endpoint',
+        userId: 'test-user-123',
+      },
+    });
 
-    // إرسال الإشعار في الخلفية مع waitUntil لعدم تعطيل الـ Response
-    c.executionCtx.waitUntil(
-      sendErrorToTelegram(systemError, c.env).catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error('❌ [Report API] Failed to notify error via Telegram:', msg);
-      })
-    );
+    // 3. كتابة الخطأ بـ B2 وتمرير الـ Key المولد للـ Queue
+    let b2Saved = false;
+    let generatedKey = '';
+    try {
+      const { createB2StoreFromEnv, B2Store, enqueueErrorKey } = await import('@/lib/errors/storage');
+      const b2Store = createB2StoreFromEnv(c.env as unknown as Record<string, string | undefined>);
+      
+      generatedKey = B2Store.createErrorKey();
+      await b2Store.write({
+        content: testError,
+        key: generatedKey,
+        compress: true,
+        enqueue: false,
+      });
 
-    return c.json({ success: true, code: systemError.code }, 200);
-  } catch (routeError) {
-    const errorMessage = routeError instanceof Error ? routeError.message : String(routeError);
-    console.error('🚨 [Report API] Failure:', errorMessage);
-    
-    return c.json({ success: false, error: 'INTERNAL_ROUTER_ERROR' }, 500);
-  }
-});
+      // إضافة الـ Key المولد حقيقة للـ Redis Queue
+      await enqueueErrorKey(c.env, generatedKey);
+      b2Saved = true;
+    } catch (storageError) {
+      console.error('[Test Route] Failed to save test error to B2:', storageError);
+    }
+
+    // 4. إرسال التنبيه المباشر عبر تليجرام
+    const { sendCriticalError, formatErrorForTelegram } = await import('@/lib/errors/clients/telegram');
+    const formattedText = formatErrorForTelegram(testError);
+    const result = await sendCriticalError(telegramEnv, formattedText);
+
+    if (!result.success) {
+      throw new SystemError({
+        code: 'TELEGRAM_DELIVERY_FAILED',
+        userMessage: 'فشل إرسال التنبيه عبر تليجرام',
+        technicalMessage: `Telegram Delivery Failed: ${result.errorMessage} (Code: ${result.errorCode})`,
+        category: 'system',
+        severity: 'critical',
+        retryable: true,
+        shouldAlert: false,
+        storeId: 'test-store-999',
+        metadata: {
+          path: c.req.path,
+          errorCode: result.errorCode,
+        },
+      });
+    }
+
+    return c.json({
+      ok: true,
+      message: 'Telegram test alert sent and Error stored successfully',
+      b2Saved,
+      generatedKey,
+      telegramResult: result,
+    });
+  })
+);

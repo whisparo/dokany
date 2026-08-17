@@ -1,5 +1,5 @@
 // lib/errors/processing/safe-executor.ts
-// الإصدار: 1.1.1
+// الإصدار: 1.1.3
 // الدور: تنفيذ العمليات بأمان مع إعادة محاولة ذكية، مراقبة أداء، وقيمة افتراضية
 // المبدأ: أي عملية تُنفذ، إما تنجح، أو تُعاد محاولتها، أو تسقط بقيمة افتراضية آمنة.
 
@@ -13,8 +13,8 @@ import { addBreadcrumb, getContext, type ErrorContext } from '../core/context';
 // ============================================================
 
 export interface SafeExecuteOptions<T> {
-  /** اسم العملية (للتوثيق والتتبع) */
-  operationName: string;
+  /** اسم العملية (للتوثيق والتتبع) (افتراضي: anonymous_operation) */
+  operationName?: string;
 
   /** مسار الطلب (لتطبيق عتبات الأداء المخصصة) */
   route?: string;
@@ -59,10 +59,10 @@ export interface SafeExecuteOptions<T> {
  */
 export async function safeExecute<T>(
   fn: () => Promise<T>,
-  options: SafeExecuteOptions<T>
+  options: SafeExecuteOptions<T> = {}
 ): Promise<T> {
   const {
-    operationName,
+    operationName = 'anonymous_operation',
     route = '*',
     maxRetries = 3,
     backoffBaseMs = 200,
@@ -183,6 +183,31 @@ export async function safeExecute<T>(
   }
 
   if (lastError) {
+    // إذا كان كود الخطأ أو رسالة المستخدم مخصصة للإخفاق النهائي، نقوم بإعادة بناء الخطأ بتلك الخصائص
+    if (finalFailureCode !== 'SYS_001' || options.finalFailureUserMessage) {
+      throw new SystemError({
+        code: finalFailureCode,
+        category: lastError.category,
+        severity: lastError.severity,
+        userMessage: finalFailureUserMessage,
+        technicalMessage: lastError.technicalMessage,
+        retryable: false,
+        shouldAlert: lastError.shouldAlert,
+        silent: lastError.silent,
+        httpStatus: lastError.httpStatus,
+        cause: lastError.cause,
+        correlationId: lastError.correlationId,
+        breadcrumbs: [...lastError.breadcrumbs],
+        metadata: {
+          ...lastError.metadata,
+          operationName,
+          route,
+          attempts: attempt,
+          totalDuration: Math.round(totalDuration),
+        },
+      });
+    }
+
     throw lastError;
   }
 
@@ -228,7 +253,7 @@ function sleep(ms: number): Promise<void> {
 
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  options: Omit<SafeExecuteOptions<T>, 'fallback' | 'enablePerformanceMonitoring'>
+  options: Omit<SafeExecuteOptions<T>, 'fallback' | 'enablePerformanceMonitoring'> = {}
 ): Promise<T> {
   return safeExecute(fn, {
     ...options,
@@ -240,7 +265,7 @@ export async function withRetry<T>(
 export async function withFallback<T>(
   fn: () => Promise<T>,
   fallback: T,
-  options: Omit<SafeExecuteOptions<T>, 'fallback' | 'maxRetries' | 'enablePerformanceMonitoring'>
+  options: Omit<SafeExecuteOptions<T>, 'fallback' | 'maxRetries' | 'enablePerformanceMonitoring'> = {}
 ): Promise<T> {
   return safeExecute(fn, {
     ...options,
@@ -252,7 +277,7 @@ export async function withFallback<T>(
 
 export async function tryOnce<T>(
   fn: () => Promise<T>,
-  options: Omit<SafeExecuteOptions<T>, 'fallback' | 'maxRetries'>
+  options: Omit<SafeExecuteOptions<T>, 'fallback' | 'maxRetries'> = {}
 ): Promise<T> {
   return safeExecute(fn, {
     ...options,
@@ -263,7 +288,7 @@ export async function tryOnce<T>(
 
 export async function withMonitoring<T>(
   fn: () => Promise<T>,
-  options: Omit<SafeExecuteOptions<T>, 'fallback' | 'maxRetries' | 'enablePerformanceMonitoring'>
+  options: Omit<SafeExecuteOptions<T>, 'fallback' | 'maxRetries' | 'enablePerformanceMonitoring'> = {}
 ): Promise<T> {
   return safeExecute(fn, {
     ...options,

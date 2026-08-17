@@ -293,7 +293,7 @@ export class AlertService {
     payload: AlertPayload
   ): Promise<void> {
     const token = env.TELEGRAM_BOT_TOKEN;
-    const chatId = env.ADMIN_TELEGRAM_CHAT_ID;
+    const chatId = env.TELEGRAM_CHAT_ID;
 
     if (!token || !chatId) {
       console.warn('[AlertService] ⚠️ Telegram credentials missing, skipping message.');

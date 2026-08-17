@@ -4,7 +4,6 @@ import { Hono, type Context } from 'hono';
 import { AwsClient } from 'aws4fetch';
 import { eq, and, isNull } from 'drizzle-orm';
 import type { AppEnv } from '@/lib/env';
-import { safeExecute } from '@/lib/errors/safe-executor';
 import { getDb } from '@/lib/db';
 import { media } from '@/lib/db/schema/media';
 import { stores } from '@/lib/db/schema/stores';
@@ -14,8 +13,8 @@ import {
   deleteMediaSchema,
 } from '@/lib/validations/media';
 import { queueMediaProcessing } from '@/lib/queue/media-queue';
-import { getStoreCloudinaryAccount, type CloudinaryEnv } from '@/lib/services/cloudinary';
-import { SystemError } from '@/lib/errors/types';
+import { getStoreCloudinaryAccount } from '@/lib/services/cloudinary';
+import { safeExecute, SystemError } from '@/lib/errors';
 import { requireAuth } from '@/workers/middleware/auth';
 
 export const mediaRouter = new Hono<AppEnv>();
@@ -28,31 +27,29 @@ async function verifyStoreOwnership<E extends AppEnv>(
 ): Promise<{ storeId: string; userId: string }> {
   const storeId = c.req.header('x-store-id');
 
-  // استخراج الـ user بحماية نمطية تجنباً للـ Type mismatch مع AuthEnv
   const user = c.get('user') as { id: string } | undefined;
   const userId = user?.id || (c.get('userId') as string | undefined);
 
   if (!storeId) {
     throw new SystemError({
-      code: 'STORE_CONTEXT_MISSING',
-      userMessage: 'معرف المتجر مفقود من الطلب.',
-      technicalMessage: 'Header x-store-id is missing.',
+      code: 'STORE_NOT_FOUND',
       category: 'security',
       severity: 'warning',
-      retryable: false,
-      shouldAlert: false,
+      userMessage: 'معرف المتجر مفقود من الطلب.',
+      technicalMessage: 'Header x-store-id is missing.',
+      metadata: { path: c.req.path },
     });
   }
 
   if (!userId) {
     throw new SystemError({
-      code: 'UNAUTHORIZED',
-      userMessage: 'غير مصرح للوصول.',
-      technicalMessage: 'User ID missing in request context.',
+      code: 'FORBIDDEN',
       category: 'security',
       severity: 'warning',
-      retryable: false,
-      shouldAlert: false,
+      userMessage: 'غير مصرح للوصول.',
+      technicalMessage: 'User ID missing in request context.',
+      storeId,
+      metadata: { path: c.req.path },
     });
   }
 
@@ -65,13 +62,14 @@ async function verifyStoreOwnership<E extends AppEnv>(
 
   if (!store || store.ownerId !== userId) {
     throw new SystemError({
-      code: 'FORBIDDEN_STORE_ACCESS',
-      userMessage: 'ليس لديك صلاحية الوصول لوسائط هذا المتجر.',
-      technicalMessage: `User ${userId} attempted unauthorized media operation on store ${storeId}`,
+      code: 'FORBIDDEN',
       category: 'security',
       severity: 'warning',
-      retryable: false,
+      userMessage: 'ليس لديك صلاحية الوصول لوسائط هذا المتجر.',
+      technicalMessage: `User ${userId} attempted unauthorized media operation on store ${storeId}`,
       shouldAlert: true,
+      storeId,
+      metadata: { path: c.req.path, userId },
     });
   }
 
@@ -128,30 +126,33 @@ mediaRouter.get('/media/cloudinary-config', requireAuth, (c) =>
 
     const account = getStoreCloudinaryAccount(
       store?.cloudinaryAccountIndex,
-      c.env as unknown as CloudinaryEnv
+      c.env
     );
 
     if (!account) {
       throw new SystemError({
-        code: 'CLOUDINARY_ACCOUNT_NOT_FOUND',
-        userMessage: 'لم يتم العثور على حساب وسائط معتمد لهذا المتجر.',
-        technicalMessage: `Cloudinary account not found for store ${storeId}`,
+        code: 'CLOUDINARY_NOT_CONFIGURED',
         category: 'system',
         severity: 'critical',
-        retryable: false,
+        userMessage: 'لم يتم العثور على حساب وسائط معتمد لهذا المتجر.',
+        technicalMessage: `Cloudinary account not found for store ${storeId}`,
         shouldAlert: true,
+        storeId,
       });
     }
 
-    return c.json({
-      success: true,
-      data: {
-        accountIndex: account.id,
-        cloudName: account.cloudName,
-        apiKey: account.apiKey,
-        uploadPreset: account.uploadPreset,
+    return c.json(
+      {
+        success: true,
+        data: {
+          accountIndex: account.id,
+          cloudName: account.cloudName,
+          apiKey: account.apiKey,
+          uploadPreset: account.uploadPreset,
+        },
       },
-    });
+      200
+    );
   })
 );
 
@@ -171,19 +172,19 @@ mediaRouter.post('/media/cloudinary-sign', requireAuth, (c) =>
 
     const account = getStoreCloudinaryAccount(
       store?.cloudinaryAccountIndex,
-      c.env as unknown as CloudinaryEnv
+      c.env
     );
 
     if (!account || !account.apiSecret) {
       throw new SystemError({
-        code: 'CLOUDINARY_SECRET_MISSING',
-        userMessage: 'تكوين Cloudinary غير مكتمل، يرجى التواصل مع الدعم.',
-        technicalMessage: `Cloudinary API secret is missing for account index ${account?.id}`,
+        code: 'CLOUDINARY_NOT_CONFIGURED',
         category: 'system',
         severity: 'critical',
-        retryable: false,
+        userMessage: 'تكوين Cloudinary غير مكتمل، يرجى التواصل مع الدعم.',
+        technicalMessage: `Cloudinary API secret is missing for account index ${account?.id}`,
         shouldAlert: true,
-        metadata: { accountId: account?.id, storeId },
+        storeId,
+        metadata: { accountId: account?.id },
       });
     }
 
@@ -197,7 +198,8 @@ mediaRouter.post('/media/cloudinary-sign', requireAuth, (c) =>
 
     const timestamp = Math.floor(Date.now() / 1000);
     const folder = body.folder || `stores/${storeId}`;
-    const publicId = body.publicId || `media_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+    const publicId =
+      body.publicId || `media_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
     const resourceType = body.resourceType || 'image';
 
     const params: Record<string, string | number> = {
@@ -219,19 +221,22 @@ mediaRouter.post('/media/cloudinary-sign', requireAuth, (c) =>
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
 
-    return c.json({
-      success: true,
-      data: {
-        signature,
-        timestamp,
-        cloudName: account.cloudName,
-        apiKey: account.apiKey,
-        publicId,
-        folder,
-        resourceType,
-        uploadPreset: account.uploadPreset,
+    return c.json(
+      {
+        success: true,
+        data: {
+          signature,
+          timestamp,
+          cloudName: account.cloudName,
+          apiKey: account.apiKey,
+          publicId,
+          folder,
+          resourceType,
+          uploadPreset: account.uploadPreset,
+        },
       },
-    });
+      200
+    );
   })
 );
 
@@ -246,14 +251,14 @@ mediaRouter.post('/media/upload-url', requireAuth, (c) =>
 
     if (!B2_ENDPOINT || !B2_BUCKET_NAME || !B2_ACCESS_KEY_ID) {
       throw new SystemError({
-        code: 'B2_STORAGE_CONFIG_MISSING',
+        code: 'B2_NOT_CONFIGURED',
+        category: 'system',
+        severity: 'critical',
         userMessage: 'إعدادات التخزين السحابي B2 غير مكتملة.',
         technicalMessage:
           'B2 Storage configuration is missing in Cloudflare environment bindings.',
-        category: 'system',
-        severity: 'critical',
-        retryable: false,
         shouldAlert: true,
+        storeId,
       });
     }
 
@@ -273,15 +278,18 @@ mediaRouter.post('/media/upload-url', requireAuth, (c) =>
 
     const uploadUrl = await getB2PresignedUrl(c.env, uniqueKey, validatedData.mimeType);
 
-    return c.json({
-      success: true,
-      data: {
-        uploadUrl,
-        fileKey: uniqueKey,
-        bucketName: B2_BUCKET_NAME,
-        resourceType: mediaType,
+    return c.json(
+      {
+        success: true,
+        data: {
+          uploadUrl,
+          fileKey: uniqueKey,
+          bucketName: B2_BUCKET_NAME,
+          resourceType: mediaType,
+        },
       },
-    });
+      200
+    );
   })
 );
 
@@ -307,13 +315,12 @@ mediaRouter.post('/media/confirm', requireAuth, (c) =>
 
     if (!body.url || !body.filename || !body.size || !body.type || !body.mimeType) {
       throw new SystemError({
-        code: 'INVALID_MEDIA_INPUT',
+        code: 'INVALID_MEDIA_DATA',
+        category: 'validation',
+        severity: 'info',
         userMessage: 'بيانات الوسائط المرفوعة غير مكتملة.',
         technicalMessage: 'Missing required media parameters in confirm body',
-        category: 'business',
-        severity: 'warning',
-        retryable: false,
-        shouldAlert: false,
+        storeId,
       });
     }
 
@@ -341,11 +348,14 @@ mediaRouter.post('/media/confirm', requireAuth, (c) =>
       await queueMediaProcessing(c.env, inserted.id);
     }
 
-    return c.json({
-      success: true,
-      message: 'تم تسجيل الملف بنجاح وإرساله للطابور للمعالجة.',
-      data: inserted,
-    });
+    return c.json(
+      {
+        success: true,
+        message: 'تم تسجيل الملف بنجاح وإرساله للطابور للمعالجة.',
+        data: inserted,
+      },
+      200
+    );
   })
 );
 
@@ -378,18 +388,21 @@ mediaRouter.delete('/media', requireAuth, (c) =>
     if (!updated.length) {
       throw new SystemError({
         code: 'MEDIA_NOT_FOUND',
+        category: 'business',
+        severity: 'info',
         userMessage: 'الملف غير موجود أو تم حذفه مسبقاً.',
         technicalMessage: `Media ${body.mediaId} not found or soft-deleted for store ${storeId}`,
-        category: 'business',
-        severity: 'warning',
-        retryable: false,
-        shouldAlert: false,
+        storeId,
+        metadata: { mediaId: body.mediaId, productId: body.productId },
       });
     }
 
-    return c.json({
-      success: true,
-      message: 'تم حذف الملف بنجاح.',
-    });
+    return c.json(
+      {
+        success: true,
+        message: 'تم حذف الملف بنجاح.',
+      },
+      200
+    );
   })
 );

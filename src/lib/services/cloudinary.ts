@@ -1,6 +1,7 @@
 // src/lib/services/cloudinary.ts
 
 import type { D1Database } from '@cloudflare/workers-types';
+import type { Env } from '@/lib/env'; // 👈 استورد Env الأساسي بتاعك
 
 export type CloudinaryAccount = {
   id: number;
@@ -21,69 +22,51 @@ export type CloudinaryUploadResponse = {
   resource_type: 'image' | 'video' | 'raw';
 };
 
-export interface CloudinaryEnv {
-  NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_1?: string;
-  NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_1?: string;
-  NEXT_PUBLIC_CLOUDINARY_API_KEY_1?: string;
-  CLOUDINARY_API_SECRET_1?: string;
-  NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_2?: string;
-  NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_2?: string;
-  NEXT_PUBLIC_CLOUDINARY_API_KEY_2?: string;
-  CLOUDINARY_API_SECRET_2?: string;
-  NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_3?: string;
-  NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_3?: string;
-  NEXT_PUBLIC_CLOUDINARY_API_KEY_3?: string;
-  CLOUDINARY_API_SECRET_3?: string;
-  NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_4?: string;
-  NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_4?: string;
-  NEXT_PUBLIC_CLOUDINARY_API_KEY_4?: string;
-  CLOUDINARY_API_SECRET_4?: string;
-  NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_5?: string;
-  NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_5?: string;
-  NEXT_PUBLIC_CLOUDINARY_API_KEY_5?: string;
-  CLOUDINARY_API_SECRET_5?: string;
-  [key: string]: string | undefined;
-}
+// 💡 هنا حل المشكلة المباشر: بنعرف الـ Type إنه يقبل Env أو أي Record مرن
+export type CloudinaryEnv = Env | Record<string, unknown>;
 
 /**
  * القراءة الحرفية لمتغيرات البيئة لدعم Next.js Bundler و Cloudflare Workers
  */
 export function loadAccounts(env?: CloudinaryEnv): CloudinaryAccount[] {
+  // بنحول الـ env لـ Record داخلي عشان السهولة في القراءة
+  const envMap = env as Record<string, string | undefined> | undefined;
+
   const raw = [
     {
       id: 1,
-      cloudName: env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_1 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_1,
-      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_1 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_1 ?? 'dokany_unsigned_preset',
-      apiKey: env?.NEXT_PUBLIC_CLOUDINARY_API_KEY_1 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_1 ?? '',
-      apiSecret: env?.CLOUDINARY_API_SECRET_1 ?? process.env.CLOUDINARY_API_SECRET_1 ?? '',
+      cloudName: envMap?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_1 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_1,
+      uploadPreset: envMap?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_1 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_1 ?? 'dokany_unsigned_preset',
+      apiKey: envMap?.NEXT_PUBLIC_CLOUDINARY_API_KEY_1 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_1 ?? '',
+      apiSecret: envMap?.CLOUDINARY_API_SECRET_1 ?? process.env.CLOUDINARY_API_SECRET_1 ?? '',
     },
     {
       id: 2,
-      cloudName: env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_2 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_2,
-      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_2 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_2 ?? 'dokany_unsigned_preset',
-      apiKey: env?.NEXT_PUBLIC_CLOUDINARY_API_KEY_2 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_2 ?? '',
-      apiSecret: env?.CLOUDINARY_API_SECRET_2 ?? process.env.CLOUDINARY_API_SECRET_2 ?? '',
+      cloudName: envMap?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_2 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_2,
+      uploadPreset: envMap?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_2 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_2 ?? 'dokany_unsigned_preset',
+      apiKey: envMap?.NEXT_PUBLIC_CLOUDINARY_API_KEY_2 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_2 ?? '',
+      apiSecret: envMap?.CLOUDINARY_API_SECRET_2 ?? process.env.CLOUDINARY_API_SECRET_2 ?? '',
     },
     {
       id: 3,
-      cloudName: env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_3 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_3,
-      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_3 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_3 ?? 'dokany_unsigned_preset',
-      apiKey: env?.NEXT_PUBLIC_CLOUDINARY_API_KEY_3 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_3 ?? '',
-      apiSecret: env?.CLOUDINARY_API_SECRET_3 ?? process.env.CLOUDINARY_API_SECRET_3 ?? '',
+      cloudName: envMap?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_3 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_3,
+      uploadPreset: envMap?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_3 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_3 ?? 'dokany_unsigned_preset',
+      apiKey: envMap?.NEXT_PUBLIC_CLOUDINARY_API_KEY_3 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_3 ?? '',
+      apiSecret: envMap?.CLOUDINARY_API_SECRET_3 ?? process.env.CLOUDINARY_API_SECRET_3 ?? '',
     },
     {
       id: 4,
-      cloudName: env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_4 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_4,
-      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_4 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_4 ?? 'dokany_unsigned_preset',
-      apiKey: env?.NEXT_PUBLIC_CLOUDINARY_API_KEY_4 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_4 ?? '',
-      apiSecret: env?.CLOUDINARY_API_SECRET_4 ?? process.env.CLOUDINARY_API_SECRET_4 ?? '',
+      cloudName: envMap?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_4 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_4,
+      uploadPreset: envMap?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_4 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_4 ?? 'dokany_unsigned_preset',
+      apiKey: envMap?.NEXT_PUBLIC_CLOUDINARY_API_KEY_4 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_4 ?? '',
+      apiSecret: envMap?.CLOUDINARY_API_SECRET_4 ?? process.env.CLOUDINARY_API_SECRET_4 ?? '',
     },
     {
       id: 5,
-      cloudName: env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_5 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_5,
-      uploadPreset: env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_5 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_5 ?? 'dokany_unsigned_preset',
-      apiKey: env?.NEXT_PUBLIC_CLOUDINARY_API_KEY_5 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_5 ?? '',
-      apiSecret: env?.CLOUDINARY_API_SECRET_5 ?? process.env.CLOUDINARY_API_SECRET_5 ?? '',
+      cloudName: envMap?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_5 ?? process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME_5,
+      uploadPreset: envMap?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_5 ?? process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_5 ?? 'dokany_unsigned_preset',
+      apiKey: envMap?.NEXT_PUBLIC_CLOUDINARY_API_KEY_5 ?? process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY_5 ?? '',
+      apiSecret: envMap?.CLOUDINARY_API_SECRET_5 ?? process.env.CLOUDINARY_API_SECRET_5 ?? '',
     },
   ];
 
@@ -191,7 +174,6 @@ export async function uploadToCloudinary(
     throw new Error('لم يتم تحديد ملف للرفع');
   }
 
-  // استخدام حساب المتجر المخصص، أو السقوط للحساب العشوائي
   const account = storeAccountIndex
     ? getStoreCloudinaryAccount(storeAccountIndex, env)
     : getNextCloudinaryAccount(env);
@@ -202,7 +184,6 @@ export async function uploadToCloudinary(
 
   const uploadUrl = `https://api.cloudinary.com/v1_1/${account.cloudName}/auto/upload`;
 
-  // 1. إذا كان التنفيذ في المتصفح وتوفر XMLHttpRequest، نستخدمه لحساب الـ Progress
   if (typeof window !== 'undefined' && typeof XMLHttpRequest !== 'undefined') {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -246,7 +227,6 @@ export async function uploadToCloudinary(
     });
   }
 
-  // 2. إذا كان التنفيذ في بيئة Edge/Server (Cloudflare Workers / Next.js Runtime)
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);

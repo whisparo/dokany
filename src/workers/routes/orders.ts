@@ -6,11 +6,10 @@ import { z } from 'zod';
 import type { Env } from '@/lib/env';
 import { getDb } from '@/lib/db/db';
 import * as schema from '@/lib/db/schema';
-import { safeExecute } from '@/lib/errors/safe-executor';
-import { SystemError } from '@/lib/errors/types';
+import { safeExecute, SystemError } from '@/lib/errors';
 import type { ShippingAddress, NewOrder } from '@/lib/db/schema/orders';
 import type { ProductOptions, NewOrderItem } from '@/lib/db/schema/order-items';
-import { requireAuth } from '@/workers/middleware/auth';
+import { requireAuth, type AuthVariables } from '@/workers/middleware/auth';
 
 /* ============================================================================
  * 🛠️ TYPES & ENVS DECLARATIONS
@@ -24,7 +23,7 @@ export interface UserContext {
 
 export interface AppEnv {
   Bindings: Env;
-  Variables: {
+  Variables: AuthVariables & {
     user?: UserContext;
   };
 }
@@ -55,8 +54,6 @@ const createOrderItemSchema = z.object({
 });
 
 const createOrderSchema = z.object({
-  // ⚠️ customerId مقبول هنا فقط للـ Frontend compatibility، لكن السيرفر يتجاهله تماماً
-  // customerId الفعلي يُستخرج فقط من الجلسة الموثوقة (user?.id) أو يُنشأ كـ guest UUID
   customerId: z.string().optional(),
   customerName: z.string().min(1, 'اسم العميل مطلوب'),
   customerPhone: z.string().min(1, 'رقم هاتف العميل مطلوب'),
@@ -130,13 +127,12 @@ async function getStoreBySlugOrThrow(
   if (!store) {
     throw new SystemError({
       code: 'STORE_NOT_FOUND',
-      userMessage: 'المتجر المطلوب غير موجود.',
-      technicalMessage: `Store with slug '${slug}' not found or deleted.`,
       category: 'business',
       severity: 'info',
-      retryable: false,
-      shouldAlert: false,
-      context: { storeId: slug, path, extras: { storeSlug: slug } },
+      userMessage: 'المتجر المطلوب غير موجود.',
+      technicalMessage: `Store with slug '${slug}' not found or deleted.`,
+      storeId: slug,
+      metadata: { path, storeSlug: slug },
     });
   }
 
@@ -144,13 +140,13 @@ async function getStoreBySlugOrThrow(
   if (requiredOwnerId && store.ownerId !== requiredOwnerId) {
     throw new SystemError({
       code: 'FORBIDDEN',
-      userMessage: 'ليس لديك صلاحية للتعامل مع طلبات هذا المتجر.',
-      technicalMessage: `User '${requiredOwnerId}' attempted unauthorized operation on store '${store.id}' owned by '${store.ownerId}'.`,
       category: 'security',
       severity: 'warning',
-      retryable: false,
+      userMessage: 'ليس لديك صلاحية للتعامل مع طلبات هذا المتجر.',
+      technicalMessage: `User '${requiredOwnerId}' attempted unauthorized operation on store '${store.id}' owned by '${store.ownerId}'.`,
       shouldAlert: true,
-      context: { storeId: store.id, path },
+      storeId: store.id,
+      metadata: { path, requiredOwnerId },
     });
   }
 
@@ -164,13 +160,9 @@ async function getStoreBySlugOrThrow(
 export const ordersRouter = new Hono<AppEnv>();
 
 // ============================================================
-// 🟢 GET Routes (عرض الطلبات - محمية لصاحب المتجر)
+// 🟢 GET Routes
 // ============================================================
 
-/**
- * GET /api/store/:slug/orders
- * 🛡️ SECURITY FIX: إضافة requireAuth وفحص ملكية المتجر للحد من ثغرات التسريب IDOR
- */
 ordersRouter.get('/store/:slug/orders', requireAuth, (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
@@ -209,20 +201,19 @@ ordersRouter.get('/store/:slug/orders', requireAuth, (c) =>
       .limit(limit)
       .offset(offset);
 
-    return c.json({
-      success: true,
-      data: {
-        orders: ordersList,
-        pagination: { limit, offset, total, hasMore: offset + limit < total },
+    return c.json(
+      {
+        success: true,
+        data: {
+          orders: ordersList,
+          pagination: { limit, offset, total, hasMore: offset + limit < total },
+        },
       },
-    }, 200);
+      200
+    );
   })
 );
 
-/**
- * GET /api/store/:slug/orders/:id
- * 🛡️ SECURITY FIX: إضافة requireAuth وفحص ملكية المتجر
- */
 ordersRouter.get('/store/:slug/orders/:id', requireAuth, (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
@@ -247,13 +238,12 @@ ordersRouter.get('/store/:slug/orders/:id', requireAuth, (c) =>
     if (!order) {
       throw new SystemError({
         code: 'ORDER_NOT_FOUND',
-        userMessage: 'الطلب المطلوب غير موجود.',
-        technicalMessage: `Order '${id}' not found in store '${store.id}'.`,
         category: 'business',
         severity: 'info',
-        retryable: false,
-        shouldAlert: false,
-        context: { storeId: store.id, path: c.req.path },
+        userMessage: 'الطلب المطلوب غير موجود.',
+        technicalMessage: `Order '${id}' not found in store '${store.id}'.`,
+        storeId: store.id,
+        metadata: { path: c.req.path, orderId: id },
       });
     }
 
@@ -270,39 +260,29 @@ ordersRouter.get('/store/:slug/orders/:id', requireAuth, (c) =>
 // 🟡 POST / PUT / DELETE Routes
 // ============================================================
 
-/**
- * POST /api/store/:slug/orders
- * ✅ متاح للزوار والعملاء للـ Checkout العام في المتجر
- */
 ordersRouter.post('/store/:slug/orders', (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
     const rawBody = await c.req.json();
-    const user = c.get('user'); // قد يكون undefined (زائر) أو UserContext (عميل مسجل)
+    const user = c.get('user');
 
     const parsed = createOrderSchema.safeParse(rawBody);
     if (!parsed.success) {
       throw new SystemError({
-        code: 'ORDER_VALIDATION_ERROR',
-        userMessage: parsed.error.issues[0]?.message || 'بيانات إنشاء الطلب غير صحيحة.',
-        technicalMessage: JSON.stringify(parsed.error.issues),
+        code: 'INVALID_ORDER_DATA',
         category: 'validation',
         severity: 'info',
-        retryable: false,
-        shouldAlert: false,
-        context: { storeId: slug || 'unknown', path: c.req.path },
+        userMessage: parsed.error.issues[0]?.message || 'بيانات إنشاء الطلب غير صحيحة.',
+        technicalMessage: JSON.stringify(parsed.error.issues),
+        storeId: slug,
+        metadata: { path: c.req.path },
       });
     }
 
     const body = parsed.data;
     const db = getDb({ DB: c.env.DB });
-    
-    const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
 
-    // 🛡️ SECURITY FIX: customerId يُستخرج فقط من:
-    //   1. الجلسة الموثوقة (user?.id) — للعملاء المسجلين
-    //   2. guest UUID فريد — للزوار
-    // body.customerId يتم تجاهله تماماً لمنع التزوير (never trust client-supplied customerId)
+    const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
     const effectiveCustomerId = user?.id ?? `guest_${crypto.randomUUID()}`;
 
     const result = await db.transaction(async (tx) => {
@@ -325,30 +305,27 @@ ordersRouter.post('/store/:slug/orders', (c) =>
         if (!product) {
           throw new SystemError({
             code: 'PRODUCT_NOT_FOUND',
-            userMessage: `المنتج غير موجود أو محذوف.`,
-            technicalMessage: `Product '${item.productId}' not found in store '${store.id}'.`,
             category: 'business',
             severity: 'info',
-            retryable: false,
-            shouldAlert: false,
-            context: { storeId: store.id, path: c.req.path },
+            userMessage: `المنتج غير موجود أو محذوف.`,
+            technicalMessage: `Product '${item.productId}' not found in store '${store.id}'.`,
+            storeId: store.id,
+            metadata: { path: c.req.path, productId: item.productId },
           });
         }
 
         if (product.stock < item.quantity) {
           throw new SystemError({
             code: 'INSUFFICIENT_STOCK',
-            userMessage: `المنتج "${product.name}" لا يملك مخزوناً كافياً.`,
-            technicalMessage: `Stock insufficient for product '${product.id}'. Requested: ${item.quantity}, Available: ${product.stock}.`,
             category: 'business',
             severity: 'info',
-            retryable: false,
-            shouldAlert: false,
-            context: { storeId: store.id, path: c.req.path },
+            userMessage: `المنتج "${product.name}" لا يملك مخزوناً كافياً.`,
+            technicalMessage: `Stock insufficient for product '${product.id}'. Requested: ${item.quantity}, Available: ${product.stock}.`,
+            storeId: store.id,
+            metadata: { path: c.req.path, productId: product.id, requested: item.quantity, available: product.stock },
           });
         }
 
-        // 🛡️ SECURITY FIX: السعر يُجلب دائماً من قاعدة البيانات، وليس من بيانات العميل
         const unitPriceCents = product.price;
         const lineTotalCents = unitPriceCents * item.quantity;
 
@@ -381,7 +358,6 @@ ordersRouter.post('/store/:slug/orders', (c) =>
           netAmountCents: lineTotalCents,
         });
 
-        // 🛡️ Atomic stock decrement with race condition protection
         const updatedProducts = await tx
           .update(schema.products)
           .set({ stock: sql`${schema.products.stock} - ${item.quantity}` })
@@ -395,14 +371,14 @@ ordersRouter.post('/store/:slug/orders', (c) =>
 
         if (updatedProducts.length === 0) {
           throw new SystemError({
-            code: 'INSUFFICIENT_STOCK_RACE',
-            userMessage: `حدث تغيير في المخزون للمنتج "${product.name}". يرجى إعادة المحاولة.`,
-            technicalMessage: `Atomic stock reduction failed for product '${product.id}'.`,
+            code: 'STOCK_UPDATE_FAILED',
             category: 'business',
             severity: 'info',
             retryable: true,
-            shouldAlert: false,
-            context: { storeId: store.id, path: c.req.path },
+            userMessage: `حدث تغيير في المخزون للمنتج "${product.name}". يرجى إعادة المحاولة.`,
+            technicalMessage: `Atomic stock reduction failed for product '${product.id}'.`,
+            storeId: store.id,
+            metadata: { path: c.req.path, productId: product.id },
           });
         }
       }
@@ -417,14 +393,13 @@ ordersRouter.post('/store/:slug/orders', (c) =>
 
       if (totalCents < 0) {
         throw new SystemError({
-          code: 'INVALID_ORDER_TOTAL',
-          userMessage: 'إجمالي الطلب المحسوب لا يمكن أن يكون بالسالب.',
-          technicalMessage: `Calculated total is negative: ${totalCents}`,
+          code: 'INVALID_TOTAL',
           category: 'validation',
           severity: 'info',
-          retryable: false,
-          shouldAlert: false,
-          context: { storeId: store.id, path: c.req.path },
+          userMessage: 'إجمالي الطلب المحسوب لا يمكن أن يكون بالسالب.',
+          technicalMessage: `Calculated total is negative: ${totalCents}`,
+          storeId: store.id,
+          metadata: { path: c.req.path, totalCents },
         });
       }
 
@@ -441,7 +416,7 @@ ordersRouter.post('/store/:slug/orders', (c) =>
         id: orderId,
         orderNumber: generatedOrderNumber,
         storeId: store.id,
-        customerId: effectiveCustomerId, // 🛡️ الهوية المحمية
+        customerId: effectiveCustomerId,
         addressId: body.addressId ?? null,
         customerName: body.customerName.trim(),
         customerPhone: body.customerPhone.trim(),
@@ -515,9 +490,6 @@ ordersRouter.post('/store/:slug/orders', (c) =>
   })
 );
 
-/**
- * PUT /api/store/:slug/orders/:id/status
- */
 ordersRouter.put('/store/:slug/orders/:id/status', requireAuth, (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
@@ -528,20 +500,19 @@ ordersRouter.put('/store/:slug/orders/:id/status', requireAuth, (c) =>
     const parsed = updateOrderStatusSchema.safeParse(rawBody);
     if (!parsed.success) {
       throw new SystemError({
-        code: 'STATUS_VALIDATION_ERROR',
-        userMessage: parsed.error.issues[0]?.message || 'حالة الطلب غير صحيحة.',
-        technicalMessage: JSON.stringify(parsed.error.issues),
+        code: 'INVALID_STATUS_DATA',
         category: 'validation',
         severity: 'info',
-        retryable: false,
-        shouldAlert: false,
-        context: { storeId: slug || 'unknown', path: c.req.path },
+        userMessage: parsed.error.issues[0]?.message || 'حالة الطلب غير صحيحة.',
+        technicalMessage: JSON.stringify(parsed.error.issues),
+        storeId: slug,
+        metadata: { path: c.req.path },
       });
     }
 
     const body = parsed.data;
     const db = getDb({ DB: c.env.DB });
-    
+
     const store = await getStoreBySlugOrThrow(db, slug, c.req.path, user?.id);
 
     await db.transaction(async (tx) => {
@@ -560,13 +531,12 @@ ordersRouter.put('/store/:slug/orders/:id/status', requireAuth, (c) =>
       if (!order) {
         throw new SystemError({
           code: 'ORDER_NOT_FOUND',
-          userMessage: 'الطلب غير موجود.',
-          technicalMessage: `Order '${id}' not found for store '${store.id}'.`,
           category: 'business',
           severity: 'info',
-          retryable: false,
-          shouldAlert: false,
-          context: { storeId: store.id, path: c.req.path },
+          userMessage: 'الطلب غير موجود.',
+          technicalMessage: `Order '${id}' not found for store '${store.id}'.`,
+          storeId: store.id,
+          metadata: { path: c.req.path, orderId: id },
         });
       }
 
@@ -622,9 +592,6 @@ ordersRouter.put('/store/:slug/orders/:id/status', requireAuth, (c) =>
   })
 );
 
-/**
- * DELETE /api/store/:slug/orders/:id (Soft Delete)
- */
 ordersRouter.delete('/store/:slug/orders/:id', requireAuth, (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
@@ -632,7 +599,7 @@ ordersRouter.delete('/store/:slug/orders/:id', requireAuth, (c) =>
     const user = c.get('user');
 
     const db = getDb({ DB: c.env.DB });
-    
+
     const store = await getStoreBySlugOrThrow(db, slug, c.req.path, user?.id);
 
     const order = await db
@@ -650,26 +617,24 @@ ordersRouter.delete('/store/:slug/orders/:id', requireAuth, (c) =>
     if (!order) {
       throw new SystemError({
         code: 'ORDER_NOT_FOUND',
-        userMessage: 'الطلب غير موجود.',
-        technicalMessage: `Order '${id}' not found for store '${store.id}'.`,
         category: 'business',
         severity: 'info',
-        retryable: false,
-        shouldAlert: false,
-        context: { storeId: store.id, path: c.req.path },
+        userMessage: 'الطلب غير موجود.',
+        technicalMessage: `Order '${id}' not found for store '${store.id}'.`,
+        storeId: store.id,
+        metadata: { path: c.req.path, orderId: id },
       });
     }
 
     if (order.status === 'shipped' || order.status === 'delivered') {
       throw new SystemError({
         code: 'ORDER_CANNOT_BE_DELETED',
-        userMessage: 'لا يمكن حذف الطلبات التي تم شحنها أو توصيلها بالفعل.',
-        technicalMessage: `Cannot delete order '${id}' with status '${order.status}'.`,
         category: 'business',
         severity: 'info',
-        retryable: false,
-        shouldAlert: false,
-        context: { storeId: store.id, path: c.req.path },
+        userMessage: 'لا يمكن حذف الطلبات التي تم شحنها أو توصيلها بالفعل.',
+        technicalMessage: `Cannot delete order '${id}' with status '${order.status}'.`,
+        storeId: store.id,
+        metadata: { path: c.req.path, orderId: id, status: order.status },
       });
     }
 

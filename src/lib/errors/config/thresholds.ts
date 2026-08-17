@@ -4,13 +4,13 @@
 // المبدأ: تكوين مركزي - قابل للتعديل دون المساس بالمنطق الأساسي
 
 // ═══════════════════════════════════════════════════════════════
-// 📦  الأنواع
+// 📦  الأنواع (Types)
 // ═══════════════════════════════════════════════════════════════
 
 /**
  * عتبات الأداء لمسار معين
  */
-interface RouteThreshold {
+export interface RouteThreshold {
   /** المدة بالمللي ثانية - إذا تجاوزها الطلب، يُعتبر "بطيئاً" (يُطلق PERF_001) */
   slowThresholdMs: number;
   /** المدة بالمللي ثانية - إذا تجاوزها الطلب، يُعتبر "حرجاً" (يُطلق PERF_003) */
@@ -24,7 +24,7 @@ interface RouteThreshold {
 /**
  * تكوين عتبات الأداء الكامل
  */
-interface PerformanceThresholdsConfig {
+export interface PerformanceThresholdsConfig {
   /** خريطة المسارات إلى عتباتها */
   routes: Record<string, RouteThreshold>;
   /** العتبة الافتراضية (تطبق على أي مسار غير محدد) */
@@ -34,10 +34,10 @@ interface PerformanceThresholdsConfig {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 📊  العتبات الافتراضية
+// 📊  العتبات الافتراضية (Default Thresholds)
 // ═══════════════════════════════════════════════════════════════
 
-const DEFAULT_THRESHOLDS: PerformanceThresholdsConfig = {
+export const DEFAULT_THRESHOLDS: PerformanceThresholdsConfig = {
   version: '1.0.1',
 
   // العتبة الافتراضية (تطبق على أي مسار غير محدد)
@@ -380,13 +380,13 @@ const DEFAULT_THRESHOLDS: PerformanceThresholdsConfig = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// 🔍 دوال البحث والاستعلام
+// 🔍 دوال البحث والاستعلام (Query Helpers)
 // ═══════════════════════════════════════════════════════════════
 
 /**
  * تطهير المسارات لمنع مشاكل الشرطة المائلة النهائية Trailing Slashes
  */
-function normalizePath(path: string): string {
+export function normalizePath(path: string): string {
   if (!path || path === '/') return '/';
   return path.endsWith('/') ? path.slice(0, -1) : path;
 }
@@ -394,7 +394,7 @@ function normalizePath(path: string): string {
 /**
  * الحصول على العتبات المناسبة لمسار معين مع معلومات التفاصيل
  */
-function getThresholdForPathWithInfo(
+export function getThresholdForPathWithInfo(
   rawPath: string,
   config: PerformanceThresholdsConfig = DEFAULT_THRESHOLDS
 ): {
@@ -441,7 +441,7 @@ function getThresholdForPathWithInfo(
 /**
  * الحصول على العتبات المناسبة لمسار معين
  */
-function getThresholdForPath(
+export function getThresholdForPath(
   path: string,
   config: PerformanceThresholdsConfig = DEFAULT_THRESHOLDS
 ): RouteThreshold {
@@ -451,7 +451,7 @@ function getThresholdForPath(
 /**
  * الحصول على جميع المسارات التي تطابق بادئة معينة
  */
-function getPathsByPrefix(
+export function getPathsByPrefix(
   prefix: string,
   config: PerformanceThresholdsConfig = DEFAULT_THRESHOLDS
 ): string[] {
@@ -461,7 +461,7 @@ function getPathsByPrefix(
 /**
  * الحصول على جميع المسارات حسب مستوى الأهمية
  */
-function getPathsByPriority(
+export function getPathsByPriority(
   priority: 'low' | 'normal' | 'high',
   config: PerformanceThresholdsConfig = DEFAULT_THRESHOLDS
 ): string[] {
@@ -473,7 +473,7 @@ function getPathsByPriority(
 /**
  * التحقق مما إذا كان المسار يحتوي على عتبات مخصصة
  */
-function hasCustomThreshold(
+export function hasCustomThreshold(
   path: string,
   config: PerformanceThresholdsConfig = DEFAULT_THRESHOLDS
 ): boolean {
@@ -482,10 +482,10 @@ function hasCustomThreshold(
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 🛠️ دوال التعديل والإدارة
+// 🛠️ دوال التعديل والإدارة (Mutation Helpers)
 // ═══════════════════════════════════════════════════════════════
 
-function mergeThresholds(
+export function mergeThresholds(
   customConfig: Partial<PerformanceThresholdsConfig>
 ): PerformanceThresholdsConfig {
   return {
@@ -498,7 +498,7 @@ function mergeThresholds(
   };
 }
 
-function setThresholdForPath(
+export function setThresholdForPath(
   path: string,
   threshold: RouteThreshold,
   config: PerformanceThresholdsConfig = DEFAULT_THRESHOLDS
@@ -512,7 +512,7 @@ function setThresholdForPath(
   };
 }
 
-function removeThresholdForPath(
+export function removeThresholdForPath(
   path: string,
   config: PerformanceThresholdsConfig = DEFAULT_THRESHOLDS
 ): PerformanceThresholdsConfig {
@@ -525,16 +525,16 @@ function removeThresholdForPath(
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 📋 دوال التصدير والتصحيح
+// 📋 دوال التصدير والتصحيح (Debug & Export Helpers)
 // ═══════════════════════════════════════════════════════════════
 
-function getThresholdsJSON(
+export function getThresholdsJSON(
   config: PerformanceThresholdsConfig = DEFAULT_THRESHOLDS
 ): string {
   return JSON.stringify(config, null, 2);
 }
 
-function getThresholdsSummary(
+export function getThresholdsSummary(
   config: PerformanceThresholdsConfig = DEFAULT_THRESHOLDS
 ): {
   totalRoutes: number;
@@ -588,25 +588,3 @@ function getThresholdsSummary(
     fastestRoute: fastest.path ? fastest : { path: 'default', threshold: config.default },
   };
 }
-
-// ═══════════════════════════════════════════════════════════════
-// 📤 التصدير الموحد والصريح
-// ═══════════════════════════════════════════════════════════════
-
-export {
-  DEFAULT_THRESHOLDS,
-  getThresholdForPath,
-  getThresholdForPathWithInfo,
-  getPathsByPrefix,
-  getPathsByPriority,
-  hasCustomThreshold,
-  mergeThresholds,
-  setThresholdForPath,
-  removeThresholdForPath,
-  getThresholdsJSON,
-  getThresholdsSummary,
-  type RouteThreshold,
-  type PerformanceThresholdsConfig,
-};
-
-export default DEFAULT_THRESHOLDS;

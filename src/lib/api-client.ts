@@ -1,6 +1,7 @@
 // src/lib/api-client.ts
 
-import { classifyError } from '@/lib/errors/classifier';
+import { SystemError } from '@/lib/errors';
+
 type NextFetchRequestConfig = NonNullable<RequestInit['next']>;
 
 // ============================================================
@@ -47,7 +48,7 @@ function getDefaultHeaders(options?: ApiClientOptions): Record<string, string> {
     'Accept': 'application/json',
   };
 
-  // ✅ 1. حقن הـ Correlation ID الموحد للتتبع في كامل المنظومة
+  // ✅ 1. حقن الـ Correlation ID الموحد للتتبع في كامل المنظومة
   const correlationId = 
     options?.correlationId || 
     (typeof window !== 'undefined' ? (window as unknown as { __CORRELATION_ID__?: string }).__CORRELATION_ID__ : undefined) ||
@@ -178,14 +179,16 @@ async function fetchWithRetry<T>(
       return fetchWithRetry<T>(url, options, attempt + 1);
     }
 
-    // ✅ تصنيف خطأ الشبكة النهائي عبر Classifier للتوافق مع دستور الأخطاء
-    const classified = classifyError(error as Error);
+    // ✅ تحويل الخطأ إلى SystemError متوافق مع نظامك الموحد
+    const isSysErr = error instanceof SystemError;
+    const errorCode = isSysErr ? error.code : 'NETWORK_ERROR';
+    const errorMessage = isSysErr ? error.userMessage : (error instanceof Error ? error.message : 'Network request failed');
 
     return {
       success: false,
       error: {
-        code: classified.code || 'NETWORK_ERROR',
-        message: classified.userMessage || (error instanceof Error ? error.message : 'Network request failed'),
+        code: errorCode,
+        message: errorMessage,
         details: error,
       },
       metadata: { 
@@ -298,10 +301,13 @@ export async function executeServerAction<T, P>(
   try {
     return await action(payload);
   } catch (error) {
-    const systemError = classifyError(error as Error);
+    const isSysErr = error instanceof SystemError;
+    const errorCode = isSysErr ? error.code : 'ACTION_FAILED';
+    const errorMessage = isSysErr ? error.userMessage : (error instanceof Error ? error.message : 'Action execution failed');
+
     return {
       success: false,
-      error: { code: systemError.code, message: systemError.userMessage },
+      error: { code: errorCode, message: errorMessage },
       metadata: { timestamp: new Date().toISOString() },
     };
   }

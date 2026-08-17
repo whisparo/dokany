@@ -5,7 +5,7 @@ import { Redis } from '@upstash/redis';
 import { getDb } from '@/lib/db';
 import { customers, type Customer } from '@/lib/db/schema/customers';
 import type { Env } from '@/lib/env';
-import { SystemError } from '@/lib/errors/types';
+import { SystemError } from '@/lib/errors';
 
 export interface FindOrCreateCustomerInput {
   name: string;
@@ -59,7 +59,7 @@ export class CustomerService {
         return existingCustomer;
       }
 
-      // 3️⃣ إنشاء عميل جديد إذا لم يوجد
+      // 3️⃣ إنشاء عميل جديد إذا لم يوجد (مع الحماية من Race Condition)
       const newCustomerId = crypto.randomUUID();
       const cleanEmail = input.email && input.email.trim() !== '' ? input.email.trim() : null;
       const cleanName = input.name && input.name.trim() !== '' ? input.name.trim() : null;
@@ -79,9 +79,22 @@ export class CustomerService {
           createdAt: now,
           updatedAt: now,
         })
+        .onConflictDoNothing()
         .returning();
 
+      // التعامل مع حالة التعارض (تزامن إدراج نفس الرقم بنفس الوقت)
       if (!newCustomer) {
+        const [fallbackCustomer] = await db
+          .select()
+          .from(customers)
+          .where(eq(customers.phone, cleanPhone))
+          .limit(1);
+
+        if (fallbackCustomer) {
+          await CustomerService.setCache(env, cacheKey, fallbackCustomer);
+          return fallbackCustomer;
+        }
+
         throw new SystemError({
           code: 'CUST_501',
           userMessage: 'فشل حفظ بيانات العميل في قاعدة البيانات.',
@@ -127,7 +140,6 @@ export class CustomerService {
         token: env.UPSTASH_REDIS_REST_TOKEN,
       });
 
-      // تمرير الكائن مباشرة لأن Upstash يقوم بعمل serialization تلقائياً
       await redis.set(key, customerData, { ex: CUSTOMER_CACHE_TTL_SECONDS });
     } catch (error) {
       console.warn('⚠️ Failed to save customer to Redis cache:', error);

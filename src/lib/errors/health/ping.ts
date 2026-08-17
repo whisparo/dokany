@@ -1,7 +1,7 @@
 // lib/errors/health/ping.ts
-// الإصدار: 1.0.1
+// الإصدار: 1.0.2
 // الدور: مسار /ping و /health للمراقبة الخارجية (Uptime Robot & Health Checks)
-// المبدأ: استجابة 200 OK فورية للمسارات الخفيفة + فحص متكامل للموارد عند الطلب
+// المبدأ: استجابة 200 OK فورية للمسارات الخفيفة + فحص متكامل للموارد عند الطلب مع Timeout لضمان السرعة
 
 import { addBreadcrumb } from '../core/context';
 
@@ -16,6 +16,32 @@ export interface PingResponse {
   timestamp: string;
   /** معرف الـ Worker (اختياري) */
   workerId?: string;
+}
+
+export interface HealthCheckItem {
+  name: string;
+  status: 'ok' | 'error';
+  message?: string;
+  durationMs?: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 🛠️  دالة مساعدة للـ Timeout
+// ═══════════════════════════════════════════════════════════════
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs = 2000): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Operation timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timeoutId!);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -47,7 +73,7 @@ export function handlePing(
               url: env.UPSTASH_REDIS_REST_URL,
               token: env.UPSTASH_REDIS_REST_TOKEN,
             });
-            await redis.set('health:last_ping', Date.now(), { ex: 3600 });
+            await withTimeout(redis.set('health:last_ping', Date.now(), { ex: 3600 }), 1500);
           }
         } catch {
           // تجاهل فشل Redis في الخلفية
@@ -73,7 +99,7 @@ export function handlePing(
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
-      'X-Ping-Version': '1.0.1',
+      'X-Ping-Version': '1.0.2',
     },
   });
 }
@@ -98,7 +124,7 @@ export function pingResponse(): Response {
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
-      'X-Ping-Version': '1.0.1',
+      'X-Ping-Version': '1.0.2',
     },
   });
 }
@@ -123,22 +149,16 @@ export function pingLight(): Response {
 
 export async function healthCheck(
   env?: any,
-  waitUntil?: (promise: Promise<unknown>) => void
+  _waitUntil?: (promise: Promise<unknown>) => void
 ): Promise<Response> {
-  const checks: {
-    name: string;
-    status: 'ok' | 'error';
-    message?: string;
-    durationMs?: number;
-  }[] = [];
-
+  const checks: HealthCheckItem[] = [];
   const startTime = performance.now();
 
   // 1️⃣ فحص قاعدة البيانات D1
   if (env?.DB) {
     const start = performance.now();
     try {
-      const result = await env.DB.prepare('SELECT 1').first();
+      const result = await withTimeout(env.DB.prepare('SELECT 1').first(), 2000);
       checks.push({
         name: 'D1 Database',
         status: result ? 'ok' : 'error',
@@ -165,7 +185,7 @@ export async function healthCheck(
         token: env.UPSTASH_REDIS_REST_TOKEN,
       });
 
-      const ping = await redis.ping();
+      const ping = await withTimeout(redis.ping(), 2000);
       checks.push({
         name: 'Upstash Redis',
         status: ping === 'PONG' ? 'ok' : 'error',
@@ -182,14 +202,14 @@ export async function healthCheck(
     }
   }
 
-  // 3️⃣ فحص Backblaze B2 (تصحيح المسميات واستدعاءcreateB2StoreFromEnv)
+  // 3️⃣ فحص Backblaze B2
   if (env?.B2_ACCESS_KEY_ID && env?.B2_BUCKET_NAME) {
     const start = performance.now();
     try {
       const { createB2StoreFromEnv } = await import('../storage/b2-store');
       const b2 = createB2StoreFromEnv(env);
       
-      const exists = await b2.exists('health-check.tmp');
+      await withTimeout(b2.exists('health-check.tmp'), 2000);
       checks.push({
         name: 'Backblaze B2',
         status: 'ok',

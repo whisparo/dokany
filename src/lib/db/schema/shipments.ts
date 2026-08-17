@@ -11,7 +11,6 @@ import {
 import { sql, eq, and, isNull, desc, count } from 'drizzle-orm';
 import { type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
-import { classifyError } from '@/lib/errors/classifier';
 
 // ============================================
 // 📦 أنواع TypeScript
@@ -272,16 +271,11 @@ export async function updateShipmentStatus(
     .get();
 
   if (!currentShipment) {
-    throw classifyError(
-      new Error('BIZ_404: Shipment not found or already deleted')
-    );
+    throw new Error('BIZ_404: Shipment not found or already deleted');
   }
 
   if (!canTransitionStatus(currentShipment.status, newStatus)) {
-    throw classifyError(
-      new Error(`BIZ_400: Cannot transition shipment state from ${currentShipment.status} to ${newStatus}`),
-      { storeId: currentShipment.storeId }
-    );
+    throw new Error(`BIZ_400: Cannot transition shipment state from ${currentShipment.status} to ${newStatus}`);
   }
 
   const newEvent: ShipmentEvent = {
@@ -314,10 +308,7 @@ export async function updateShipmentStatus(
     .get();
 
   if (!result) {
-    throw classifyError(
-      new Error('SYS_500: Failed to update shipment record in D1 engine'),
-      { storeId: currentShipment.storeId }
-    );
+    throw new Error('SYS_500: Failed to update shipment record in D1 engine');
   }
   return result;
 }
@@ -340,9 +331,7 @@ export async function recordCODCollection(
     .get();
 
   if (!result) {
-    throw classifyError(
-      new Error('BIZ_404: Shipment not found for COD collection process')
-    );
+    throw new Error('BIZ_404: Shipment not found for COD collection process');
   }
   return result;
 }

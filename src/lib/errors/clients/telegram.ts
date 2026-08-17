@@ -1,5 +1,5 @@
 // lib/errors/clients/telegram.ts
-// الإصدار: 9.1.0 (إصدار الإنتاج المعماري المحسن)
+// الإصدار: 9.1.2 (تنظيف وتوحيد متغيرات البيئة)
 // الدور: عميل التليجرام المتكامل مع Rate Limiting و Circuit Breaker
 // المبدأ: إرسال آمن متوافق 100% مع بيئة Cloudflare Workers و Edge Runtime
 
@@ -53,6 +53,22 @@ export interface TelegramSendResult {
   chatId: string;
   errorCode?: string;
   errorMessage?: string;
+}
+
+export interface TelegramEnvBindings {
+  TELEGRAM_BOT_TOKEN?: string;
+  ERROR_BOT_TOKEN?: string;
+  ERROR_CHANNEL_ID?: string;
+  TELEGRAM_ERROR_CHAT_ID?: string;
+  TELEGRAM_CRITICAL_CHAT_ID?: string;
+  TELEGRAM_WARNING_CHAT_ID?: string;
+  TELEGRAM_DIGEST_CHAT_ID?: string;
+  TELEGRAM_WEBHOOK_URL?: string;
+  TELEGRAM_WEBHOOK_SECRET?: string;
+  TELEGRAM_MAX_MESSAGES_PER_SECOND?: string | number;
+  TELEGRAM_CIRCUIT_FAILURE_THRESHOLD?: string | number;
+  TELEGRAM_CIRCUIT_OPEN_DURATION?: string | number;
+  TELEGRAM_REQUEST_TIMEOUT_MS?: string | number;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -233,6 +249,11 @@ export class TelegramClient {
       };
     }
 
+    // 🔍 طباعة بيانات الطلب للكشف والتنقيح
+    console.log('🔍 [Telegram Fetch Debug] URL:', url);
+    console.log('🔍 [Telegram Fetch Debug] Target Chat ID:', targetChatId);
+    console.log('🔍 [Telegram Fetch Debug] Payload:', JSON.stringify(payload, null, 2));
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
@@ -286,7 +307,6 @@ export class TelegramClient {
       };
     }
   }
-
   async sendCritical(
     text: string,
     options: { chatId?: string; buttons?: TelegramInlineButton[] } = {}
@@ -363,20 +383,37 @@ export class TelegramClient {
 // 🏭  المصنع (Factory - Worker Safe)
 // ═══════════════════════════════════════════════════════════════
 
-export function createTelegramClientFromEnv(env: any): TelegramClient {
-  const botToken = env.TELEGRAM_BOT_TOKEN;
-  const criticalChatId = env.TELEGRAM_CRITICAL_CHAT_ID || env.TELEGRAM_ADMIN_CHAT_ID || env.ADMIN_TELEGRAM_CHAT_ID;
-  const warningChatId = env.TELEGRAM_WARNING_CHAT_ID || env.TELEGRAM_ERROR_CHAT_ID || env.ERROR_CHANNEL_ID;
-  const digestChatId = env.TELEGRAM_DIGEST_CHAT_ID || env.TELEGRAM_ERROR_CHAT_ID;
+export function createTelegramClientFromEnv(env: TelegramEnvBindings): TelegramClient {
+  // 1. التوكن الموحد
+  const botToken = env.ERROR_BOT_TOKEN;
 
-  if (!botToken) throw new Error('TELEGRAM_BOT_TOKEN is required');
-  if (!criticalChatId) throw new Error('TELEGRAM_CRITICAL_CHAT_ID or TELEGRAM_ADMIN_CHAT_ID is required');
+  // 2. قناة الأخطاء الموحدة
+  const criticalChatId =
+    env.ERROR_CHANNEL_ID ||
+    env.TELEGRAM_ERROR_CHAT_ID ||
+    env.TELEGRAM_CRITICAL_CHAT_ID;
+
+  // 3. الفحص المبكر
+  if (!botToken) {
+    throw new Error('ERROR_BOT_TOKEN is required for Error Tracking System');
+  }
+  if (!criticalChatId) {
+    throw new Error('ERROR_CHANNEL_ID (or TELEGRAM_ERROR_CHAT_ID) is required');
+  }
+  // 4. تعيين باقي القنوات لتقرأ من القناة الرئيسية في حال عدم تحديدها
+  const warningChatId =
+    env.TELEGRAM_WARNING_CHAT_ID ||
+    criticalChatId;
+
+  const digestChatId =
+    env.TELEGRAM_DIGEST_CHAT_ID ||
+    criticalChatId;
 
   return new TelegramClient({
     botToken,
     criticalChatId,
-    warningChatId: warningChatId || criticalChatId,
-    digestChatId: digestChatId || criticalChatId,
+    warningChatId,
+    digestChatId,
     maxMessagesPerSecond: Number(env.TELEGRAM_MAX_MESSAGES_PER_SECOND) || 30,
     circuitFailureThreshold: Number(env.TELEGRAM_CIRCUIT_FAILURE_THRESHOLD) || 5,
     circuitOpenDurationSeconds: Number(env.TELEGRAM_CIRCUIT_OPEN_DURATION) || 300,
@@ -387,12 +424,12 @@ export function createTelegramClientFromEnv(env: any): TelegramClient {
 /**
  * الحصول على عميل التليجرام المرتبط بالطلب الحالي فقط
  */
-export function getTelegramClient(env: any): TelegramClient {
+export function getTelegramClient(env: TelegramEnvBindings): TelegramClient {
   return createTelegramClientFromEnv(env);
 }
 
 export async function sendCriticalError(
-  env: any,
+  env: TelegramEnvBindings,
   text: string,
   options?: { buttons?: TelegramInlineButton[] }
 ): Promise<TelegramSendResult> {
@@ -400,7 +437,7 @@ export async function sendCriticalError(
 }
 
 export async function sendWarningError(
-  env: any,
+  env: TelegramEnvBindings,
   text: string,
   options?: { buttons?: TelegramInlineButton[] }
 ): Promise<TelegramSendResult> {
@@ -408,7 +445,7 @@ export async function sendWarningError(
 }
 
 export async function sendDigestError(
-  env: any,
+  env: TelegramEnvBindings,
   text: string,
   options?: { buttons?: TelegramInlineButton[] }
 ): Promise<TelegramSendResult> {
@@ -438,9 +475,8 @@ export function formatErrorForTelegram(
   lines.push(`<b>🕒</b> ${escapeHtml(error.timestamp.toISOString())}`);
   lines.push(`<b>📦</b> <code>${escapeHtml(error.correlationId)}</code>`);
 
-  // 🔹 استخراج storeId بأمان من metadata أو الكائن نفسه
   const meta = (error.metadata || {}) as Record<string, unknown>;
-  const storeId = (error as unknown as { storeId?: string }).storeId || meta.storeId;
+  const storeId = ('storeId' in error && typeof error.storeId === 'string' ? error.storeId : undefined) || meta.storeId;
 
   if (storeId) {
     lines.push(`<b>🏪</b> <code>${escapeHtml(String(storeId))}</code>`);
@@ -459,7 +495,6 @@ export function formatErrorForTelegram(
     lines.push('');
     lines.push('<b>📊 Details:</b>');
     for (const [key, value] of Object.entries(meta)) {
-      // تجنب تكرار storeId في التفاصيل لأنه تم طباعته في الهيدر فوق
       if (key !== 'storeId' && typeof value !== 'object') {
         lines.push(`  • ${escapeHtml(key)}: ${escapeHtml(String(value))}`);
       }
@@ -468,6 +503,7 @@ export function formatErrorForTelegram(
 
   return lines.join('\n');
 }
+
 export function formatIncidentSummary(data: {
   code: string;
   category: string;

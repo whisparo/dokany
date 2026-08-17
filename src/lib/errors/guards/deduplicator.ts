@@ -215,11 +215,7 @@ export class Deduplicator {
       const redis = getRedisClient(env);
       if (!redis) return null;
 
-      const key = this.getIncidentKey(incidentId);
-      const data = await redis.get(key);
-      if (!data) return null;
-
-      return typeof data === 'string' ? JSON.parse(data) : (data as IncidentData);
+      return await this.getIncident(redis, incidentId);
     } catch (error) {
       console.warn(
         `[Deduplicator] Failed to get incident ${incidentId}:`,
@@ -238,12 +234,12 @@ export class Deduplicator {
       if (!redis) return [];
 
       const pattern = `${this.redisKeyPrefix}:*`;
-      const keys = await redis.keys(pattern);
+      const keys = await this.withTimeout(redis.keys(pattern));
 
       const incidents: IncidentData[] = [];
       for (const key of keys) {
         try {
-          const data = await redis.get(key);
+          const data = await this.withTimeout(redis.get(key));
           if (data) {
             incidents.push(typeof data === 'string' ? JSON.parse(data) : (data as IncidentData));
           }
@@ -292,9 +288,11 @@ export class Deduplicator {
         },
       };
 
-      await redis.set(key, JSON.stringify(updated), {
-        ex: this.config.windowSeconds,
-      });
+      await this.withTimeout(
+        redis.set(key, JSON.stringify(updated), {
+          ex: this.config.windowSeconds,
+        })
+      );
 
       return updated;
     } catch (error) {
@@ -315,7 +313,7 @@ export class Deduplicator {
       if (!redis) return;
 
       const key = this.getIncidentKey(incidentId);
-      await redis.del(key);
+      await this.withTimeout(redis.del(key));
 
       addBreadcrumb(`Incident reset: ${incidentId}`, {
         service: this.config.serviceName,
@@ -331,6 +329,24 @@ export class Deduplicator {
   // ═══════════════════════════════════════════════════════════════
   // 🧩  الدوال الداخلية (Private Helpers)
   // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * تغليف استدعاءات Redis بمهلة زناية (Timeout) لتفادي التعليق
+   */
+  private async withTimeout<T>(promise: Promise<T>): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Redis operation timed out after ${this.config.redisTimeoutMs}ms`));
+      }, this.config.redisTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutId!);
+    }
+  }
 
   /**
    * توليد معرف الحادثة
@@ -366,7 +382,7 @@ export class Deduplicator {
     incidentId: string
   ): Promise<IncidentData | null> {
     const key = this.getIncidentKey(incidentId);
-    const data = await redis.get(key);
+    const data = await this.withTimeout(redis.get(key));
 
     if (!data) return null;
 
@@ -412,9 +428,11 @@ export class Deduplicator {
       updatedAt: now,
     };
 
-    await redis.set(key, JSON.stringify(data), {
-      ex: this.config.windowSeconds,
-    });
+    await this.withTimeout(
+      redis.set(key, JSON.stringify(data), {
+        ex: this.config.windowSeconds,
+      })
+    );
   }
 
   /**
@@ -444,9 +462,11 @@ export class Deduplicator {
     };
 
     // تحديث TTL
-    await redis.set(key, JSON.stringify(updated), {
-      ex: this.config.windowSeconds,
-    });
+    await this.withTimeout(
+      redis.set(key, JSON.stringify(updated), {
+        ex: this.config.windowSeconds,
+      })
+    );
 
     return updated;
   }
@@ -559,18 +579,6 @@ export async function resetIncident(
  * @param options - خيارات التجميع
  * @param config - تكوين إضافي للحارس
  * @returns نتيجة الدالة
- * 
- * @example
- * ```typescript
- * const result = await withDeduplication(
- *   env,
- *   'telegram',
- *   async () => {
- *     return await sendTelegramMessage();
- *   },
- *   { code: 'INT_003', storeId: 'store_123' }
- * );
- * ```
  */
 export async function withDeduplication<T>(
   env: RedisEnv | undefined,
@@ -589,8 +597,6 @@ export async function withDeduplication<T>(
   isNewIncident: boolean;
   count: number;
 }> {
-  // إنشاء خطأ وهمي للتجميع (بدون رميه)
-  // نستخدمه فقط لتوليد incidentId
   const mockError = new SystemError({
     code: options.code,
     category: 'system',
@@ -605,14 +611,12 @@ export async function withDeduplication<T>(
 
   const deduplicator = getDeduplicator(serviceName, config);
 
-  // 1️⃣ تسجيل الحدث في نظام التجميع
   const result = await deduplicator.record(mockError, env, {
     storeId: options.storeId,
     userId: options.userId,
     metadata: options.metadata,
   });
 
-  // 2️⃣ تنفيذ الدالة (بغض النظر عن التجميع)
   try {
     const fnResult = await fn();
     return {
@@ -622,7 +626,6 @@ export async function withDeduplication<T>(
       count: result.count,
     };
   } catch (error) {
-    // في حال فشل الدالة، نُسجل الفشل أيضاً (لكن نعيد رمي الخطأ)
     throw error;
   }
 }

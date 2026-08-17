@@ -1,5 +1,5 @@
 // lib/errors/processing/classifier.ts
-// الإصدار: 1.1.0
+// الإصدار: 1.1.1
 // الدور: تحويل الأخطاء الخام إلى SystemError موحد
 // المبدأ: أي خطأ يدخل ← SystemError يخرج
 
@@ -131,6 +131,7 @@ export function classifyError(error: unknown, options: ClassifyOptions = {}): Sy
     breadcrumbs: context?.breadcrumbs ? [...context.breadcrumbs] : [],
   });
 }
+
 // ============================================================
 // 🔧 Helper Functions (Private)
 // ============================================================
@@ -184,31 +185,31 @@ function sanitizeCause(error: unknown): unknown {
     return null;
   }
 
-  if (error instanceof Error) {
-    const causeObj: Record<string, unknown> = {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-    };
+  try {
+    if (error instanceof Error) {
+      const causeObj: Record<string, unknown> = {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      };
 
-    const errorAny = error as unknown as Record<string, unknown>;
-    if (errorAny.metadata && typeof errorAny.metadata === 'object') {
-      try {
-        causeObj.metadata = sanitizeError({ metadata: errorAny.metadata as Record<string, unknown> }).metadata;
-      } catch {
-        // تجاهل الأخطاء
+      const errorAny = error as unknown as Record<string, unknown>;
+      if (errorAny.metadata && typeof errorAny.metadata === 'object') {
+        try {
+          causeObj.metadata = sanitizeError({ metadata: errorAny.metadata as Record<string, unknown> }).metadata;
+        } catch {
+          // تجاهل الأخطاء
+        }
       }
+
+      return causeObj;
     }
 
-    return causeObj;
-  }
-
-  if (typeof error === 'object') {
-    try {
+    if (typeof error === 'object') {
       return sanitizeError(error as { metadata?: Record<string, unknown>; cause?: unknown });
-    } catch {
-      return '[Unserializable Object]';
     }
+  } catch {
+    return '[Unserializable Cause]';
   }
 
   return String(error);

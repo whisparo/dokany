@@ -1,4 +1,5 @@
 // src/lib/db/schema/reviews.ts
+
 import {
   sqliteTable,
   text,
@@ -10,7 +11,6 @@ import {
 import { sql, eq, and, isNull, desc, asc, avg, count } from 'drizzle-orm';
 import { type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
-import { classifyError } from '@/lib/errors/classifier';
 import type { D1Database } from '@cloudflare/workers-types';
 
 // ============================================
@@ -54,7 +54,7 @@ export const reviews = sqliteTable(
     // 📝 محتوى المراجعة
     title: text('title'),
     comment: text('comment').notNull(),
-    
+
     // 🎨 الميديا والـ Arrays (JSON)
     pros: text('pros', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
     cons: text('cons', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
@@ -75,7 +75,7 @@ export const reviews = sqliteTable(
     // 💬 الرد من التاجر
     reply: text('reply'),
     repliedAt: integer('replied_at', { mode: 'timestamp' }),
-    repliedBy: text('replied_by'), 
+    repliedBy: text('replied_by'),
 
     reportedCount: integer('reported_count').notNull().default(0),
     spamScore: integer('spam_score').notNull().default(0), // 0-100
@@ -109,27 +109,27 @@ export const reviews = sqliteTable(
     index('reviews_customer_idx').on(table.customerId).where(sql`customer_id IS NOT NULL`),
     index('reviews_order_idx').on(table.orderId).where(sql`order_id IS NOT NULL`),
     index('reviews_rating_idx').on(table.rating),
-    
+
     index('reviews_product_rating_idx')
       .on(table.productId, table.rating)
       .where(sql`status = 'published' AND deleted_at IS NULL`),
-    
+
     index('reviews_status_idx').on(table.status),
-    index('reviews_verified_idx').on(table.verified).where(sql`status = 'published'`), 
+    index('reviews_verified_idx').on(table.verified).where(sql`status = 'published'`),
     index('reviews_replied_idx').on(table.repliedAt).where(sql`replied_at IS NOT NULL`),
     index('reviews_reported_idx').on(table.reportedCount).where(sql`reported_count > 0`),
     index('reviews_spam_idx').on(table.spamScore).where(sql`spam_score > 70`),
     index('reviews_helpful_idx').on(table.helpfulCount),
     index('reviews_language_idx').on(table.language),
     index('reviews_created_idx').on(table.createdAt),
-    
+
     index('reviews_product_created_idx')
       .on(table.productId, table.createdAt)
       .where(sql`status = 'published' AND deleted_at IS NULL`),
-    
+
     index('reviews_deleted_idx').on(table.deletedAt).where(sql`deleted_at IS NULL`),
     index('reviews_store_status_idx').on(table.storeId, table.status),
-    
+
     index('reviews_store_rating_idx')
       .on(table.storeId, table.rating)
       .where(sql`status = 'published' AND deleted_at IS NULL`),
@@ -141,12 +141,12 @@ export const reviews = sqliteTable(
     check('chk_title_length', sql`${table.title} IS NULL OR length(${table.title}) BETWEEN 1 AND 200`),
     check('chk_comment_length', sql`length(${table.comment}) BETWEEN 1 AND 5000`),
     check('chk_reply_length', sql`${table.reply} IS NULL OR length(${table.reply}) <= 2000`),
-    
+
     check('chk_images_limit', sql`json_array_length(${table.images}) <= 10`),
-    check('chk_videos_limit', sql`json_array_length(${table.videos}) <= 2`), 
+    check('chk_videos_limit', sql`json_array_length(${table.videos}) <= 2`),
     check('chk_pros_limit', sql`json_array_length(${table.pros}) <= 10`),
     check('chk_cons_limit', sql`json_array_length(${table.cons}) <= 10`),
-    
+
     check('chk_helpful_count_non_negative', sql`${table.helpfulCount} >= 0`),
     check('chk_not_helpful_count_non_negative', sql`${table.notHelpfulCount} >= 0`),
     check('chk_reported_count_non_negative', sql`${table.reportedCount} >= 0`),
@@ -173,7 +173,7 @@ export async function getAverageRating(
   productId: string
 ): Promise<{ average: number; count: number }> {
   const db = drizzle(d1Database);
-  
+
   const result = await db
     .select({
       average: avg(reviews.rating),
@@ -200,7 +200,7 @@ export async function getStoreAverageRating(
   storeId: string
 ): Promise<{ average: number; count: number }> {
   const db = drizzle(d1Database);
-  
+
   const result = await db
     .select({
       average: avg(reviews.rating),
@@ -231,7 +231,7 @@ export async function getProductReviews(
 ): Promise<{ reviews: Review[]; total: number }> {
   const db = drizzle(d1Database);
   const offset = (page - 1) * limit;
-  
+
   let orderClause = desc(reviews.createdAt);
   if (sortBy === 'helpful') orderClause = desc(reviews.helpfulCount);
   if (sortBy === 'rating_high') orderClause = desc(reviews.rating);
@@ -243,7 +243,6 @@ export async function getProductReviews(
     isNull(reviews.deletedAt)
   );
 
-  // تنفيذ الاستعلامين بالتوازي لتسريع الاستجابة على الـ Edge
   const [reviewsList, totalCount] = await Promise.all([
     db.select()
       .from(reviews)
@@ -296,8 +295,8 @@ export async function voteReview(
   vote: 'helpful' | 'not_helpful'
 ): Promise<Review> {
   const db = drizzle(d1Database);
-  
-  const updateFields = vote === 'helpful' 
+
+  const updateFields = vote === 'helpful'
     ? { helpfulCount: sql`${reviews.helpfulCount} + 1`, updatedAt: new Date() }
     : { notHelpfulCount: sql`${reviews.notHelpfulCount} + 1`, updatedAt: new Date() };
 
@@ -309,9 +308,7 @@ export async function voteReview(
     .get();
 
   if (!result) {
-    throw classifyError(
-      new Error('BIZ_404: Review not found or already deleted')
-    );
+    throw new Error('NOT_FOUND: Review not found or already deleted');
   }
   return result;
 }
@@ -337,9 +334,7 @@ export async function replyToReview(
     .get();
 
   if (!result) {
-    throw classifyError(
-      new Error('BIZ_404: Review not found for merchant reply')
-    );
+    throw new Error('NOT_FOUND: Review not found for merchant reply');
   }
   return result;
 }
@@ -362,9 +357,7 @@ export async function reportReview(
     .get();
 
   if (!result) {
-    throw classifyError(
-      new Error('BIZ_404: Review not found for reporting')
-    );
+    throw new Error('NOT_FOUND: Review not found for reporting');
   }
   return result;
 }
@@ -394,10 +387,7 @@ export async function moderateReview(
     .get();
 
   if (!result) {
-    throw classifyError(
-      new Error('BIZ_404: Review not found for moderation'),
-      { userId }
-    );
+    throw new Error('NOT_FOUND: Review not found for moderation');
   }
   return result;
 }

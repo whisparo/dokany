@@ -4,7 +4,6 @@ import { sqliteTable, text, integer, index, uniqueIndex, check, foreignKey } fro
 import { sql, eq, and, isNull, desc, count, between } from 'drizzle-orm';
 import { type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
-import { classifyError } from '@/lib/errors/classifier';
 
 import { stores } from './stores';
 import { customers } from './customers';
@@ -129,7 +128,10 @@ export const telegramMessages = sqliteTable(
     check('chk_sent_consistency', sql`${table.sentAt} IS NULL OR ${table.status} NOT IN ('pending')`),
     check('chk_delivered_consistency', sql`${table.deliveredAt} IS NULL OR ${table.status} IN ('delivered', 'read')`),
     check('chk_read_consistency', sql`${table.readAt} IS NULL OR ${table.status} = 'read'`),
-    check('chk_failure_consistency', sql`(${table.status} != 'failed' AND ${table.failureReason} IS NULL) OR (${table.status} = 'failed' AND ${table.failureReason} IS NOT NULL)`),
+    check('chk_failure_consistency', sql`
+      (${table.status} = 'failed' AND ${table.failureReason} IS NOT NULL) OR
+      (${table.status} != 'failed' AND (${table.failureReason} IS NULL OR ${table.retryCount} > 0))
+    `),
     check('chk_metadata_valid', sql`${table.metadata} IS NULL OR (json_valid(${table.metadata}) = 1 AND json_type(${table.metadata}) = 'object')`),
   ]
 );
@@ -205,9 +207,7 @@ export async function updateMessageStatus(
     .get();
   
   if (!result) {
-    throw classifyError(
-      new Error('BIZ_404: Telegram message entity not found for status update')
-    );
+    throw new Error('BIZ_404: Telegram message entity not found for status update');
   }
   return result;
 }
@@ -231,9 +231,7 @@ export async function incrementRetryCount(d1Database: D1Database, messageId: str
     .get();
   
   if (!result) {
-    throw classifyError(
-      new Error('BIZ_404: Telegram message entity not found for retry incrementation')
-    );
+    throw new Error('BIZ_404: Telegram message entity not found for retry incrementation');
   }
   return result;
 }
@@ -256,20 +254,19 @@ export async function getChatMessages(
   
   const baseCondition = and(...conditions);
   
-  const messagesList = await db
-    .select()
-    .from(telegramMessages)
-    .where(baseCondition)
-    .orderBy(desc(telegramMessages.createdAt))
-    .limit(limit)
-    .offset(offset)
-    .all();
-    
-  const totalCount = await db
-    .select({ count: count(telegramMessages.id) })
-    .from(telegramMessages)
-    .where(baseCondition)
-    .get();
+  const [messagesList, totalCount] = await Promise.all([
+    db.select()
+      .from(telegramMessages)
+      .where(baseCondition)
+      .orderBy(desc(telegramMessages.createdAt))
+      .limit(limit)
+      .offset(offset)
+      .all(),
+    db.select({ count: count(telegramMessages.id) })
+      .from(telegramMessages)
+      .where(baseCondition)
+      .get()
+  ]);
   
   return { 
     messages: messagesList, 

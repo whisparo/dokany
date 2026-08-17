@@ -1,5 +1,5 @@
 // lib/errors/guards/rate-limiter.ts
-// الإصدار: 1.0.1
+// الإصدار: 1.0.2
 // الدور: حماية الخدمات الخارجية من تجاوز الحدود المسموحة (Rate Limiting)
 // المبدأ: Sliding Window Log باستخدام Redis ZSET لتوزيع الحالة عبر الـ Workers
 
@@ -168,8 +168,8 @@ export class RateLimiter {
       }
 
       // حذف الطلبات القديمة وعد الباقي
-      await redis.zremrangebyscore(key, 0, windowStart);
-      const count = await redis.zcard(key);
+      await this.withTimeout(redis.zremrangebyscore(key, 0, windowStart));
+      const count = await this.withTimeout(redis.zcard(key));
 
       const allowed = count < this.config.limit;
       const remaining = Math.max(0, this.config.limit - count);
@@ -212,7 +212,7 @@ export class RateLimiter {
       const redis = getRedisClient(env);
       if (!redis) return;
 
-      await redis.del(key);
+      await this.withTimeout(redis.del(key));
       addBreadcrumb(`Rate limiter reset for ${this.config.serviceName}`, {
         service: this.config.serviceName,
         identifier,
@@ -242,8 +242,8 @@ export class RateLimiter {
       if (!redis) return 0;
 
       // حذف الطلبات القديمة وعد الباقي
-      await redis.zremrangebyscore(key, 0, windowStart);
-      return await redis.zcard(key);
+      await this.withTimeout(redis.zremrangebyscore(key, 0, windowStart));
+      return await this.withTimeout(redis.zcard(key));
     } catch (error) {
       console.warn(
         `[RateLimiter] Failed to get count for ${this.config.serviceName}:`,
@@ -256,6 +256,24 @@ export class RateLimiter {
   // ═══════════════════════════════════════════════════════════════
   // 🧩  الدوال الداخلية (Private Helpers)
   // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * تغليف استدعاءات Redis بمهلة زمنية (Timeout) لتفادي تعليق الـ Worker
+   */
+  private async withTimeout<T>(promise: Promise<T>): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Redis operation timed out after ${this.config.redisTimeoutMs}ms`));
+      }, this.config.redisTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutId!);
+    }
+  }
 
   /**
    * تنفيذ العملية الذرية باستخدام Lua Script
@@ -274,6 +292,7 @@ export class RateLimiter {
       local now = tonumber(ARGV[1])
       local windowStart = tonumber(ARGV[2])
       local maxCount = tonumber(ARGV[3])
+      local windowSeconds = tonumber(ARGV[4])
 
       -- حذف الطلبات القديمة
       redis.call('ZREMRANGEBYSCORE', key, 0, windowStart)
@@ -284,8 +303,8 @@ export class RateLimiter {
       -- إذا لم يتجاوز الحد، أضف الطلب الجديد
       if count < maxCount then
         redis.call('ZADD', key, now, now)
-        -- تعيين TTL للنافذة (لمنع تراكم البيانات)
-        redis.call('EXPIRE', key, math.ceil((windowStart + windowMs) / 1000))
+        -- تعيين TTL للنافذة بالشكل الصحيح
+        redis.call('EXPIRE', key, windowSeconds)
         return count + 1
       end
 
@@ -293,10 +312,20 @@ export class RateLimiter {
     `;
 
     const windowStart = now - windowMs;
-    const result = await redis.eval(
-      script,
-      [key],
-      [String(now), String(windowStart), String(this.config.limit)]
+    // إضافة احتياطي ثانية واحدة لضمان بقاء الـ Key طوال النافذة
+    const expireSeconds = Math.ceil(this.config.windowSeconds) + 1;
+
+    const result = await this.withTimeout(
+      redis.eval(
+        script,
+        [key],
+        [
+          String(now),
+          String(windowStart),
+          String(this.config.limit),
+          String(expireSeconds),
+        ]
+      )
     );
 
     return typeof result === 'number' ? result : 0;
@@ -430,9 +459,20 @@ export function rateLimitMiddleware(
   serviceName: string,
   config?: Partial<RateLimiterConfig>
 ) {
-  return async (c: { env: RedisEnv; req: { header: (name: string) => string | undefined }; header: (name: string, value: string) => void; json: (body: unknown, status: number) => unknown }, next: () => Promise<void>) => {
+  return async (
+    c: {
+      env: RedisEnv;
+      req: { header: (name: string) => string | undefined };
+      header: (name: string, value: string) => void;
+      json: (body: unknown, status: number) => unknown;
+    },
+    next: () => Promise<void>
+  ) => {
     const env = c.env;
-    const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const ip =
+      c.req.header('cf-connecting-ip') ||
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+      'unknown';
     const identifier = `${serviceName}:${ip}`;
 
     const limiter = getRateLimiter(serviceName, config);

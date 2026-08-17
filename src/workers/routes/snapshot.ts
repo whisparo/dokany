@@ -5,8 +5,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq, and, isNull } from 'drizzle-orm';
 import { stores, products, categories } from '@/lib/db/schema';
 import type { Env } from '@/lib/env';
-import { safeExecute } from '@/lib/errors/safe-executor';
-import { SystemError } from '@/lib/errors/types';
+import { safeExecute, SystemError } from '@/lib/errors';
 
 export const snapshotRouter = new Hono<{ Bindings: Env }>();
 
@@ -27,6 +26,10 @@ snapshotRouter.get('/store/:storeSlug/snapshot', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
+        metadata: {
+          path: c.req.path,
+          method: c.req.method,
+        },
       });
     }
 
@@ -70,6 +73,11 @@ snapshotRouter.get('/store/:storeSlug/snapshot', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
+        storeId: storeSlug,
+        metadata: {
+          path: c.req.path,
+          method: c.req.method,
+        },
       });
     }
 
@@ -199,6 +207,10 @@ snapshotRouter.get('/store/:storeSlug/version', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
+        metadata: {
+          path: c.req.path,
+          method: c.req.method,
+        },
       });
     }
 
@@ -228,6 +240,11 @@ snapshotRouter.get('/store/:storeSlug/version', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
+        storeId: storeSlug,
+        metadata: {
+          path: c.req.path,
+          method: c.req.method,
+        },
       });
     }
 

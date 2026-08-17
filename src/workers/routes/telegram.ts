@@ -2,7 +2,7 @@
 
 import { Hono, type Context, type Next } from 'hono';
 import type { Env } from '@/lib/env';
-import { safeExecute } from '@/lib/errors/safe-executor';
+import { safeExecute, SystemError } from '@/lib/errors';
 import { handleTelegramUpdate } from '@/lib/telegram/adapter';
 import { checkRateLimit } from '@/lib/rate-limit-client';
 
@@ -74,7 +74,16 @@ const requireInternalAuth = async (c: Context<{ Bindings: Env }>, next: Next) =>
   const providedSecret = c.req.header('x-internal-secret');
 
   if (!internalSecret || providedSecret !== internalSecret) {
-    return c.json({ ok: false, error: 'Unauthorized: Invalid internal secret' }, 401);
+    throw new SystemError({
+      code: 'UNAUTHORIZED_INTERNAL_ACCESS',
+      userMessage: 'غير مصرح للوصول إلى هذا المسار الداخلي',
+      technicalMessage: 'Invalid or missing x-internal-secret header',
+      category: 'security',
+      severity: 'warning',
+      retryable: false,
+      shouldAlert: false,
+      metadata: { path: c.req.path },
+    });
   }
   await next();
 };
@@ -85,14 +94,22 @@ const requireInternalAuth = async (c: Context<{ Bindings: Env }>, next: Next) =>
 
 /**
  * POST /api/telegram/webhook
- * نقطة نهاية ويب هوك تليجرام الرئيسية
+ * نقطة نهاية ويب هوك تليجرام الرئيسية لرسائل المستخدمين (تستخدم بوت التسجيل/التفاعل)
  */
 telegramRouter.post('/telegram/webhook', (c) =>
   safeExecute(async () => {
     const botToken = c.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) {
-      console.error('❌ TELEGRAM_BOT_TOKEN is not configured');
-      return c.json({ ok: false, error: 'Bot not configured' }, 500);
+      throw new SystemError({
+        code: 'TELEGRAM_BOT_NOT_CONFIGURED',
+        userMessage: 'خدمة البوت غير مهيأة',
+        technicalMessage: 'TELEGRAM_BOT_TOKEN is missing in environment variables',
+        category: 'system',
+        severity: 'critical',
+        retryable: false,
+        shouldAlert: true,
+        metadata: { path: c.req.path },
+      });
     }
 
     // 1️⃣ التحقق من الـ Secret Token الخاص بـ Telegram
@@ -100,8 +117,16 @@ telegramRouter.post('/telegram/webhook', (c) =>
     const receivedSecret = c.req.header('x-telegram-bot-api-secret-token');
 
     if (expectedSecret && receivedSecret && receivedSecret !== expectedSecret) {
-      console.warn('⚠️ Unauthorized webhook attempt (Invalid secret token)');
-      return c.json({ ok: false, error: 'Unauthorized' }, 401);
+      throw new SystemError({
+        code: 'UNAUTHORIZED_WEBHOOK_TOKEN',
+        userMessage: 'غير مصرح للوصول إلى الويب هوك',
+        technicalMessage: 'x-telegram-bot-api-secret-token header mismatch',
+        category: 'security',
+        severity: 'warning',
+        retryable: false,
+        shouldAlert: true,
+        metadata: { path: c.req.path },
+      });
     }
 
     const update = await c.req.json<TelegramUpdatePayload>();
@@ -123,17 +148,25 @@ telegramRouter.post('/telegram/webhook', (c) =>
     });
 
     if (!rlResult.allowed) {
-      console.warn(`⚠️ Rate limit exceeded for Telegram Chat ID: ${chatId || 'unknown'}`);
-      return c.json({ ok: false, error: 'Rate limit exceeded', retryAfter: rlResult.retryAfter }, 200);
+      throw new SystemError({
+        code: 'TELEGRAM_RATE_LIMIT_EXCEEDED',
+        userMessage: 'تم تجاوز الحد المسموح من الطلبات',
+        technicalMessage: `Rate limit exceeded for chatId: ${chatId || 'unknown'}`,
+        category: 'security',
+        severity: 'warning',
+        retryable: true,
+        shouldAlert: false,
+        storeId,
+        metadata: { path: c.req.path, retryAfter: rlResult.retryAfter },
+      });
     }
 
     console.log('📥 Telegram update received:', update.update_id ?? 'unknown');
 
-    // 4️⃣ معالجة الـ Update في الخلفية عبر waitUntil لضمان عدم حدوث Webhook Timeout
+    // 4️⃣ معالجة الـ Update في الخلفية
     c.executionCtx.waitUntil(
       handleTelegramUpdate(c.env, update, botToken).catch((err: unknown) => {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        console.error(`❌ Error in background Telegram update processing: ${errorMessage}`);
+        console.error('❌ Background Telegram Update Error:', err);
       })
     );
 
@@ -143,19 +176,37 @@ telegramRouter.post('/telegram/webhook', (c) =>
 
 /**
  * POST /api/telegram/send
- * إرسال رسالة عبر تليجرام (محمي بـ Internal Secret)
+ * إرسال رسالة عبر تليجرام لخدمة المستخدمين (محمي بـ Internal Secret)
  */
 telegramRouter.post('/telegram/send', requireInternalAuth, (c) =>
   safeExecute(async () => {
     const botToken = c.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) {
-      return c.json({ ok: false, error: 'Bot not configured' }, 500);
+      throw new SystemError({
+        code: 'TELEGRAM_BOT_NOT_CONFIGURED',
+        userMessage: 'خدمة البوت غير مهيأة',
+        technicalMessage: 'TELEGRAM_BOT_TOKEN is missing in environment variables',
+        category: 'system',
+        severity: 'critical',
+        retryable: false,
+        shouldAlert: true,
+        metadata: { path: c.req.path },
+      });
     }
 
     const body = await c.req.json<SendMessageRequestBody>();
 
     if (!body.chatId || !body.text) {
-      return c.json({ ok: false, error: 'chatId and text are required' }, 400);
+      throw new SystemError({
+        code: 'MISSING_REQUIRED_FIELDS',
+        userMessage: 'البيانات المطلوبة غير مكتملة',
+        technicalMessage: 'chatId and text are required in body',
+        category: 'validation',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        metadata: { path: c.req.path },
+      });
     }
 
     const payload: Record<string, unknown> = {
@@ -179,8 +230,16 @@ telegramRouter.post('/telegram/send', requireInternalAuth, (c) =>
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ Failed to send Telegram message: ${errorText}`);
-      return c.json({ ok: false, error: 'Failed to send message' }, 500);
+      throw new SystemError({
+        code: 'TELEGRAM_SEND_HTTP_FAILED',
+        userMessage: 'فشل إرسال الرسالة عبر تليجرام',
+        technicalMessage: `Telegram API error response: ${errorText}`,
+        category: 'system',
+        severity: 'critical',
+        retryable: true,
+        shouldAlert: true,
+        metadata: { path: c.req.path, chatId: body.chatId },
+      });
     }
 
     return c.json({ ok: true });
@@ -189,13 +248,22 @@ telegramRouter.post('/telegram/send', requireInternalAuth, (c) =>
 
 /**
  * GET /api/telegram/setup
- * إعداد ويب هوك تليجرام (محمي بـ Internal Secret)
+ * إعداد ويب هوك تليجرام الخاص ببوت التفاعل (محمي بـ Internal Secret)
  */
 telegramRouter.get('/telegram/setup', requireInternalAuth, (c) =>
   safeExecute(async () => {
     const botToken = c.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) {
-      return c.json({ ok: false, error: 'Bot not configured' }, 500);
+      throw new SystemError({
+        code: 'TELEGRAM_BOT_NOT_CONFIGURED',
+        userMessage: 'خدمة البوت غير مهيأة',
+        technicalMessage: 'TELEGRAM_BOT_TOKEN is missing in environment variables',
+        category: 'system',
+        severity: 'critical',
+        retryable: false,
+        shouldAlert: true,
+        metadata: { path: c.req.path },
+      });
     }
 
     const host = c.req.header('host') || 'www.dokany.workers.dev';
@@ -216,6 +284,19 @@ telegramRouter.get('/telegram/setup', requireInternalAuth, (c) =>
 
     const result = (await response.json()) as TelegramApiResponse;
 
+    if (!result.ok) {
+      throw new SystemError({
+        code: 'TELEGRAM_SETUP_FAILED',
+        userMessage: 'فشل إعداد الويب هوك الخاص بتليجرام',
+        technicalMessage: `Telegram setWebhook API returned ok: false. Description: ${result.description || 'Unknown error'}`,
+        category: 'system',
+        severity: 'critical',
+        retryable: true,
+        shouldAlert: true,
+        metadata: { path: c.req.path, webhookUrl },
+      });
+    }
+
     return c.json({
       ok: result.ok,
       data: result,
@@ -227,58 +308,47 @@ telegramRouter.get('/telegram/setup', requireInternalAuth, (c) =>
 
 /**
  * POST /api/telegram/error-channel
- * إرسال خطأ إلى قناة الأخطاء (محمي بـ Internal Secret)
+ * إرسال خطأ إلى قناة الأخطاء عبر النظام الموحد (محمي بـ Internal Secret)
+ * يولد SystemError مع إرسال تلقائي عبر ERROR_BOT_TOKEN المعتمد في نظام الأخطاء
  */
 telegramRouter.post('/telegram/error-channel', requireInternalAuth, (c) =>
   safeExecute(async () => {
-    const errorBotToken = c.env.ERROR_BOT_TOKEN || c.env.TELEGRAM_BOT_TOKEN;
-    if (!errorBotToken) {
-      return c.json({ ok: false, error: 'Error bot not configured' }, 500);
-    }
-
     const body = await c.req.json<ErrorChannelRequestBody>();
 
     if (!body.message) {
-      return c.json({ ok: false, error: 'message is required' }, 400);
+      throw new SystemError({
+        code: 'MISSING_ERROR_MESSAGE',
+        userMessage: 'رسالة الخطأ مطلوبة',
+        technicalMessage: 'message field is required in request body',
+        category: 'validation',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        metadata: { path: c.req.path },
+      });
     }
 
-    const chatId = c.env.ERROR_CHANNEL_ID || c.env.TELEGRAM_ERROR_CHAT_ID;
-    if (!chatId) {
-      return c.json({ ok: false, error: 'Error channel not configured' }, 500);
-    }
+    const level = body.level || 'info';
+    const severityMap: Record<string, 'info' | 'warning' | 'critical'> = {
+      critical: 'critical',
+      warning: 'warning',
+      info: 'info',
+    };
 
-    const levelEmoji =
-      body.level === 'critical' ? '🚨' : body.level === 'warning' ? '⚠️' : 'ℹ️';
-
-    let text = `${levelEmoji} **[${(body.level || 'INFO').toUpperCase()}]**\n\n`;
-    text += `📝 ${body.message}\n`;
-    if (body.stack) {
-      const truncatedStack =
-        body.stack.length > 1000
-          ? `${body.stack.slice(0, 1000)}\n...(truncated)`
-          : body.stack;
-      text += `\n\`\`\`text\n${truncatedStack}\n\`\`\``;
-    }
-
-    const response = await fetch(
-      `https://api.telegram.org/bot${errorBotToken}/sendMessage`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text,
-          parse_mode: 'Markdown',
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Failed to send error to Telegram: ${errorText}`);
-      return c.json({ ok: false, error: 'Failed to send error' }, 500);
-    }
-
-    return c.json({ ok: true });
+    // النظام سيتولى توجيه هذا الخطأ مباشرة عبر ERROR_BOT_TOKEN
+    throw new SystemError({
+      code: `CHANNEL_${level.toUpperCase()}`,
+      userMessage: 'تم إرسال التنبيه إلى قناة الأخطاء',
+      technicalMessage: body.message,
+      category: 'system',
+      severity: severityMap[level] || 'info',
+      retryable: false,
+      shouldAlert: true,
+      metadata: {
+        path: c.req.path,
+        stack: body.stack,
+        source: 'telegram-error-channel-api',
+      },
+    });
   })
 );

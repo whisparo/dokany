@@ -1,7 +1,7 @@
 // lib/errors/health/readiness.ts
-// الإصدار: 1.0.1
+// الإصدار: 1.0.2
 // الدور: مسار /readiness للتحقق من جاهزية النظام (D1، Redis، B2، QStash)
-// المبدأ: فحص متوازي شامل للخدمات الأساسية مع تقرير مفصل
+// المبدأ: فحص متوازي شامل للخدمات الأساسية مع تقرير مفصل وتنظيف كامل للمؤقتات
 
 import { addBreadcrumb } from '../core/context';
 
@@ -188,6 +188,30 @@ export async function checkReadiness(
 // ═══════════════════════════════════════════════════════════════
 
 /**
+ * دالة مساعدة لتشغيل الوعود مع مهلة زمنية ومسح المؤقت فور الانتهاء
+ */
+async function runWithTimeout<T>(
+  promiseFn: (signal?: AbortSignal) => Promise<T>,
+  timeoutMs: number
+): Promise<T> {
+  const controller = new AbortController();
+  let timerId: ReturnType<typeof setTimeout>;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timerId = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`Timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promiseFn(controller.signal), timeoutPromise]);
+  } finally {
+    clearTimeout(timerId!);
+  }
+}
+
+/**
  * فحص اتصال D1 Database
  */
 async function checkD1Connection(
@@ -207,39 +231,30 @@ async function checkD1Connection(
       };
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const result = await runWithTimeout(
+      async () => env.DB.prepare('SELECT 1 as connected').first('connected'),
+      timeoutMs
+    );
 
-    try {
-      const result = await env.DB.prepare('SELECT 1 as connected').first('connected', {
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (result !== undefined && result !== null) {
-        return {
-          name,
-          status: 'ok',
-          durationMs: Math.round(performance.now() - start),
-          message: 'Connected and responsive',
-          details: { result },
-        };
-      }
-
+    if (result !== undefined && result !== null) {
       return {
         name,
-        status: 'degraded',
+        status: 'ok',
         durationMs: Math.round(performance.now() - start),
-        message: 'Connected but unexpected response format',
+        message: 'Connected and responsive',
+        details: { result },
       };
-    } catch (queryError) {
-      clearTimeout(timeoutId);
-      throw queryError;
     }
+
+    return {
+      name,
+      status: 'degraded',
+      durationMs: Math.round(performance.now() - start),
+      message: 'Connected but unexpected response format',
+    };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    const isTimeout = error instanceof Error && error.name === 'AbortError';
+    const isTimeout = errorMsg.includes('Timeout') || (error instanceof Error && error.name === 'AbortError');
 
     return {
       name,
@@ -274,18 +289,12 @@ async function checkRedisConnection(
     }
 
     const { Redis } = await import('@upstash/redis');
-
     const redis = new Redis({
       url: env.UPSTASH_REDIS_REST_URL,
       token: env.UPSTASH_REDIS_REST_TOKEN,
     });
 
-    const ping = await Promise.race([
-      redis.ping(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-      ),
-    ]);
+    const ping = await runWithTimeout(async () => redis.ping(), timeoutMs);
 
     if (ping === 'PONG') {
       return {
@@ -305,7 +314,7 @@ async function checkRedisConnection(
     };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    const isTimeout = error instanceof Error && error.message === 'Timeout';
+    const isTimeout = errorMsg.includes('Timeout');
 
     return {
       name,
@@ -339,16 +348,13 @@ async function checkB2Connection(
       };
     }
 
-    // تصحيح الاستيراد للدالة المتاحة فعلياً createB2StoreFromEnv
     const { createB2StoreFromEnv } = await import('../storage/b2-store');
     const b2 = createB2StoreFromEnv(env);
 
-    const exists = await Promise.race([
-      b2.exists('health-check.tmp'),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-      ),
-    ]);
+    const exists = await runWithTimeout(
+      async () => b2.exists('health-check.tmp'),
+      timeoutMs
+    );
 
     return {
       name,
@@ -363,7 +369,7 @@ async function checkB2Connection(
     };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    const isTimeout = error instanceof Error && error.message === 'Timeout';
+    const isTimeout = errorMsg.includes('Timeout');
 
     return {
       name,
@@ -399,16 +405,16 @@ async function checkQStashConnection(
 
     const baseUrl = env.QSTASH_URL || 'https://qstash.upstash.io/v2';
 
-    const response = await Promise.race([
-      fetch(`${baseUrl}/schedules?limit=1`, {
-        headers: {
-          Authorization: `Bearer ${env.QSTASH_TOKEN}`,
-        },
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-      ),
-    ]);
+    const response = await runWithTimeout(
+      async (signal) =>
+        fetch(`${baseUrl}/schedules?limit=1`, {
+          headers: {
+            Authorization: `Bearer ${env.QSTASH_TOKEN}`,
+          },
+          signal,
+        }),
+      timeoutMs
+    );
 
     if (response instanceof Response) {
       if (response.ok) {
@@ -430,7 +436,7 @@ async function checkQStashConnection(
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    const isTimeout = error instanceof Error && error.message === 'Timeout';
+    const isTimeout = errorMsg.includes('Timeout') || (error instanceof Error && error.name === 'AbortError');
 
     return {
       name,
@@ -457,7 +463,7 @@ async function checkQStashConnection(
 
 export async function readinessHandler(
   env: any,
-  waitUntil?: (promise: Promise<unknown>) => void
+  _waitUntil?: (promise: Promise<unknown>) => void
 ): Promise<Response> {
   const result = await checkReadiness(env, {
     checkD1: true,

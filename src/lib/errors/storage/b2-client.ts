@@ -1,9 +1,11 @@
 // lib/errors/storage/b2-client.ts
-// الإصدار: 1.0.3
+// الإصدار: 1.0.5
 // الدور: العميل الأساسي للتواصل مع Backblaze B2 (توقيع الطلبات، HTTP Methods)
 
+import { AwsClient } from 'aws4fetch';
+
 // ═══════════════════════════════════════════════════════════════
-// 📦  الأنواع
+// 📦 الأنواع
 // ═══════════════════════════════════════════════════════════════
 
 export interface B2ClientOptions {
@@ -14,27 +16,39 @@ export interface B2ClientOptions {
   region?: string;
 }
 
+export interface B2PutResult {
+  etag: string;
+}
+
+export interface B2GetResult {
+  body: Uint8Array;
+  etag: string;
+  metadata: Record<string, string>;
+}
+
 // ═══════════════════════════════════════════════════════════════
-// 🏗️  عميل B2 الخام
+// 🏗️ عميل B2 الخام
 // ═══════════════════════════════════════════════════════════════
 
 export class B2Client {
   private readonly endpoint: string;
   private readonly bucketName: string;
-  private readonly accessKeyId: string;
-  private readonly secretAccessKey: string;
-  private readonly region: string;
+  private readonly awsClient: AwsClient;
 
   constructor(options: B2ClientOptions) {
     this.endpoint = options.endpoint.replace(/\/$/, '');
     this.bucketName = options.bucketName;
-    this.accessKeyId = options.accessKeyId;
-    this.secretAccessKey = options.secretAccessKey;
-    this.region = options.region ?? 'us-east-005';
+    
+    this.awsClient = new AwsClient({
+      accessKeyId: options.accessKeyId,
+      secretAccessKey: options.secretAccessKey,
+      region: options.region ?? 'us-east-005',
+      service: 's3',
+    });
   }
 
   private getUrl(key: string): string {
-    return `${this.endpoint}/${this.bucketName}/${key}`;
+    return `${this.endpoint}/${this.bucketName}/${key.replace(/^\//, '')}`;
   }
 
   private async signRequest(
@@ -43,14 +57,6 @@ export class B2Client {
     body?: BodyInit,
     headers: Record<string, string> = {}
   ): Promise<Headers> {
-    const { AwsClient } = await import('aws4fetch');
-    const client = new AwsClient({
-      accessKeyId: this.accessKeyId,
-      secretAccessKey: this.secretAccessKey,
-      region: this.region,
-      service: 's3',
-    });
-
     const url = this.getUrl(key);
     const request = new Request(url, {
       method,
@@ -58,19 +64,23 @@ export class B2Client {
       body,
     });
 
-    const signedRequest = await client.sign(request);
+    const signedRequest = await this.awsClient.sign(request);
     return signedRequest.headers;
   }
 
-  async put(key: string, body: Uint8Array, headers: Record<string, string>): Promise<{ etag: string }> {
-    // ✅ تحويل Uint8Array لـ BodyInit بشكل آمن ومتوافق مع Web APIs القياسية
-    const requestBody = body as unknown as BodyInit;
+  async put(
+    key: string,
+    body: Uint8Array,
+    headers: Record<string, string>
+  ): Promise<B2PutResult> {
+    // 💡 اقتطاع الـ ArrayBuffer الخالص لضمان توافق TypeScript مع BodyInit
+    const payload = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer;
 
-    const signedHeaders = await this.signRequest('PUT', key, requestBody, headers);
+    const signedHeaders = await this.signRequest('PUT', key, payload, headers);
     const response = await fetch(this.getUrl(key), { 
       method: 'PUT', 
       headers: signedHeaders, 
-      body: requestBody 
+      body: payload,
     });
 
     if (!response.ok) {
@@ -78,22 +88,29 @@ export class B2Client {
       throw new Error(`B2 PUT failed: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
-    return { etag: response.headers.get('etag')?.replace(/^"|"$/g, '') || 'unknown' };
+    const rawEtag = response.headers.get('etag');
+    const etag = rawEtag ? rawEtag.replace(/^"|"$/g, '') : 'unknown';
+
+    return { etag };
   }
 
-  async get(key: string): Promise<{ body: Uint8Array; etag: string; metadata: Record<string, string> }> {
+  async get(key: string): Promise<B2GetResult> {
     const signedHeaders = await this.signRequest('GET', key);
     const response = await fetch(this.getUrl(key), { method: 'GET', headers: signedHeaders });
 
     if (!response.ok) {
-      if (response.status === 404) throw new Error(`File not found: ${key}`);
+      if (response.status === 404) {
+        throw new Error(`File not found: ${key}`);
+      }
       const errorText = await response.text();
       throw new Error(`B2 GET failed: ${response.status} - ${errorText}`);
     }
 
     const arrayBuffer = await response.arrayBuffer();
     const body = new Uint8Array(arrayBuffer);
-    const etag = response.headers.get('etag')?.replace(/^"|"$/g, '') || 'unknown';
+    
+    const rawEtag = response.headers.get('etag');
+    const etag = rawEtag ? rawEtag.replace(/^"|"$/g, '') : 'unknown';
 
     const metadata: Record<string, string> = {};
     for (const [k, v] of response.headers.entries()) {

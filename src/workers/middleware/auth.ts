@@ -3,10 +3,10 @@
 import { createMiddleware } from 'hono/factory';
 import { verify } from 'hono/jwt';
 import { eq, and, isNull } from 'drizzle-orm';
-import type { AppEnv, Env } from '@/lib/env';
-import { getDb } from '@/lib/db/db';
+import type { Env } from '@/lib/env';
+import { getDb } from '@/lib/db';
 import * as schema from '@/lib/db/schema';
-import { SystemError } from '@/lib/errors/types';
+import { SystemError } from '@/lib/errors';
 
 export interface AuthVariables {
   user: {
@@ -57,7 +57,7 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
       severity: 'info',
       retryable: false,
       shouldAlert: false,
-      context: { storeId: 'N/A', path: c.req.path },
+      metadata: { path: c.req.path },
     });
   }
 
@@ -73,7 +73,7 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
       severity: 'critical',
       retryable: false,
       shouldAlert: true,
-      context: { storeId: 'N/A', path: c.req.path },
+      metadata: { path: c.req.path },
     });
   }
 
@@ -87,7 +87,7 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: 'N/A', path: c.req.path },
+        metadata: { path: c.req.path },
       });
     }
 
@@ -105,7 +105,7 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: 'N/A', path: c.req.path },
+        metadata: { path: c.req.path },
       });
     }
 
@@ -118,7 +118,7 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: 'N/A', path: c.req.path },
+        metadata: { path: c.req.path },
       });
     }
 
@@ -143,16 +143,15 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
         severity: 'warning',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: 'N/A', path: c.req.path },
+        metadata: { path: c.req.path },
       });
     }
 
-    // ✅ التعديل لحل أخطاء c.set('userId') والأدوار غير المحددة
     c.set('userId', user.id);
     c.set('user', {
       id: user.id,
       email: user.email ?? '',
-      role: user.role ?? 'merchant', // ✅ ضمان قيمة string دائماً بدون undefined
+      role: user.role ?? 'merchant',
     });
 
     await next();
@@ -168,7 +167,7 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
       severity: 'info',
       retryable: false,
       shouldAlert: false,
-      context: { storeId: 'N/A', path: c.req.path },
+      metadata: { path: c.req.path },
     });
   }
 });
@@ -187,7 +186,7 @@ export const requireStoreOwnership = createMiddleware<AuthEnv>(async (c, next) =
       severity: 'warning',
       retryable: false,
       shouldAlert: true,
-      context: { storeId: 'UNKNOWN', path: c.req.path },
+      metadata: { path: c.req.path },
     });
   }
 
@@ -205,7 +204,7 @@ export const requireStoreOwnership = createMiddleware<AuthEnv>(async (c, next) =
       severity: 'info',
       retryable: false,
       shouldAlert: false,
-      context: { storeId: 'UNKNOWN', path: c.req.path },
+      metadata: { path: c.req.path },
     });
   }
 
@@ -232,11 +231,11 @@ export const requireStoreOwnership = createMiddleware<AuthEnv>(async (c, next) =
       severity: 'warning',
       retryable: false,
       shouldAlert: true,
-      context: { storeId, path: c.req.path },
+      storeId,
+      metadata: { path: c.req.path },
     });
   }
 
-  // ✅ حل خطأ c.set('storeId')
   c.set('storeId', store.id);
 
   await next();
@@ -257,14 +256,14 @@ export const requireRole = (allowedRoles: string[]) =>
         severity: 'warning',
         retryable: false,
         shouldAlert: true,
-        context: { storeId: 'UNKNOWN', path: c.req.path },
+        metadata: { path: c.req.path },
       });
     }
 
-    // ✅ حل خطأ user.role قد يكون undefined
     const userRole = user.role ?? 'merchant';
 
     if (!allowedRoles.includes(userRole)) {
+      const currentStoreId = c.get('storeId');
       throw new SystemError({
         code: 'FORBIDDEN_ROLE',
         userMessage: 'ليس لديك صلاحيات كافية لتنفيذ هذا الإجراء.',
@@ -273,11 +272,8 @@ export const requireRole = (allowedRoles: string[]) =>
         severity: 'warning',
         retryable: false,
         shouldAlert: false,
-        // ✅ حل خطأ النوع عند إرجاع c.get('storeId')
-        context: { 
-          storeId: typeof c.get('storeId') === 'string' ? (c.get('storeId') as string) : 'UNKNOWN', 
-          path: c.req.path 
-        },
+        storeId: typeof currentStoreId === 'string' ? currentStoreId : undefined,
+        metadata: { path: c.req.path },
       });
     }
 

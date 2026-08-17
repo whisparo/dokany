@@ -3,23 +3,12 @@
 import { getDb } from '@/lib/db';
 import { media } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import type { Env } from '@/lib/env';
+import type { Env, MediaQueuePayload } from '@/lib/env';
 import { uploadToB2 } from '@/lib/storage';
 
 // ============================================================
 // 🔒 واجهات البيانات المحددة بدقة (Strict Types)
 // ============================================================
-
-export interface MediaProcessingJob {
-  mediaId: string;
-  storeId: string;
-  mediaType: 'image' | 'video';
-  rawUrl: string;
-  idempotencyKey: string;
-  sequenceNumber: number;
-  retryCount?: number;
-  lastError?: string;
-}
 
 export interface QueueOptions {
   delaySeconds?: number;
@@ -64,14 +53,19 @@ export async function queueMediaProcessing(
     const idempotencyKey = `media_job_${mediaId}`;
     const sequenceNumber = await getNextSequenceNumber(env, mediaRecord.storeId);
 
-    const job: MediaProcessingJob = {
-      mediaId: mediaRecord.id,
-      storeId: mediaRecord.storeId,
-      mediaType: mediaRecord.type === 'video' ? 'video' : 'image',
-      rawUrl: mediaRecord.url,
-      idempotencyKey,
-      sequenceNumber,
-      retryCount: 0,
+    // 🎯 مطابقة الكائن بدقة مع MediaQueuePayload المعرف في env.ts
+    const job: MediaQueuePayload = {
+      fileId: mediaRecord.id,
+      action: 'process',
+      metadata: {
+        mediaId: mediaRecord.id,
+        storeId: mediaRecord.storeId,
+        mediaType: mediaRecord.type === 'video' ? 'video' : 'image',
+        rawUrl: mediaRecord.url,
+        idempotencyKey,
+        sequenceNumber,
+        retryCount: 0,
+      },
     };
 
     const queue = env.MEDIA_QUEUE;
@@ -199,7 +193,7 @@ async function processMediaInBackground(
       if (imageRes.ok) {
         const imageBuffer = await imageRes.arrayBuffer();
         const b2Key = `stores/${storeId}/${mediaType}s/${Date.now()}_${filename}`;
-        
+
         await uploadToB2(
           b2Key,
           imageBuffer,

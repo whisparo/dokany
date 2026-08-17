@@ -1,5 +1,5 @@
 // lib/errors/storage/b2-store.ts
-// الإصدار: 1.0.3
+// الإصدار: 1.0.4
 // الدور: طبقة التخزين المتكاملة لنظام الأخطاء (تستخدم B2Client + Compression + Queue Manager)
 
 import { addBreadcrumb, type ErrorContext } from '../core/context';
@@ -94,7 +94,7 @@ export class B2Store {
     let enqueued = false;
     if (enqueue && waitUntil) {
       waitUntil(
-        enqueueErrorKey(env, key).catch((err: unknown) => // 👈 تم تعديل الترتيب إلى (env, key)
+        enqueueErrorKey(env, key).catch((err) =>
           console.error(`[B2] Failed to enqueue ${key}:`, err)
         )
       );
@@ -157,15 +157,20 @@ export class B2Store {
   }
 }
 
-export function createB2StoreFromEnv(env: Record<string, string | undefined>): B2Store {
-  const { B2_ENDPOINT, B2_BUCKET_NAME, B2_ACCESS_KEY_ID, B2_SECRET_ACCESS_KEY } = env;
-  if (!B2_ENDPOINT || !B2_BUCKET_NAME || !B2_ACCESS_KEY_ID || !B2_SECRET_ACCESS_KEY) {
+export function createB2StoreFromEnv(env: Record<string, unknown>): B2Store {
+  const endpoint = typeof env.B2_ENDPOINT === 'string' ? env.B2_ENDPOINT : undefined;
+  const bucketName = typeof env.B2_BUCKET_NAME === 'string' ? env.B2_BUCKET_NAME : undefined;
+  const accessKeyId = typeof env.B2_ACCESS_KEY_ID === 'string' ? env.B2_ACCESS_KEY_ID : undefined;
+  const secretAccessKey = typeof env.B2_SECRET_ACCESS_KEY === 'string' ? env.B2_SECRET_ACCESS_KEY : undefined;
+
+  if (!endpoint || !bucketName || !accessKeyId || !secretAccessKey) {
     throw new Error('Missing B2 environment variables');
   }
+
   return new B2Store({
-    endpoint: B2_ENDPOINT,
-    bucketName: B2_BUCKET_NAME,
-    accessKeyId: B2_ACCESS_KEY_ID,
-    secretAccessKey: B2_SECRET_ACCESS_KEY,
+    endpoint,
+    bucketName,
+    accessKeyId,
+    secretAccessKey,
   });
 }

@@ -7,10 +7,9 @@ import { CouponService } from '@/lib/services/coupon-service';
 import type { AppEnv } from '@/lib/env';
 import * as schema from '@/lib/db/schema';
 import { getDb } from '@/lib/db/db';
-import { safeExecute } from '@/lib/errors/safe-executor';
-import { SystemError } from '@/lib/errors/types';
+// 🟢 الاستيراد الصح من البوابة الموحدة مباشرة
+import { safeExecute, SystemError } from '@/lib/errors';
 
-// ✅ استخدام AppEnv الموحد
 export const couponsRouter = new Hono<AppEnv>();
 
 /**
@@ -36,7 +35,8 @@ async function getStoreByIdOrThrow(
       severity: 'info',
       retryable: false,
       shouldAlert: false,
-      context: { storeId, path },
+      storeId,
+      metadata: { path },
     });
   }
 
@@ -55,7 +55,6 @@ const validateCouponBodySchema = z.object({
 
 /**
  * 🎟️ POST /api/coupons/validate - التحقق من صحة كود الخصم أثناء الشراء
- * ✅ عام (Public) ومتاح للعملاء أثناء مرحلة الـ Checkout
  */
 couponsRouter.post('/coupons/validate', (c) =>
   safeExecute(async () => {
@@ -63,6 +62,8 @@ couponsRouter.post('/coupons/validate', (c) =>
     const parsed = validateCouponBodySchema.safeParse(body);
 
     if (!parsed.success) {
+      const extractedStoreId = typeof body?.storeId === 'string' ? body.storeId : undefined;
+
       throw new SystemError({
         code: 'VALIDATION_ERROR',
         userMessage: parsed.error.issues[0]?.message || 'بيانات الكوبون غير صالحة',
@@ -71,8 +72,8 @@ couponsRouter.post('/coupons/validate', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: {
-          storeId: typeof body?.storeId === 'string' ? body.storeId : 'UNKNOWN', // ✅ إضافة storeId المطابق للـ Type
+        storeId: extractedStoreId,
+        metadata: {
           path: c.req.path,
         },
       });

@@ -9,6 +9,7 @@ export interface CheckOptions {
   userId?: string;
   storeId?: string;
   ip?: string;
+  correlationId?: string;
 }
 
 export interface CheckResult {
@@ -45,7 +46,7 @@ async function getRateLimiterEnv(): Promise<{ url?: string; token?: string }> {
 }
 
 /**
- * 🔄 Helper للقيام بـ fetch مع Single Retry و Timeout بطول 5 ثوانٍ
+ * 🔄 Helper للقيام بـ fetch مع Single Retry و Timeout بطول 2 ثانية للحفاظ على السرعة
  */
 async function fetchWithRetry(
   url: string,
@@ -55,7 +56,7 @@ async function fetchWithRetry(
   try {
     return await fetch(url, {
       ...options,
-      signal: AbortSignal.timeout(5000), // ⚡ 5 seconds timeout
+      signal: AbortSignal.timeout(2000), // ⚡ 2 seconds timeout لعدم تعطيل الـ Request
     });
   } catch (err) {
     if (retries > 0) {
@@ -77,13 +78,27 @@ export async function checkRateLimit(options: CheckOptions): Promise<CheckResult
   }
 
   try {
-    const headersList = await headers();
-    
-    // استخراج أول IP صحيح
-    const rawIp = options.ip
-      || headersList.get('cf-connecting-ip')
-      || headersList.get('x-forwarded-for')?.split(',')[0].trim()
-      || '127.0.0.1';
+    let clientIp = options.ip;
+    let correlationId = options.correlationId;
+
+    // 🛡️ استخراج الـ Headers بأمان لو لم يتم تمريرها (مثل الـ Server Actions)
+    if (!clientIp || !correlationId) {
+      try {
+        const headersList = await headers();
+        if (!clientIp) {
+          clientIp =
+            headersList.get('cf-connecting-ip') ||
+            headersList.get('x-forwarded-for')?.split(',')[0].trim() ||
+            '127.0.0.1';
+        }
+        if (!correlationId) {
+          correlationId = headersList.get('x-correlation-id') || undefined;
+        }
+      } catch {
+        // في حالة استدعاء من بيئة لا تدعم next/headers (مثل Middleware Context)
+        clientIp = clientIp || '127.0.0.1';
+      }
+    }
 
     const response = await fetchWithRetry(
       `${rateLimiterUrl}/check`,
@@ -92,8 +107,9 @@ export async function checkRateLimit(options: CheckOptions): Promise<CheckResult
         headers: {
           'Content-Type': 'application/json',
           'X-RL-Token': rateLimiterToken,
+          ...(correlationId && { 'x-correlation-id': correlationId }),
         },
-        body: JSON.stringify({ ...options, ip: rawIp }),
+        body: JSON.stringify({ ...options, ip: clientIp }),
       },
       1 // Single Retry
     );
@@ -108,7 +124,7 @@ export async function checkRateLimit(options: CheckOptions): Promise<CheckResult
 
     return await response.json();
   } catch (error) {
-    // في حالة انقطاع الشبكة أو الـ Timeout بعد الإعادة: Fail-Open
+    // في حالة انقطاع الشبكة أو الـ Timeout: Fail-Open
     console.error('Rate limiter call failed after retry:', error);
     return { allowed: true, degraded: true, limit: 0, remaining: 0, resetAt: 0 };
   }

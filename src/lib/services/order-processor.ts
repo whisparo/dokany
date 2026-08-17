@@ -18,7 +18,7 @@ import {
   updateProductStatsBatch,
 } from './store-stats';
 import { AlertService } from './alert-service';
-import { SystemError } from '@/lib/errors/types';
+import { SystemError } from '@/lib/errors';
 
 export type OrderInput = NewOrder & {
   rawItems: RawOrderItemInput[];

@@ -5,7 +5,7 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { stores, users } from '@/lib/db/schema'; 
 import { eq, or } from 'drizzle-orm';
 import { allocateCloudinaryAccount } from '@/lib/services/cloudinary'; 
-import { classifyError } from '@/lib/errors/classifier';
+import { SystemError } from '@/lib/errors';
 
 export interface CreateStoreEnv {
   DB: D1Database;
@@ -83,6 +83,7 @@ export async function createStore(
 
   if (existingUser) {
     userId = existingUser.id;
+
     const updatePayload: Record<string, any> = {};
 
     if (!existingUser.telegramId && data.telegramUserId) {
@@ -131,11 +132,27 @@ export async function createStore(
         .returning();
 
       const newUser = insertedUsers[0];
-      if (!newUser) throw new Error('BIZ_500: Failed to capture newly created user identity');
+      if (!newUser) {
+        throw new SystemError({
+          code: 'DATABASE_ERROR',
+          category: 'database',
+          severity: 'critical',
+          userMessage: 'فشل في إشعارات إنشاء هوية التاجر الجديد.',
+          technicalMessage: 'Failed to capture newly created user identity from returning query.',
+        });
+      }
       userId = newUser.id;
     } catch (insertError) {
+      if (insertError instanceof SystemError) throw insertError;
+
       console.error('❌ [createStore] Failed creating new user:', insertError);
-      throw classifyError(insertError);
+      throw new SystemError({
+        code: 'USER_CREATION_FAILED',
+        category: 'database',
+        severity: 'critical',
+        userMessage: 'تعذر إنشاء حساب التاجر.',
+        technicalMessage: insertError instanceof Error ? insertError.message : String(insertError),
+      });
     }
   }
 
@@ -169,9 +186,14 @@ export async function createStore(
     : decodedSlug;
 
   // 3️⃣ تخصيص Cloudinary
-  const allocatedAccountIndex = await allocateCloudinaryAccount(d1Database);
+  let allocatedAccountIndex = 0;
+  try {
+    allocatedAccountIndex = await allocateCloudinaryAccount(d1Database);
+  } catch (cloudinaryErr) {
+    console.error('⚠️ [createStore] Cloudinary allocation failed, fallback to default:', cloudinaryErr);
+  }
 
-  // 4️⃣ الإدراج المتوافق المباشر مع D1 Schema
+  // 4️⃣ الإدراج في D1 Schema
   const storeId = crypto.randomUUID();
 
   try {
@@ -205,7 +227,13 @@ export async function createStore(
     });
   } catch (storeInsertErr) {
     console.error('❌ [createStore] Store insertion failed:', storeInsertErr);
-    throw classifyError(storeInsertErr);
+    throw new SystemError({
+      code: 'STORE_CREATION_FAILED',
+      category: 'database',
+      severity: 'critical',
+      userMessage: 'فشل في إنشاء سجل المتجر الجديد.',
+      technicalMessage: storeInsertErr instanceof Error ? storeInsertErr.message : String(storeInsertErr),
+    });
   }
 
   console.log(`✅ [createStore] Store successfully deployed with slug: ${slug}`);

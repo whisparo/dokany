@@ -1,5 +1,5 @@
 // lib/errors/storage/queue-manager.ts
-// الإصدار: 1.1.2
+// الإصدار: 1.1.3
 // الدور: إدارة قائمة انتظار Redis (error_queue) لتجنب LIST Operations في B2
 // المبدأ: LPUSH (دفع) + RPOP (سحب) + TTL صارم ≤ 7 أيام
 
@@ -12,7 +12,7 @@ import { getRedisClient } from './redis-counter';
 // 📦 الأنواع
 // ═══════════════════════════════════════════════════════════════
 
-export type QueueEnv = RedisEnv; // 👈 تصدير QueueEnv لتوافق الاستيراد في b2-store.ts
+export type QueueEnv = RedisEnv;
 
 export interface QueueOptions {
   /** اسم قائمة الانتظار (افتراضي: error_queue) */
@@ -71,7 +71,7 @@ export class QueueManager {
       pipeline.llen(this.queueKey);
       const results = await pipeline.exec();
 
-      const length = results[2] as number;
+      const length = typeof results[2] === 'number' ? results[2] : 0;
 
       if (length > this.maxLength) {
         await this.redis.ltrim(this.queueKey, 0, this.maxLength - 1);
@@ -83,7 +83,7 @@ export class QueueManager {
         queueLength: length,
       });
       return true;
-    } catch (error: unknown) {
+    } catch (error) {
       console.error('[QueueManager] Push failed:', error);
       return false;
     }
@@ -110,7 +110,8 @@ export class QueueManager {
       pipeline.llen(this.queueKey);
       
       const results = await pipeline.exec();
-      const length = results[results.length - 1] as number;
+      const rawLength = results[results.length - 1];
+      const length = typeof rawLength === 'number' ? rawLength : 0;
 
       if (length > this.maxLength) {
         await this.redis.ltrim(this.queueKey, 0, this.maxLength - 1);
@@ -122,7 +123,7 @@ export class QueueManager {
       });
 
       return keys.length;
-    } catch (error: unknown) {
+    } catch (error) {
       console.error('[QueueManager] PushBatch failed:', error);
       return 0;
     }
@@ -139,12 +140,12 @@ export class QueueManager {
     }
 
     try {
-      const key = await this.redis.rpop(this.queueKey);
+      const key = await this.redis.rpop<string>(this.queueKey);
       if (key) {
         addBreadcrumb(`Queue pop: ${key}`, { queueKey: this.queueKey });
       }
-      return key as string | null;
-    } catch (error: unknown) {
+      return key;
+    } catch (error) {
       console.error('[QueueManager] Pop failed:', error);
       return null;
     }
@@ -170,7 +171,7 @@ export class QueueManager {
       const results = await pipeline.exec();
       
       for (const result of results) {
-        if (result !== null && result !== undefined && typeof result === 'string') {
+        if (typeof result === 'string') {
           keys.push(result);
         }
       }
@@ -183,7 +184,7 @@ export class QueueManager {
       }
 
       return keys;
-    } catch (error: unknown) {
+    } catch (error) {
       console.error('[QueueManager] PopBatch failed:', error);
       return [];
     }
@@ -199,7 +200,7 @@ export class QueueManager {
     try {
       const len = await this.redis.llen(this.queueKey);
       return typeof len === 'number' ? len : 0;
-    } catch (error: unknown) {
+    } catch (error) {
       console.error('[QueueManager] Length check failed:', error);
       return 0;
     }
@@ -225,9 +226,9 @@ export class QueueManager {
     const safeStop = Math.min(stop, start + 99);
     
     try {
-      const keys = await this.redis.lrange(this.queueKey, start, safeStop);
-      return (keys as string[]) ?? [];
-    } catch (error: unknown) {
+      const keys = await this.redis.lrange<string>(this.queueKey, start, safeStop);
+      return keys ?? [];
+    } catch (error) {
       console.error('[QueueManager] Peek failed:', error);
       return [];
     }
@@ -243,7 +244,7 @@ export class QueueManager {
         deleted,
       });
       return deleted > 0;
-    } catch (error: unknown) {
+    } catch (error) {
       console.error('[QueueManager] Clear failed:', error);
       return false;
     }
@@ -255,7 +256,7 @@ export class QueueManager {
     try {
       const result = await this.redis.expire(this.queueKey, this.ttlSeconds);
       return result === 1;
-    } catch (error: unknown) {
+    } catch (error) {
       console.error('[QueueManager] Refresh TTL failed:', error);
       return false;
     }

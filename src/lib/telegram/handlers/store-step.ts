@@ -6,7 +6,7 @@ import type { HandlerContext, HandlerResult } from '@/lib/telegram/types';
 import { getDb } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { saveSession } from '../memory';
-import { safeExecute } from '@/lib/errors/safe-executor';
+import { safeExecute, SystemError } from '@/lib/errors';
 
 interface SecureHandlerContext extends HandlerContext {
   env: { DB: D1Database };
@@ -26,7 +26,7 @@ export async function handleStoreStep(ctx: SecureHandlerContext): Promise<Handle
   let phone = ctx.session?.phone;
   let name = ctx.session?.name;
 
-  // استعادة البيانات المفقودة من قاعدة البيانات إذا لزم الأمر
+  // استعادة البيانات المفقودة من قاعدة البيانات إذا لزم الأمر (Session Healing)
   if ((!phone || !name) && ctx.telegramUserId) {
     console.log(`🔍 [StoreStep] Fetching missing user data for Telegram ID: ${ctx.telegramUserId}...`);
 
@@ -47,12 +47,8 @@ export async function handleStoreStep(ctx: SecureHandlerContext): Promise<Handle
         return null;
       },
       {
+        operationName: 'store_step_session_healing',
         fallback: null,
-        context: {
-          userId: String(ctx.telegramUserId),
-          path: 'store_step_session_healing',
-          extras: { storeName },
-        },
       }
     );
 
@@ -70,8 +66,16 @@ export async function handleStoreStep(ctx: SecureHandlerContext): Promise<Handle
     name,
   };
 
-  // حفظ الجلسة باستخدام db
-  await saveSession(db, ctx.platform, ctx.externalId, nextSession);
+  // حفظ الجلسة باستخدام db داخل safeExecute
+  await safeExecute(
+    async () => {
+      await saveSession(db, ctx.platform, ctx.externalId, nextSession);
+    },
+    {
+      operationName: 'store_step_save_session',
+      fallback: undefined,
+    }
+  );
 
   return {
     reply: `🏪 متجر "${storeName}".. اسم رائع!\nأخيراً، اختر تخصص متجرك من الأزرار بالأسفل، أو اختر "تخصص آخر" واكتبه بنفسك:`,

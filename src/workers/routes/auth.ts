@@ -6,6 +6,7 @@ import { sign, verify } from 'hono/jwt';
 import type { Env } from '@/lib/env';
 import { getDb } from '@/lib/db/db';
 import * as schema from '@/lib/db/schema';
+import { safeExecute, SystemError } from '@/lib/errors';
 
 export const authRouter = new Hono<{ Bindings: Env }>();
 
@@ -25,7 +26,6 @@ interface RedisResponse {
   result: unknown;
 }
 
-// 🛡️ Telegram Auth Body Interface (Strictly Typed)
 interface TelegramAuthInput {
   id: string | number;
   hash: string;
@@ -65,7 +65,7 @@ async function isTokenBlacklisted(token: string, env: Env): Promise<boolean> {
     const result = await redisCommand(env, ['GET', `bl_${token}`]);
     return result !== null;
   } catch {
-    return false; // Fail open to prevent auth lockouts if Redis fails
+    return false; // Fail open
   }
 }
 
@@ -75,7 +75,7 @@ async function blacklistToken(token: string, ttlSeconds: number, env: Env): Prom
 }
 
 /**
- * التحقق من توقيع بيانات Telegram WebApp (HMAC-SHA256) مع فحص Replay Attack
+ * التحقق من توقيع بيانات Telegram WebApp (HMAC-SHA256)
  */
 async function verifyTelegramWebAppData(
   initData: Record<string, string>,
@@ -85,7 +85,6 @@ async function verifyTelegramWebAppData(
     const { hash, auth_date, ...data } = initData;
     if (!hash || !auth_date) return false;
 
-    // 🛡️ حماية ضد Replay Attacks: الرافعة الأقصى للطلب 24 ساعة (86400 ثانية)
     const authTimestamp = parseInt(auth_date, 10);
     const nowTimestamp = Math.floor(Date.now() / 1000);
     if (isNaN(authTimestamp) || nowTimestamp - authTimestamp > 86400) {
@@ -93,7 +92,6 @@ async function verifyTelegramWebAppData(
       return false;
     }
 
-    // بناء الـ Check String بفرز المفاتيح أبجدياً
     const checkString = Object.keys(data)
       .sort()
       .map((key) => `${key}=${data[key]}`)
@@ -101,7 +99,6 @@ async function verifyTelegramWebAppData(
 
     const encoder = new TextEncoder();
     
-    // HMAC-SHA256("WebAppData", botToken)
     const tokenKey = await crypto.subtle.importKey(
       'raw',
       encoder.encode('WebAppData'),
@@ -124,7 +121,6 @@ async function verifyTelegramWebAppData(
       ['sign']
     );
 
-    // HMAC-SHA256(secretKey, checkString)
     const calculatedHashBuffer = await crypto.subtle.sign(
       'HMAC',
       secretKey,
@@ -152,7 +148,15 @@ async function createTokenAndSession(
   userAgent?: string | null
 ): Promise<{ token: string; sessionId: string }> {
   if (!env.BETTER_AUTH_SECRET) {
-    throw new Error('BETTER_AUTH_SECRET is not configured');
+    throw new SystemError({
+      code: 'SERVER_CONFIG_ERROR',
+      userMessage: 'خطأ في إعدادات الخادم الفنية.',
+      technicalMessage: 'BETTER_AUTH_SECRET is not configured in environment variables.',
+      category: 'system',
+      severity: 'critical',
+      retryable: false,
+      shouldAlert: true,
+    });
   }
 
   const db = getDb({ DB: env.DB });
@@ -226,263 +230,370 @@ async function verifyToken(token: string, env: Env): Promise<JWTPayload | null> 
 /**
  * POST /api/auth/telegram
  */
-authRouter.post('/auth/telegram', async (c) => {
-  const rawBody = await c.req.json<TelegramAuthInput | null>().catch(() => null);
+authRouter.post('/auth/telegram', (c) =>
+  safeExecute(async () => {
+    const rawBody = await c.req.json<TelegramAuthInput | null>().catch(() => null);
 
-  if (!rawBody || typeof rawBody !== 'object') {
-    return c.json({ success: false, code: 'INVALID_INPUT', message: 'بيانات الطلب غير صالحة' }, 400);
-  }
-
-  const telegramId = rawBody.id !== undefined && rawBody.id !== null ? String(rawBody.id) : '';
-  const hash = typeof rawBody.hash === 'string' ? rawBody.hash : '';
-  const authDate = rawBody.auth_date !== undefined && rawBody.auth_date !== null ? String(rawBody.auth_date) : '';
-
-  if (!telegramId || !hash || !authDate) {
-    return c.json({ success: false, code: 'INVALID_INPUT', message: 'بيانات التوثيق غير مكتملة' }, 400);
-  }
-
-  const db = getDb({ DB: c.env.DB });
-  const botToken = c.env.TELEGRAM_BOT_TOKEN;
-
-  if (!botToken) {
-    return c.json({ success: false, code: 'SERVER_CONFIG_ERROR', message: 'معدة التليجرام غير مكتملة' }, 500);
-  }
-
-  const stringBody: Record<string, string> = {};
-  for (const [k, v] of Object.entries(rawBody)) {
-    if (v !== undefined && v !== null) {
-      stringBody[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    if (!rawBody || typeof rawBody !== 'object') {
+      throw new SystemError({
+        code: 'INVALID_INPUT',
+        userMessage: 'بيانات الطلب غير صالحة',
+        technicalMessage: 'Invalid or missing JSON payload in request body',
+        category: 'validation',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        metadata: { path: c.req.path },
+      });
     }
-  }
 
-  const isValid = await verifyTelegramWebAppData(stringBody, botToken);
-  if (!isValid) {
-    return c.json({ success: false, code: 'UNAUTHORIZED', message: 'توقيع بيانات تليجرام غير صالح أو منتهي الصلاحية' }, 401);
-  }
+    const telegramId = rawBody.id !== undefined && rawBody.id !== null ? String(rawBody.id) : '';
+    const hash = typeof rawBody.hash === 'string' ? rawBody.hash : '';
+    const authDate = rawBody.auth_date !== undefined && rawBody.auth_date !== null ? String(rawBody.auth_date) : '';
 
-  let user = await db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.telegramId, telegramId))
-    .get();
+    if (!telegramId || !hash || !authDate) {
+      throw new SystemError({
+        code: 'INVALID_INPUT',
+        userMessage: 'بيانات التوثيق غير مكتملة',
+        technicalMessage: 'Missing telegram authentication fields (id, hash, auth_date)',
+        category: 'validation',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        metadata: { path: c.req.path },
+      });
+    }
 
-  const firstName = typeof rawBody.first_name === 'string' ? rawBody.first_name : '';
-  const lastName = typeof rawBody.last_name === 'string' ? rawBody.last_name : '';
-  const username = typeof rawBody.username === 'string' ? rawBody.username : null;
-  const photoUrl = typeof rawBody.photo_url === 'string' ? rawBody.photo_url : null;
-  const fullName = `${firstName} ${lastName}`.trim() || username || 'مستخدم تليجرام';
+    const db = getDb({ DB: c.env.DB });
+    const botToken = c.env.TELEGRAM_BOT_TOKEN;
 
-  const now = new Date();
-  const clientIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || null;
+    if (!botToken) {
+      throw new SystemError({
+        code: 'SERVER_CONFIG_ERROR',
+        userMessage: 'معدة التليجرام غير مكتملة',
+        technicalMessage: 'TELEGRAM_BOT_TOKEN is not configured in env',
+        category: 'system',
+        severity: 'critical',
+        retryable: false,
+        shouldAlert: true,
+        metadata: { path: c.req.path },
+      });
+    }
 
-  if (!user) {
-    const newUserId = crypto.randomUUID();
-    const merchantId = `mch_${crypto.randomUUID().slice(0, 8)}`;
+    const stringBody: Record<string, string> = {};
+    for (const [k, v] of Object.entries(rawBody)) {
+      if (v !== undefined && v !== null) {
+        stringBody[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      }
+    }
 
-    try {
-      const newUser = await db
-        .insert(schema.users)
-        .values({
-          id: newUserId,
-          name: fullName,
-          image: photoUrl,
-          telegramId: telegramId,
-          telegramUsername: username,
-          telegramChatId: telegramId,
-          authMethod: 'telegram',
-          status: 'active',
-          isVerified: true,
-          emailVerified: false,
-          role: 'merchant',
-          merchantId: merchantId,
+    const isValid = await verifyTelegramWebAppData(stringBody, botToken);
+    if (!isValid) {
+      throw new SystemError({
+        code: 'UNAUTHORIZED',
+        userMessage: 'توقيع بيانات تليجرام غير صالح أو منتهي الصلاحية',
+        technicalMessage: 'Telegram HMAC verification failed or auth_date expired',
+        category: 'security',
+        severity: 'warning',
+        retryable: false,
+        shouldAlert: true,
+        metadata: { path: c.req.path, telegramId },
+      });
+    }
+
+    let user = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.telegramId, telegramId))
+      .get();
+
+    const firstName = typeof rawBody.first_name === 'string' ? rawBody.first_name : '';
+    const lastName = typeof rawBody.last_name === 'string' ? rawBody.last_name : '';
+    const username = typeof rawBody.username === 'string' ? rawBody.username : null;
+    const photoUrl = typeof rawBody.photo_url === 'string' ? rawBody.photo_url : null;
+    const fullName = `${firstName} ${lastName}`.trim() || username || 'مستخدم تليجرام';
+
+    const now = new Date();
+    const clientIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || null;
+
+    if (!user) {
+      const newUserId = crypto.randomUUID();
+      const merchantId = `mch_${crypto.randomUUID().slice(0, 8)}`;
+
+      try {
+        const newUser = await db
+          .insert(schema.users)
+          .values({
+            id: newUserId,
+            name: fullName,
+            image: photoUrl,
+            telegramId: telegramId,
+            telegramUsername: username,
+            telegramChatId: telegramId,
+            authMethod: 'telegram',
+            status: 'active',
+            isVerified: true,
+            emailVerified: false,
+            role: 'merchant',
+            merchantId: merchantId,
+            lastLoginAt: now,
+            lastActiveAt: now,
+            lastIp: clientIp,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning();
+
+        user = newUser[0];
+
+        await db.insert(schema.userStats).values({
+          id: crypto.randomUUID(),
+          userId: user.id,
+          loginCount: 1,
+          totalSessions: 1,
+          lastLoginAt: now,
+          firstLoginAt: now,
+          lastIp: clientIp,
+          updatedAt: now,
+        });
+      } catch {
+        user = await db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.telegramId, telegramId))
+          .get();
+      }
+    } else {
+      await db
+        .update(schema.users)
+        .set({
+          telegramUsername: username || user.telegramUsername,
+          image: photoUrl || user.image,
           lastLoginAt: now,
           lastActiveAt: now,
           lastIp: clientIp,
-          createdAt: now,
           updatedAt: now,
         })
-        .returning();
+        .where(eq(schema.users.id, user.id));
 
-      user = newUser[0];
-
-      await db.insert(schema.userStats).values({
-        id: crypto.randomUUID(),
-        userId: user.id,
-        loginCount: 1,
-        totalSessions: 1,
-        lastLoginAt: now,
-        firstLoginAt: now,
-        lastIp: clientIp,
-        updatedAt: now,
-      });
-    } catch {
-      user = await db
+      const userStatRecord = await db
         .select()
-        .from(schema.users)
-        .where(eq(schema.users.telegramId, telegramId))
+        .from(schema.userStats)
+        .where(eq(schema.userStats.userId, user.id))
         .get();
+
+      if (userStatRecord) {
+        await db
+          .update(schema.userStats)
+          .set({
+            loginCount: (userStatRecord.loginCount || 0) + 1,
+            totalSessions: (userStatRecord.totalSessions || 0) + 1,
+            lastLoginAt: now,
+            lastIp: clientIp,
+            updatedAt: now,
+          })
+          .where(eq(schema.userStats.userId, user.id));
+      }
     }
-  } else {
-    await db
-      .update(schema.users)
-      .set({
-        telegramUsername: username || user.telegramUsername,
-        image: photoUrl || user.image,
-        lastLoginAt: now,
-        lastActiveAt: now,
-        lastIp: clientIp,
-        updatedAt: now,
-      })
-      .where(eq(schema.users.id, user.id));
 
-    const userStatRecord = await db
-      .select()
-      .from(schema.userStats)
-      .where(eq(schema.userStats.userId, user.id))
-      .get();
-
-    if (userStatRecord) {
-      await db
-        .update(schema.userStats)
-        .set({
-          loginCount: (userStatRecord.loginCount || 0) + 1,
-          totalSessions: (userStatRecord.totalSessions || 0) + 1,
-          lastLoginAt: now,
-          lastIp: clientIp,
-          updatedAt: now,
-        })
-        .where(eq(schema.userStats.userId, user.id));
+    if (!user || user.status !== 'active') {
+      throw new SystemError({
+        code: 'FORBIDDEN',
+        userMessage: 'الحساب غير مفعّل أو معطل',
+        technicalMessage: `User status is not active. Current status: ${user?.status}`,
+        category: 'security',
+        severity: 'warning',
+        retryable: false,
+        shouldAlert: false,
+        metadata: { path: c.req.path, userId: user?.id },
+      });
     }
-  }
 
-  if (!user || user.status !== 'active') {
-    return c.json({ success: false, code: 'FORBIDDEN', message: 'الحساب غير مفعّل أو معطل' }, 403);
-  }
+    const userAgent = c.req.header('user-agent') || null;
+    const { token } = await createTokenAndSession(user.id, c.env, clientIp, userAgent);
 
-  const userAgent = c.req.header('user-agent') || null;
-  const { token } = await createTokenAndSession(user.id, c.env, clientIp, userAgent);
-
-  return c.json({
-    success: true,
-    data: {
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        role: user.role,
-        merchantId: user.merchantId,
-        telegramId: user.telegramId,
+    return c.json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          merchantId: user.merchantId,
+          telegramId: user.telegramId,
+        },
+        token,
       },
-      token,
-    },
-  });
-});
+    }, 200);
+  })
+);
 
 /**
  * GET /api/auth/verify
  */
-authRouter.get('/auth/verify', async (c) => {
-  const authHeader = c.req.header('Authorization');
+authRouter.get('/auth/verify', (c) =>
+  safeExecute(async () => {
+    const authHeader = c.req.header('Authorization');
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return c.json({ success: false, code: 'UNAUTHORIZED', message: 'رمز التوثيق غير موجود' }, 401);
-  }
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new SystemError({
+        code: 'UNAUTHORIZED',
+        userMessage: 'رمز التوثيق غير موجود',
+        technicalMessage: 'Authorization header is missing or does not start with Bearer',
+        category: 'security',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        metadata: { path: c.req.path },
+      });
+    }
 
-  const token = authHeader.replace('Bearer ', '').trim();
-  const db = getDb({ DB: c.env.DB });
+    const token = authHeader.replace('Bearer ', '').trim();
+    const db = getDb({ DB: c.env.DB });
 
-  const payload = await verifyToken(token, c.env);
-  if (!payload) {
-    return c.json({ success: false, code: 'UNAUTHORIZED', message: 'رمز التوثيق غير صالح أو منتهي الصلاحية' }, 401);
-  }
+    const payload = await verifyToken(token, c.env);
+    if (!payload) {
+      throw new SystemError({
+        code: 'UNAUTHORIZED',
+        userMessage: 'رمز التوثيق غير صالح أو منتهي الصلاحية',
+        technicalMessage: 'Token validation failed (expired, blacklisted, or invalid signature)',
+        category: 'security',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        metadata: { path: c.req.path },
+      });
+    }
 
-  const user = await db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.id, payload.sub))
-    .get();
+    const user = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, payload.sub))
+      .get();
 
-  if (!user || user.status !== 'active') {
-    return c.json({ success: false, code: 'NOT_FOUND', message: 'المستخدم غير موجود أو غير مفعّل' }, 404);
-  }
+    if (!user || user.status !== 'active') {
+      throw new SystemError({
+        code: 'NOT_FOUND',
+        userMessage: 'المستخدم غير موجود أو غير مفعّل',
+        technicalMessage: `User ID '${payload.sub}' not found or status not active`,
+        category: 'business',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        metadata: { path: c.req.path, userId: payload.sub },
+      });
+    }
 
-  return c.json({
-    success: true,
-    data: {
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        role: user.role,
-        merchantId: user.merchantId,
+    return c.json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          merchantId: user.merchantId,
+        },
+        exp: payload.exp,
       },
-      exp: payload.exp,
-    },
-  });
-});
+    }, 200);
+  })
+);
 
 /**
  * POST /api/auth/logout
  */
-authRouter.post('/auth/logout', async (c) => {
-  const authHeader = c.req.header('Authorization');
+authRouter.post('/auth/logout', (c) =>
+  safeExecute(async () => {
+    const authHeader = c.req.header('Authorization');
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return c.json({ success: false, code: 'UNAUTHORIZED', message: 'رمز التوثيق غير موجود' }, 401);
-  }
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new SystemError({
+        code: 'UNAUTHORIZED',
+        userMessage: 'رمز التوثيق غير موجود',
+        technicalMessage: 'Missing Authorization header on logout',
+        category: 'security',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        metadata: { path: c.req.path },
+      });
+    }
 
-  const token = authHeader.replace('Bearer ', '').trim();
-  const payload = await verifyToken(token, c.env);
+    const token = authHeader.replace('Bearer ', '').trim();
+    const payload = await verifyToken(token, c.env);
 
-  if (payload) {
-    const ttl = payload.exp - Math.floor(Date.now() / 1000);
-    if (ttl > 0) {
-      await blacklistToken(token, ttl, c.env);
+    if (payload) {
+      const ttl = payload.exp - Math.floor(Date.now() / 1000);
+      if (ttl > 0) {
+        await blacklistToken(token, ttl, c.env);
 
-      if (payload.sid) {
-        const db = getDb({ DB: c.env.DB });
-        await db.delete(schema.sessions).where(eq(schema.sessions.id, payload.sid));
+        if (payload.sid) {
+          const db = getDb({ DB: c.env.DB });
+          await db.delete(schema.sessions).where(eq(schema.sessions.id, payload.sid));
+        }
       }
     }
-  }
 
-  return c.json({ success: true, data: { message: 'تم تسجيل الخروج بنجاح' } });
-});
+    return c.json({ success: true, data: { message: 'تم تسجيل الخروج بنجاح' } }, 200);
+  })
+);
 
 /**
  * POST /api/auth/refresh
  */
-authRouter.post('/auth/refresh', async (c) => {
-  const body = await c.req.json<{ token?: string }>().catch(() => ({ token: undefined }));
+authRouter.post('/auth/refresh', (c) =>
+  safeExecute(async () => {
+    const body = await c.req.json<{ token?: string }>().catch(() => ({ token: undefined }));
 
-  if (!body.token) {
-    return c.json({ success: false, code: 'INVALID_INPUT', message: 'الرمز المطلوب غير موجود' }, 400);
-  }
-
-  const payload = await verifyToken(body.token, c.env);
-  if (!payload) {
-    return c.json({ success: false, code: 'UNAUTHORIZED', message: 'الرمز غير صالح أو منتهي الصلاحية' }, 401);
-  }
-
-  const ttl = payload.exp - Math.floor(Date.now() / 1000);
-  const db = getDb({ DB: c.env.DB });
-
-  if (ttl > 0) {
-    await blacklistToken(body.token, ttl, c.env);
-    if (payload.sid) {
-      await db.delete(schema.sessions).where(eq(schema.sessions.id, payload.sid));
+    if (!body.token) {
+      throw new SystemError({
+        code: 'INVALID_INPUT',
+        userMessage: 'الرمز المطلوب غير موجود',
+        technicalMessage: 'Missing refreshToken in body payload',
+        category: 'validation',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        metadata: { path: c.req.path },
+      });
     }
-  }
 
-  const clientIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || null;
-  const userAgent = c.req.header('user-agent') || null;
+    const payload = await verifyToken(body.token, c.env);
+    if (!payload) {
+      throw new SystemError({
+        code: 'UNAUTHORIZED',
+        userMessage: 'الرمز غير صالح أو منتهي الصلاحية',
+        technicalMessage: 'Refresh token invalid or blacklisted',
+        category: 'security',
+        severity: 'info',
+        retryable: false,
+        shouldAlert: false,
+        metadata: { path: c.req.path },
+      });
+    }
 
-  const { token: newToken } = await createTokenAndSession(payload.sub, c.env, clientIp, userAgent);
+    const ttl = payload.exp - Math.floor(Date.now() / 1000);
+    const db = getDb({ DB: c.env.DB });
 
-  return c.json({
-    success: true,
-    data: { token: newToken },
-  });
-});
+    if (ttl > 0) {
+      await blacklistToken(body.token, ttl, c.env);
+      if (payload.sid) {
+        await db.delete(schema.sessions).where(eq(schema.sessions.id, payload.sid));
+      }
+    }
+
+    const clientIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || null;
+    const userAgent = c.req.header('user-agent') || null;
+
+    const { token: newToken } = await createTokenAndSession(payload.sub, c.env, clientIp, userAgent);
+
+    return c.json({
+      success: true,
+      data: { token: newToken },
+    }, 200);
+  })
+);

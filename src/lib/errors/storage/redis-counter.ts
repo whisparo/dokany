@@ -1,5 +1,5 @@
 // lib/errors/storage/redis-counter.ts
-// الإصدار: 1.1.1
+// الإصدار: 1.1.2
 // الدور: إدارة عدادات Redis للتحليلات مع سياسة TTL صارمة متوافقة مع الـ Edge
 
 import { Redis } from '@upstash/redis';
@@ -93,8 +93,11 @@ export class ErrorCounter {
       pipeline.ttl(key);
       const results = await pipeline.exec();
 
-      const count = results[0] as number;
-      const ttl = results[1] as number;
+      const rawCount = results[0];
+      const rawTtl = results[1];
+      
+      const count = typeof rawCount === 'number' ? rawCount : 0;
+      const ttl = typeof rawTtl === 'number' ? rawTtl : -1;
       const isNew = count === 1;
 
       if (ttl === -1) {
@@ -104,7 +107,7 @@ export class ErrorCounter {
       addBreadcrumb(`Counter updated: ${key}`, { count, isNew });
 
       return { count, isNew, key };
-    } catch (error: unknown) {
+    } catch (error) {
       throw classifyError(error, {
         code: 'DB_003',
         metadata: { key, operation: 'incrementDailyCounter' },
@@ -137,8 +140,11 @@ export class ErrorCounter {
       pipeline.ttl(key);
       const results = await pipeline.exec();
 
-      const count = results[0] as number;
-      const ttl = results[1] as number;
+      const rawCount = results[0];
+      const rawTtl = results[1];
+
+      const count = typeof rawCount === 'number' ? rawCount : 0;
+      const ttl = typeof rawTtl === 'number' ? rawTtl : -1;
       const isNew = count === 1;
 
       if (ttl === -1) {
@@ -146,7 +152,7 @@ export class ErrorCounter {
       }
 
       return { count, isNew, key };
-    } catch (error: unknown) {
+    } catch (error) {
       throw classifyError(error, {
         code: 'DB_003',
         metadata: { key, operation: 'incrementIncidentCounter' },
@@ -178,8 +184,11 @@ export class ErrorCounter {
       pipeline.ttl(fullKey);
       const results = await pipeline.exec();
 
-      const count = results[0] as number;
-      const ttl = results[1] as number;
+      const rawCount = results[0];
+      const rawTtl = results[1];
+
+      const count = typeof rawCount === 'number' ? rawCount : 0;
+      const ttl = typeof rawTtl === 'number' ? rawTtl : -1;
       const isNew = count === 1;
 
       if (isNew && ttlSeconds !== undefined) {
@@ -187,7 +196,7 @@ export class ErrorCounter {
       }
 
       return { count, isNew, key: fullKey };
-    } catch (error: unknown) {
+    } catch (error) {
       throw classifyError(error, {
         code: 'DB_003',
         metadata: { key: fullKey, operation: 'incrementGeneric' },
@@ -202,7 +211,7 @@ export class ErrorCounter {
       
       const numValue = typeof value === 'number' ? value : parseInt(String(value), 10);
       return isNaN(numValue) ? null : numValue;
-    } catch (error: unknown) {
+    } catch (error) {
       console.warn(`[RedisCounter] Failed to get ${key}:`, error);
       return null;
     }
@@ -230,7 +239,7 @@ export class ErrorCounter {
       });
 
       return result;
-    } catch (error: unknown) {
+    } catch (error) {
       console.warn(`[RedisCounter] Failed to get counters:`, error);
       return result;
     }
@@ -240,7 +249,7 @@ export class ErrorCounter {
     try {
       const deleted = await this.redis.del(key);
       return deleted > 0;
-    } catch (error: unknown) {
+    } catch (error) {
       console.warn(`[RedisCounter] Failed to reset ${key}:`, error);
       return false;
     }
@@ -258,7 +267,7 @@ export class ErrorCounter {
       pipeline.ltrim(key, 0, maxEntries - 1);
       pipeline.expire(key, 7 * 24 * 60 * 60);
       await pipeline.exec();
-    } catch (error: unknown) {
+    } catch (error) {
       console.warn(`[RedisCounter] Failed to add recent error:`, error);
     }
   }
@@ -267,7 +276,7 @@ export class ErrorCounter {
     const key = createRecentErrorsKey();
 
     try {
-      const rawErrors = await this.redis.lrange(key, 0, limit - 1);
+      const rawErrors = await this.redis.lrange<string>(key, 0, limit - 1);
       
       return rawErrors
         .map((raw) => {
@@ -278,7 +287,7 @@ export class ErrorCounter {
           }
         })
         .filter((entry): entry is RecentErrorEntry => entry !== null);
-    } catch (error: unknown) {
+    } catch (error) {
       console.warn(`[RedisCounter] Failed to get recent errors:`, error);
       return [];
     }

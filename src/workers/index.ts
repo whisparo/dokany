@@ -3,7 +3,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from '@/lib/env';
 
 // Routes
@@ -19,12 +18,10 @@ import { errorsRouter } from './routes/errors';
 import { cartRouter } from './routes/cart';
 import { couponsRouter } from './routes/coupons';
 import { haggleRouter } from './routes/haggle';
-import { snapshotRouter } from './routes/snapshot'; // 📸 تم استيراد راوتر اللقطة الكاش
+import { snapshotRouter } from './routes/snapshot';
 
-// 🏛️ الاستيرادات المعتمدة والدقيقة للمشروع
-import { classifyError } from '@/lib/errors/classifier';
-import { sendErrorToTelegram, createTestErrorForNotifier } from '@/lib/errors/notifier';
-import type { ErrorCategory } from '@/lib/errors/types';
+// 🟢 الاستيراد الموحد من البوابة الرئيسية
+import { safeExecute, SystemError, errorOrchestrator, type SystemEnvironment } from '@/lib/errors';
 
 // 🌐 استيراد الـ OpenNext Server Handler
 // @ts-ignore
@@ -58,15 +55,12 @@ app.use('*', async (c, next) => {
 
   const corsMiddleware = cors({
     origin: async (origin) => {
-      // 1. السماح بالطلبات التي لا تحتوي Origin (مثل Server-to-Server أو Telegram Webhooks)
       if (!origin) return '*';
 
-      // 2. مطابقة النطاقات الثابتة
       if (staticOrigins.includes(origin)) {
         return origin;
       }
 
-      // 3. التحقق الديناميكي من النطاقات المخصصة والنطاقات الفرعية
       try {
         const url = new URL(origin);
 
@@ -75,10 +69,9 @@ app.use('*', async (c, next) => {
         }
 
         if (c.env.CUSTOM_DOMAINS_KV) {
-          // ⚡ L1 Worker Cache API للحصول على 0ms Latency بدلاً من استعلام KV في كل طلب
           const cache = caches.default;
           const cacheKey = new Request(`https://internal-cache/domain-check/${url.hostname}`);
-          
+
           let response = await cache.match(cacheKey);
 
           if (!response) {
@@ -88,11 +81,10 @@ app.use('*', async (c, next) => {
             response = new Response(JSON.stringify({ valid: isValid }), {
               headers: {
                 'Content-Type': 'application/json',
-                'Cache-Control': 'public, max-age=300', // 5 دقائق كاش على الـ Edge
+                'Cache-Control': 'public, max-age=300',
               },
             });
 
-            // حفظ النتيجة في الكاش بدون تعطيل الـ Execution Flow
             c.executionCtx.waitUntil(cache.put(cacheKey, response.clone()));
           }
 
@@ -111,7 +103,7 @@ app.use('*', async (c, next) => {
     allowHeaders: [
       'Content-Type',
       'Authorization',
-      'If-None-Match', // 🟢 مطلوب للتحقق من ETag (304 Not Modified)
+      'If-None-Match',
       'X-Idempotency-Key',
       'X-Cron-Secret',
       'x-internal-secret',
@@ -119,8 +111,8 @@ app.use('*', async (c, next) => {
     ],
     exposeHeaders: [
       'Content-Length',
-      'ETag', // 🟢 إتاحة ETag للعميل
-      'Cache-Tag', // 🟢 إتاحة Cache-Tag لكاش كلوفلاير
+      'ETag',
+      'Cache-Tag',
     ],
     maxAge: 86400,
   });
@@ -131,120 +123,73 @@ app.use('*', async (c, next) => {
 // 🏛️ مسارات المراقبة الخارجية
 app.get('/ping', (c) => c.text('OK', 200));
 
-/**
- * 🛠️ Helper لاستخراج معرف شات الأخطاء بأمان من c.env مباشرة
- */
-function resolveTelegramChatId(env: Env): string | undefined {
-  return env.TELEGRAM_ERROR_CHAT_ID || env.TELEGRAM_ADMIN_CHAT_ID || env.ERROR_CHANNEL_ID;
-}
+// 🧪 Route مباشر لتجربة التنبيهات مع safeExecute والعقد الموحد
+app.get('/api/test-error', (c) =>
+  safeExecute(async () => {
+    const internalSecret = c.env.INTERNAL_API_SECRET;
+    const providedSecret = c.req.header('x-internal-secret');
 
-// 🧪 Route مباشر لتجربة التنبيهات (محمي بـ Internal Secret)
-app.get('/api/test-error', async (c) => {
-  const internalSecret = c.env.INTERNAL_API_SECRET;
-  const providedSecret = c.req.header('x-internal-secret');
+    if (internalSecret && providedSecret !== internalSecret) {
+      throw new SystemError({
+        code: 'UNAUTHORIZED_ACCESS',
+        userMessage: 'غير مصرح للوصول إلى رابط الاختبار',
+        technicalMessage: 'Provided internal secret does not match configuration',
+        category: 'security',
+        severity: 'warning',
+        retryable: false,
+        shouldAlert: false,
+        metadata: { path: c.req.path },
+      });
+    }
 
-  if (internalSecret && providedSecret !== internalSecret) {
-    return c.json({ success: false, error: 'Unauthorized' }, 401);
-  }
+    const env: SystemEnvironment = { ...c.env };
 
-  try {
-    const testError = createTestErrorForNotifier();
-    const chatId = resolveTelegramChatId(c.env);
-
-    const envWithFallback = {
-      ...c.env,
-      TELEGRAM_ERROR_CHAT_ID: chatId || '',
-    };
-
-    await sendErrorToTelegram(testError, envWithFallback);
+    const systemError = await errorOrchestrator.handleMessage(
+      'اختبار نظام التنبيهات التجريبي',
+      env,
+      {
+        code: 'TEST_001',
+        metadata: { env: 'test', path: c.req.path },
+      }
+    );
 
     return c.json({
       success: true,
-      message: '🚀 تم تنفيذ أمر الإرسال بنجاح!',
+      message: '🚀 تم تنفيذ أمر الإرسال بنجاح عبر الأوركستريتور!',
+      errorDetails: errorOrchestrator.formatApiError(systemError),
       debug: {
         hasBotToken: !!c.env.TELEGRAM_BOT_TOKEN,
-        chatIdUsed: chatId,
         hasRedisUrl: !!c.env.UPSTASH_REDIS_REST_URL,
       },
     });
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : 'حدث خطأ أثناء إرسال التنبيه التجريبي';
-    const errorStack = err instanceof Error ? err.stack : undefined;
+  })
+);
 
-    return c.json(
-      {
-        success: false,
-        error: errorMessage,
-        stack: errorStack,
-      },
-      500
-    );
-  }
-});
+// 🏛️ Global Error Handler المربوط بالـ Orchestrator لإدارة أخطاء التطبيق الشاملة
+app.onError(async (err, c) => {
+  const env: SystemEnvironment = { ...c.env };
 
-/**
- * 🎯 تحديد الـ Status Code الدقيق وفق أنواع Hono
- */
-function mapCategoryToStatusCode(category: ErrorCategory): ContentfulStatusCode {
-  switch (category) {
-    case 'validation':
-      return 400;
-    case 'security':
-      return 401;
-    case 'business':
-      return 422;
-    case 'network':
-      return 503;
-    case 'database':
-    case 'performance':
-    case 'system':
-    default:
-      return 500;
-  }
-}
+  const systemError = await errorOrchestrator.handleException(err, env, {
+    metadata: {
+      path: c.req.path,
+      ip: c.req.header('cf-connecting-ip') || '0.0.0.0',
+      method: c.req.method,
+      source: 'worker-global-onerror',
+    },
+  });
 
-// 🏛️ Global Error Handler التنفيذي المنسق مع notifier.ts
-app.onError((err, c) => {
-  const systemError = classifyError(err);
-
-  const chatId = resolveTelegramChatId(c.env);
-  const envWithFallback = {
-    ...c.env,
-    TELEGRAM_ERROR_CHAT_ID: chatId || '',
-  };
-
-  const enrichedContext = {
-    ...systemError.context,
-    path: c.req.path,
-    method: c.req.method,
-    ip: c.req.header('cf-connecting-ip') || '0.0.0.0',
-  };
-
-  const enrichedError = Object.assign(
-    Object.create(Object.getPrototypeOf(systemError)),
-    systemError,
-    { context: enrichedContext }
-  );
-
-  c.executionCtx.waitUntil(
-    sendErrorToTelegram(enrichedError, envWithFallback).catch((sendErr: unknown) => {
-      console.error('❌ Failed to process error notification pipeline:', sendErr);
-    })
-  );
-
-  const statusCode = mapCategoryToStatusCode(systemError.category);
+  const responseStatus =
+    systemError.httpStatus >= 400 && systemError.httpStatus < 600
+      ? systemError.httpStatus
+      : 500;
 
   return c.json(
-    {
-      success: false,
-      code: systemError.code,
-      message: systemError.userMessage || 'حدث خطأ غير متوقع، يسعدنا مساعدتك.',
-    },
-    statusCode
+    errorOrchestrator.formatApiError(systemError),
+    responseStatus as 400 | 500
   );
 });
 
-// Routes Mount (الخاصة بالباك إند)
+// Routes Mount
 app.route('/api', healthRouter);
 app.route('/api', storeRouter);
 app.route('/api', categoriesRouter);
@@ -257,9 +202,9 @@ app.route('/api', errorsRouter);
 app.route('/api', cartRouter);
 app.route('/api', couponsRouter);
 app.route('/api', haggleRouter);
-app.route('/api', snapshotRouter); // 📸 إضافة مسارات Snapshot & Light Version Check
+app.route('/api', snapshotRouter);
 
-// 🎯 Pass-through Fallback: تمرير باقي طلبات واجهة المستخدم إلى OpenNext
+// 🎯 Pass-through Fallback: تمرير باقي الطلبات إلى OpenNext
 app.all('*', async (c) => {
   try {
     return await openNextHandler.fetch(c.req.raw, c.env, c.executionCtx);

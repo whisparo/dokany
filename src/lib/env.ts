@@ -2,6 +2,20 @@
 
 import type { D1Database, KVNamespace, Queue } from '@cloudflare/workers-types';
 
+/* ============================================================================
+ * 📦 QUEUE PAYLOAD TYPES
+ * ============================================================================ */
+
+export interface MediaQueuePayload {
+  fileId: string;
+  action: 'process' | 'delete' | 'optimize';
+  metadata?: Record<string, unknown>;
+}
+
+/* ============================================================================
+ * 🛡️ SYSTEM ENVIRONMENT & BINDINGS
+ * ============================================================================ */
+
 export interface Env {
   // Database & Storage KV
   DB: D1Database;
@@ -35,12 +49,22 @@ export interface Env {
   QSTASH_TOKEN: string;
 
   // Background Media Worker & Queue Services
-  MEDIA_QUEUE?: Queue<unknown>;
+  MEDIA_QUEUE?: Queue<MediaQueuePayload>;
   MEDIA_PROCESSOR_URL?: string;
 
   // Application Public URLs
   NEXT_PUBLIC_APP_URL?: string;
+
+  // Node / Worker Execution Context
+  NODE_ENV?: string;
+  ENVIRONMENT?: string;
+  [key: string]: unknown;
 }
+
+/**
+ * 🛠️ Alias Type لضمان التوافق التام مع نظام الـ Error Handling و Logger
+ */
+export type SystemEnvironment = Env;
 
 /* ============================================================================
  * 🛡️ HONO CONTEXT & AUTH TYPES
@@ -58,7 +82,7 @@ export interface AppEnv {
   Bindings: Env;
   Variables: {
     user?: UserContext;
-    userId?: string;  // 👈 إضافة للـ Typesafety
-    storeId?: string; // 👈 إضافة للـ Typesafety
+    userId?: string;
+    storeId?: string;
   };
 }

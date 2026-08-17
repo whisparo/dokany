@@ -1,13 +1,12 @@
 // src/worker/routes/products.ts
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { eq, and, desc, isNull, like, gte, lte, count } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Env } from '@/lib/env';
 import { getDb } from '@/lib/db/db';
 import * as schema from '@/lib/db/schema';
-import { safeExecute } from '@/lib/errors/safe-executor';
-import { SystemError } from '@/lib/errors/types';
+import { safeExecute, SystemError } from '@/lib/errors';
 import type { ProductImage, ProductVariant, NewProduct } from '@/lib/db/schema/products';
 import { createProductSchema, updateProductSchema } from '@/lib/validations/product';
 import { requireAuth, type AuthVariables } from '@/workers/middleware/auth';
@@ -39,7 +38,7 @@ function generateSlug(text: string): string {
 async function getStoreBySlugOrThrow(
   db: ReturnType<typeof getDb>,
   slug: string,
-  path: string,
+  c: Context<{ Bindings: Env; Variables: AuthVariables }>,
   requiredOwnerId?: string
 ) {
   const store = await db
@@ -57,7 +56,8 @@ async function getStoreBySlugOrThrow(
       severity: 'info',
       retryable: false,
       shouldAlert: false,
-      context: { storeId: slug, path, extras: { storeSlug: slug } },
+      storeId: slug,
+      metadata: { path: c.req.path, storeSlug: slug },
     });
   }
 
@@ -70,7 +70,8 @@ async function getStoreBySlugOrThrow(
       severity: 'warning',
       retryable: false,
       shouldAlert: true,
-      context: { storeId: store.id, path, userId: requiredOwnerId },
+      storeId: store.id,
+      metadata: { path: c.req.path, userId: requiredOwnerId },
     });
   }
 
@@ -84,7 +85,7 @@ async function validateCategoryOwnership(
   db: ReturnType<typeof getDb>,
   categoryId: string,
   storeId: string,
-  path: string
+  c: Context<{ Bindings: Env; Variables: AuthVariables }>
 ) {
   const category = await db
     .select({ id: schema.categories.id })
@@ -107,7 +108,8 @@ async function validateCategoryOwnership(
       severity: 'info',
       retryable: false,
       shouldAlert: false,
-      context: { storeId, path },
+      storeId,
+      metadata: { path: c.req.path, categoryId },
     });
   }
 }
@@ -146,13 +148,14 @@ productsRouter.get('/store/:slug/products', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: slug || 'unknown', path: c.req.path },
+        storeId: slug || 'unknown',
+        metadata: { path: c.req.path },
       });
     }
 
     const { limit, offset, search, categoryId, minPrice, maxPrice } = queryResult.data;
     const db = getDb({ DB: c.env.DB });
-    const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
+    const store = await getStoreBySlugOrThrow(db, slug, c);
 
     const conditions = [
       eq(schema.products.storeId, store.id),
@@ -213,7 +216,7 @@ productsRouter.get('/store/:slug/products/:productSlug', (c) =>
     const productSlug = c.req.param('productSlug');
 
     const db = getDb({ DB: c.env.DB });
-    const store = await getStoreBySlugOrThrow(db, slug, c.req.path);
+    const store = await getStoreBySlugOrThrow(db, slug, c);
 
     const product = await db
       .select()
@@ -237,7 +240,8 @@ productsRouter.get('/store/:slug/products/:productSlug', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: store.id, path: c.req.path },
+        storeId: store.id,
+        metadata: { path: c.req.path, productSlug },
       });
     }
 
@@ -264,17 +268,18 @@ productsRouter.post('/store/:slug/products', requireAuth, (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: slug || 'unknown', path: c.req.path, userId },
+        storeId: slug || 'unknown',
+        metadata: { path: c.req.path, userId },
       });
     }
 
     const body = validation.data;
     const db = getDb({ DB: c.env.DB });
-    const store = await getStoreBySlugOrThrow(db, slug, c.req.path, userId);
+    const store = await getStoreBySlugOrThrow(db, slug, c, userId);
 
     // 🛡️ فحص ملكية التصنيف لو تم تمريره
     if (body.categoryId) {
-      await validateCategoryOwnership(db, body.categoryId, store.id, c.req.path);
+      await validateCategoryOwnership(db, body.categoryId, store.id, c);
     }
 
     const slugified = body.slug || generateSlug(body.name);
@@ -300,7 +305,8 @@ productsRouter.post('/store/:slug/products', requireAuth, (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: store.id, path: c.req.path, userId },
+        storeId: store.id,
+        metadata: { path: c.req.path, userId },
       });
     }
 
@@ -354,17 +360,18 @@ productsRouter.put('/store/:slug/products/:id', requireAuth, (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: slug || 'unknown', path: c.req.path, userId },
+        storeId: slug || 'unknown',
+        metadata: { path: c.req.path, userId },
       });
     }
 
     const body = validation.data;
     const db = getDb({ DB: c.env.DB });
-    const store = await getStoreBySlugOrThrow(db, slug, c.req.path, userId);
+    const store = await getStoreBySlugOrThrow(db, slug, c, userId);
 
     // 🛡️ فحص ملكية التصنيف الجديد لو تم تحديثه
     if (body.categoryId) {
-      await validateCategoryOwnership(db, body.categoryId, store.id, c.req.path);
+      await validateCategoryOwnership(db, body.categoryId, store.id, c);
     }
 
     const existing = await db
@@ -388,7 +395,8 @@ productsRouter.put('/store/:slug/products/:id', requireAuth, (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: store.id, path: c.req.path, userId },
+        storeId: store.id,
+        metadata: { path: c.req.path, userId },
       });
     }
 
@@ -419,7 +427,8 @@ productsRouter.put('/store/:slug/products/:id', requireAuth, (c) =>
             severity: 'info',
             retryable: false,
             shouldAlert: false,
-            context: { storeId: store.id, path: c.req.path, userId },
+            storeId: store.id,
+            metadata: { path: c.req.path, userId },
           });
         }
       }
@@ -471,7 +480,7 @@ productsRouter.delete('/store/:slug/products/:id', requireAuth, (c) =>
     const userId = c.get('userId');
 
     const db = getDb({ DB: c.env.DB });
-    const store = await getStoreBySlugOrThrow(db, slug, c.req.path, userId);
+    const store = await getStoreBySlugOrThrow(db, slug, c, userId);
 
     const product = await db
       .select({ id: schema.products.id })
@@ -494,7 +503,8 @@ productsRouter.delete('/store/:slug/products/:id', requireAuth, (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: store.id, path: c.req.path, userId },
+        storeId: store.id,
+        metadata: { path: c.req.path, userId },
       });
     }
 

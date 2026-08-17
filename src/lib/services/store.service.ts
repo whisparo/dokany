@@ -5,7 +5,7 @@ import { Redis } from '@upstash/redis';
 import { getDb, schema } from '@/lib/db';
 import type { Store } from '@/types';
 import type { Env } from '@/lib/env';
-import { SystemError } from '@/lib/errors/types';
+import { SystemError } from '@/lib/errors';
 
 const STORE_CACHE_TTL_SECONDS = 300; // 5 دقائق
 

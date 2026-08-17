@@ -5,8 +5,7 @@ import { eq, and, isNull } from 'drizzle-orm';
 import type { AppEnv } from '@/lib/env';
 import * as schema from '@/lib/db/schema';
 import { getDb } from '@/lib/db/db';
-import { SystemError } from '@/lib/errors/types';
-import { safeExecute } from '@/lib/errors/safe-executor';
+import { SystemError, safeExecute } from '@/lib/errors';
 import { HaggleService } from '@/lib/services/haggle-service';
 import type { HaggleStrategy } from '@/lib/db/schema/haggle-sessions';
 
@@ -36,7 +35,8 @@ async function getStoreByIdOrThrow(
       severity: 'info',
       retryable: false,
       shouldAlert: false,
-      context: { storeId, path },
+      storeId,
+      metadata: { path },
     });
   }
 
@@ -81,7 +81,8 @@ haggleRouter.post('/haggle', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: storeId ?? 'UNKNOWN', path: c.req.path },
+        storeId: storeId ?? undefined,
+        metadata: { path: c.req.path },
       });
     }
 
@@ -131,7 +132,7 @@ haggleRouter.patch('/haggle', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: 'UNKNOWN', path: c.req.path },
+        metadata: { path: c.req.path },
       });
     }
 
@@ -153,7 +154,7 @@ haggleRouter.patch('/haggle', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: 'UNKNOWN', path: c.req.path },
+        metadata: { path: c.req.path, sessionId },
       });
     }
 

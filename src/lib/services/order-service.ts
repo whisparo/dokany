@@ -4,7 +4,7 @@ import { schema, type D1Transaction } from '@/lib/db';
 import type { NewOrder, Order } from '@/lib/db/schema/orders';
 import type { NewOrderItem } from '@/lib/db/schema/order-items';
 import type { ProductOptions, OrderItemMetadata } from '@/lib/db/schema/order-items';
-import { SystemError } from '@/lib/errors/types';
+import { SystemError } from '@/lib/errors';
 
 export interface RawOrderItemInput {
   productId: string;
@@ -129,7 +129,7 @@ export class OrderService {
 
       const [order] = await tx
         .insert(schema.orders)
-        .values(values as any) // ✅ أيجاد cast مؤقت لتجاوز مشكلة الأنواع
+        .values(values as any) // ✅ استخدام cast مؤقت لتجاوز مشكلة الأنواع
         .returning();
 
       if (!order) {

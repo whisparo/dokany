@@ -5,8 +5,7 @@ import { eq, and, isNull } from 'drizzle-orm';
 import type { AppEnv } from '@/lib/env';
 import { getDb } from '@/lib/db';
 import * as schema from '@/lib/db/schema';
-import { safeExecute } from '@/lib/errors/safe-executor';
-import { SystemError } from '@/lib/errors/types';
+import { safeExecute, SystemError } from '@/lib/errors';
 import { updateStoreSchema } from '@/lib/validations/store';
 import { requireAuth } from '@/workers/middleware/auth';
 
@@ -49,11 +48,11 @@ storeRouter.get('/store/:slug', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: {
-          storeId: slug,
+        storeId: slug,
+        metadata: {
           path: c.req.path,
           method: c.req.method,
-          extras: { slug },
+          slug,
         },
       });
     }
@@ -100,12 +99,12 @@ storeRouter.get('/store/:slug', (c) =>
 storeRouter.patch('/store/:id', requireAuth, (c) =>
   safeExecute(async () => {
     const storeId = c.req.param('id');
-    
-    // ✅ 1. استخراج الـ userId والـ role بأمان وبدون Type Errors
+
+    // ✅ 1. استخراج الـ userId والـ role بأمان
     const userId = c.get('userId');
     const user = c.get('user');
     const userRole = user?.role ?? 'merchant';
-    
+
     const db = getDb({ DB: c.env.DB });
 
     // 2. جلب المتجر للتأكد من الملكية (Anti-IDOR) ومقارنة الإعدادات الحالية
@@ -129,6 +128,12 @@ storeRouter.patch('/store/:id', requireAuth, (c) =>
         severity: 'warning',
         retryable: false,
         shouldAlert: false,
+        storeId,
+        metadata: {
+          userId,
+          path: c.req.path,
+          method: c.req.method,
+        },
       });
     }
 
@@ -142,6 +147,12 @@ storeRouter.patch('/store/:id', requireAuth, (c) =>
         severity: 'warning',
         retryable: false,
         shouldAlert: true,
+        storeId,
+        metadata: {
+          userId,
+          path: c.req.path,
+          method: c.req.method,
+        },
       });
     }
 
@@ -164,10 +175,12 @@ storeRouter.patch('/store/:id', requireAuth, (c) =>
         severity: 'warning',
         retryable: false,
         shouldAlert: true,
+        storeId,
         metadata: {
           requestedFields: requestedAdminFields,
           userId,
-          storeId,
+          path: c.req.path,
+          method: c.req.method,
         },
       });
     }

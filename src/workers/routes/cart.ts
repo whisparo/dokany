@@ -6,10 +6,9 @@ import type { AppEnv } from '@/lib/env';
 import { getDb } from '@/lib/db/db';
 import * as schema from '@/lib/db/schema';
 import type { CartVariant } from '@/lib/db/schema/cart-items';
-import { safeExecute } from '@/lib/errors/safe-executor';
-import { SystemError } from '@/lib/errors/types';
+// 🟢 الاستيراد الصح والموحد لأخطاء النظام
+import { safeExecute, SystemError } from '@/lib/errors';
 
-// ✅ الاعتماد على AppEnv الموحد
 export const cartRouter = new Hono<AppEnv>();
 
 /**
@@ -49,7 +48,8 @@ async function getStoreByIdOrThrow(
       severity: 'info',
       retryable: false,
       shouldAlert: false,
-      context: { storeId, path },
+      storeId,
+      metadata: { path },
     });
   }
 
@@ -84,7 +84,7 @@ cartRouter.post('/cart/sync', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: 'N/A', path: c.req.path },
+        metadata: { path: c.req.path },
       });
     }
 
@@ -98,7 +98,7 @@ cartRouter.post('/cart/sync', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: 'UNKNOWN', path: c.req.path },
+        metadata: { path: c.req.path },
       });
     }
 
@@ -279,7 +279,7 @@ cartRouter.post('/cart/validate', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: 'N/A', path: c.req.path },
+        metadata: { path: c.req.path },
       });
     }
 
@@ -293,7 +293,7 @@ cartRouter.post('/cart/validate', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: 'UNKNOWN', path: c.req.path },
+        metadata: { path: c.req.path },
       });
     }
 

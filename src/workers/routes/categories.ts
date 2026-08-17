@@ -5,12 +5,11 @@ import { eq, and, isNull, ne, or, count } from 'drizzle-orm';
 import type { Env } from '@/lib/env';
 import { getDb } from '@/lib/db/db';
 import * as schema from '@/lib/db/schema';
-import { safeExecute } from '@/lib/errors/safe-executor';
-import { SystemError } from '@/lib/errors/types';
+// 🟢 الاستيراد الصح والموحد لأخطاء النظام
+import { safeExecute, SystemError } from '@/lib/errors';
 import { createCategorySchema, updateCategorySchema } from '@/lib/validations/category';
 import { requireAuth, type AuthVariables } from '@/workers/middleware/auth';
 
-// ✅ استخدام AuthVariables الموحد من الـ Middleware
 export const categoriesRouter = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
 /**
@@ -29,7 +28,6 @@ function slugify(text: string): string {
 
 /**
  * جلب المتجر والتأكد من وجوده + فحص الملكية (Anti-IDOR)
- * @param requiredOwnerId - معرف المستخدم المطلوب لملكية المتجر (اختياري)
  */
 async function getStoreBySlugOrThrow(
   db: ReturnType<typeof getDb>,
@@ -57,7 +55,8 @@ async function getStoreBySlugOrThrow(
       severity: 'info',
       retryable: false,
       shouldAlert: false,
-      context: { storeId: slug, path },
+      storeId: slug,
+      metadata: { path },
     });
   }
 
@@ -71,7 +70,8 @@ async function getStoreBySlugOrThrow(
       severity: 'warning',
       retryable: false,
       shouldAlert: true,
-      context: { storeId: store.id, path, extras: { userId: requiredOwnerId } },
+      storeId: store.id,
+      metadata: { path, userId: requiredOwnerId },
     });
   }
 
@@ -84,7 +84,6 @@ async function getStoreBySlugOrThrow(
 
 /**
  * GET /api/store/:slug/categories
- * جلب جميع التصنيفات غير المحذوفة مرتبة
  */
 categoriesRouter.get('/store/:slug/categories', (c) =>
   safeExecute(async () => {
@@ -110,8 +109,6 @@ categoriesRouter.get('/store/:slug/categories', (c) =>
 
 /**
  * GET /api/store/:slug/categories/:id/products
- * جلب منتجات تصنيف معين مع الترقيم (Pagination)
- * 🛡️ SEC-006: إظهار المنتجات المنشورة فقط للعموم
  */
 categoriesRouter.get('/store/:slug/categories/:id/products', (c) =>
   safeExecute(async () => {
@@ -144,14 +141,14 @@ categoriesRouter.get('/store/:slug/categories/:id/products', (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: store.id, path: c.req.path },
+        storeId: store.id,
+        metadata: { path: c.req.path },
       });
     }
 
-    // ✅ SEC-006: إضافة فلتر isPublished لمنع تسريب المسودات للعموم
     const whereProductsClause = and(
       eq(schema.products.categoryId, id),
-      eq(schema.products.isPublished, true), // 🛡️ منع عرض المسودات
+      eq(schema.products.isPublished, true),
       isNull(schema.products.deletedAt)
     );
 
@@ -195,18 +192,15 @@ categoriesRouter.get('/store/:slug/categories/:id/products', (c) =>
 
 /**
  * POST /api/store/:slug/categories
- * إنشاء تصنيف جديد مع حماية تكرار الـ Name والـ Slug
  */
 categoriesRouter.post('/store/:slug/categories', requireAuth, (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
-    // ✅ استخدام userId الصحيح من السياق (يُوضع بواسطة requireAuth)
     const userId = c.get('userId');
     const rawBody = await c.req.json();
 
     const db = getDb({ DB: c.env.DB });
 
-    // 🛡️ فحص وجود المتجر + ملكيته للمستخدم الحالي
     const store = await getStoreBySlugOrThrow(db, slug, c.req.path, userId);
 
     const parsed = createCategorySchema.safeParse({
@@ -224,13 +218,13 @@ categoriesRouter.post('/store/:slug/categories', requireAuth, (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: store.id, path: c.req.path },
+        storeId: store.id,
+        metadata: { path: c.req.path },
       });
     }
 
     const { name, description, parentId, order, isActive, slug: categorySlug } = parsed.data;
 
-    // التحقق من تكرار الاسم أو الـ Slug بنفس المتجر
     const existing = await db
       .select()
       .from(schema.categories)
@@ -255,7 +249,8 @@ categoriesRouter.post('/store/:slug/categories', requireAuth, (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: store.id, path: c.req.path },
+        storeId: store.id,
+        metadata: { path: c.req.path },
       });
     }
 
@@ -283,13 +278,11 @@ categoriesRouter.post('/store/:slug/categories', requireAuth, (c) =>
 
 /**
  * PUT /api/store/:slug/categories/:id
- * تحديث تصنيف مع منع الـ Circular Dependency
  */
 categoriesRouter.put('/store/:slug/categories/:id', requireAuth, (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
     const id = c.req.param('id');
-    // ✅ استخدام userId الصحيح من السياق
     const userId = c.get('userId');
     const rawBody = await c.req.json();
 
@@ -307,11 +300,11 @@ categoriesRouter.put('/store/:slug/categories/:id', requireAuth, (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: slug, path: c.req.path },
+        storeId: slug,
+        metadata: { path: c.req.path },
       });
     }
 
-    // منع جعل التصنيف أباً لنفسه
     if (parsed.data.parentId && parsed.data.parentId === id) {
       throw new SystemError({
         code: 'CATEGORY_INVALID_PARENT',
@@ -321,16 +314,15 @@ categoriesRouter.put('/store/:slug/categories/:id', requireAuth, (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: slug, path: c.req.path },
+        storeId: slug,
+        metadata: { path: c.req.path },
       });
     }
 
     const db = getDb({ DB: c.env.DB });
 
-    // 🛡️ فحص وجود المتجر + ملكيته للمستخدم الحالي
     const store = await getStoreBySlugOrThrow(db, slug, c.req.path, userId);
 
-    // التأكد من عدم وجود تعارض في الاسم أو الـ Slug مع تصنيف آخر
     if (parsed.data.name || parsed.data.slug) {
       const conditions = [];
       if (parsed.data.name) conditions.push(eq(schema.categories.name, parsed.data.name));
@@ -358,7 +350,8 @@ categoriesRouter.put('/store/:slug/categories/:id', requireAuth, (c) =>
           severity: 'info',
           retryable: false,
           shouldAlert: false,
-          context: { storeId: store.id, path: c.req.path },
+          storeId: store.id,
+          metadata: { path: c.req.path },
         });
       }
     }
@@ -387,7 +380,8 @@ categoriesRouter.put('/store/:slug/categories/:id', requireAuth, (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: store.id, path: c.req.path },
+        storeId: store.id,
+        metadata: { path: c.req.path },
       });
     }
 
@@ -397,18 +391,15 @@ categoriesRouter.put('/store/:slug/categories/:id', requireAuth, (c) =>
 
 /**
  * DELETE /api/store/:slug/categories/:id
- * حذف منطقي (Soft Delete) مع التحقق من خلو التصنيف من المنتجات
  */
 categoriesRouter.delete('/store/:slug/categories/:id', requireAuth, (c) =>
   safeExecute(async () => {
     const slug = c.req.param('slug');
     const id = c.req.param('id');
-    // ✅ استخدام userId الصحيح من السياق
     const userId = c.get('userId');
 
     const db = getDb({ DB: c.env.DB });
 
-    // 🛡️ فحص وجود المتجر + ملكيته للمستخدم الحالي
     const store = await getStoreBySlugOrThrow(db, slug, c.req.path, userId);
 
     const category = await db
@@ -432,7 +423,8 @@ categoriesRouter.delete('/store/:slug/categories/:id', requireAuth, (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: store.id, path: c.req.path },
+        storeId: store.id,
+        metadata: { path: c.req.path },
       });
     }
 
@@ -458,7 +450,8 @@ categoriesRouter.delete('/store/:slug/categories/:id', requireAuth, (c) =>
         severity: 'info',
         retryable: false,
         shouldAlert: false,
-        context: { storeId: store.id, path: c.req.path },
+        storeId: store.id,
+        metadata: { path: c.req.path },
       });
     }
 
