@@ -4,6 +4,6 @@
   "/page": "/",
   "/[locale]/(storefront)/[storeSlug]/order-confirmation/page": "/[locale]/[storeSlug]/order-confirmation",
   "/[locale]/(storefront)/[storeSlug]/checkout/page": "/[locale]/[storeSlug]/checkout",
-  "/[locale]/(storefront)/[storeSlug]/products/[slug]/page": "/[locale]/[storeSlug]/products/[slug]",
-  "/[locale]/(storefront)/[storeSlug]/page": "/[locale]/[storeSlug]"
+  "/[locale]/(storefront)/[storeSlug]/page": "/[locale]/[storeSlug]",
+  "/[locale]/(storefront)/[storeSlug]/products/[slug]/page": "/[locale]/[storeSlug]/products/[slug]"
 }

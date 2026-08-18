@@ -2,8 +2,7 @@
 
 import { Hono } from 'hono';
 import type { AppEnv } from '@/lib/env';
-import { safeExecute, SystemError } from '@/lib/errors';
-import { processErrorQueue } from '@/lib/errors/background/processor';
+import { safeExecute, SystemError, processErrorQueue } from '@/lib/errors'; // 👈 استيراد الدالة مباشرة من الـ Index
 
 export const cronRouter = new Hono<AppEnv>();
 
@@ -62,7 +61,7 @@ cronRouter.post('/cron/process-errors', (c) =>
         });
       }
 
-      // 2. معالجة الدفعة مع ترك أي استثناء لـ safeExecute
+      // 2. معالجة الدفعة بالمناداة المباشرة من الـ Index
       const result = await processErrorQueue(c.env, {
         batchSize: 50,
       });

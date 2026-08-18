@@ -1,6 +1,4 @@
 // lib/errors/index.ts
-// الإصدار: 2.3.0
-// الدور: البوابة المباشرة الموحدة لنظام معالجة الأخطاء (Proxy Entrypoint)
 
 import { 
   errorOrchestrator, 
@@ -8,19 +6,25 @@ import {
   type HandleErrorOptions 
 } from './orchestrator';
 
-// 1. تصدير الأدوات الأساسية اليومية
+// 1. تصدير الأدوات الأساسية والأنواع
 export { SystemError, isSystemError } from './core';
 export { safeExecute } from './processing';
-export { processErrorQueue } from './background/processor';
 
-// 2. تصدير الأوركستريتور
+// 2. تصدير الأوركستريتور والأنواع المباشرة
 export { errorOrchestrator, ErrorOrchestrator } from './orchestrator';
 
-// 3. تحويل العمليات المباشرة للأوركستريتور
+// 3. تحويل جميع العمليات (Facade Layer) للـ Orchestrator
+
+/**
+ * تهيئة نظام الأخطاء عبر الأوركستريتور
+ */
 export async function initErrorSystem(env?: SystemEnvironment) {
   return await errorOrchestrator.init(env);
 }
 
+/**
+ * التقاط استثناء لحظي وتوجيهه للأوركستريتور
+ */
 export async function captureException(
   error: unknown,
   env?: SystemEnvironment,
@@ -29,6 +33,9 @@ export async function captureException(
   return await errorOrchestrator.handleException(error, env, options);
 }
 
+/**
+ * التقاط رسالة نصية وتوجيهها للأوركستريتور
+ */
 export async function captureMessage(
   message: string,
   env?: SystemEnvironment,
@@ -37,6 +44,19 @@ export async function captureMessage(
   return await errorOrchestrator.handleMessage(message, env, options);
 }
 
+/**
+ * معالجة قائمة الانتظار في الخلفية (Cron Job Facade) عبر الأوركستريتور
+ */
+export async function processErrorQueue(
+  env?: SystemEnvironment,
+  options?: { batchSize?: number }
+) {
+  return await errorOrchestrator.processQueue(env, options);
+}
+
+/**
+ * صياغة استجابة API موحدة
+ */
 export function toApiError(error: unknown, includeDetails: boolean = false) {
   return errorOrchestrator.formatApiError(error, includeDetails);
 }

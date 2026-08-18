@@ -1,0 +1,57 @@
+🏛️ Architecture Blueprint: Alert System Engine (الإصدار المعماري الموحد v2.0)
+
+📌 1. الفلسفة المعمارية والهدف (Architecture Overview)
+تم تصميم Alert System Engine ليكون نظاماً غير معطل للعمليات الحيوية (Non-Blocking / Async Direct Engine)، يمثل الطبقة التنفيذية الموحدة لجميع الإشعارات والتنبيهات في المنصة.
+
+بيشتغل النظام كـ Single Source of Truth for Notifications، ويفصل تماماً بين توليد الأحداث جوه النظام (سواء أخطاء في الـ ErrorOrchestrator أو عمليات مخزون جوه الـ OrderProcessor) وبين آلية تشكيل الرسائل وإرسالها عبر القنوات المختلفة (Telegram, Console Logger).
+
+🚦 2. مصفوفة الأولوية والتوجيه (Severity & Routing Matrix)
+المستوي (Severity)	Scope / Event Type	قنوات الإرسال (Channels)	سلوك الإرسال والـ Deduplication
+CRITICAL 🚨	CRITICAL_FAILURE / SYSTEM_ERROR	Telegram + Console Logger	إشعار عاجل فوري (يتجاوز الـ Deduplication Cache لضمان الوصول اللحظي)
+WARNING ⚠️	LOW_STOCK / FALLBACK_TRIGGERED	Telegram + Console Logger	إشعار عادي مفلتر عبر الـ Deduplication (نافذة منع 60 ثانية)
+INFO ℹ️	STOCK_COMPENSATED / NEW_ORDER	Console Logger Only	تسجيل هيكلي صامت في الـ Logs بدون إزعاج القنوات الخارجية
+⚠️ 3. المعالجة التكتيكية للمشاكل الهندسية (Technical Trade-offs)
+1. حماية زَمَن الاستجابة (Non-Blocking Latency):
+
+المشكلة: استدعاء Telegram Bot API قد يستغرق (200ms - 2000ms).
+
+الحل: الإرسال بيتم عبر نمط Fire-and-Forget مدمجاً مع ctx.waitUntil الخاص بـ Cloudflare Workers. الـ Response بيرجع للعميل في أقل من 5ms والإرسال بيستكمل في خلفية الـ Event Loop.
+
+2. الحماية من طوفان الرسائل (Alert Storming Prevention):
+
+المشكلة: عند حدوث هجوم شراء أو خطأ متكرر في ثوانٍ، قد يرسل النظام آلاف الرسائل المكررة مما يتسبب في حظر الـ Bot من تليجرام.
+
+الحل: بناء In-Memory Deduplication Cache معتمد على المفتاح المركب event:storeId:action:identifier. يمنع إعادة إرسال نفس الحدث خلال 60 ثانية، مع استثناء أحداث الـ CRITICAL لضمان الحساسية الأكمية للأخطاء.
+
+3. سلامة التنسيق عبر Telegram (Safe Formatting vs Parser Crashing):
+
+المشكلة: استخدام Markdown يتسبب في كسر الـ API (Parse Error 400) عند وجود رموز خاصة مثل _ أو * أو [ جوه الـ Stack Traces والـ JSON Metadata.
+
+الحل: الاعتماد الحصري على HTML Formatting مع تطهير إجباري للرموز (Safe HTML Escaping) باستخدام <b>, <code>, <pre> لضمان قبول تليجرام لأي حمولة بيانات مهَما بلغت غرابتها.
+
+4. العزل التام وحماية الموديل الرئيسي (Graceful Degradation):
+
+المشكلة: تعطل خدمة تليجرام أو تغيير الـ API Keys قد يرمي استثناءات يوقف معالجة الطلبات.
+
+الحل: الإرسال بيتم عبر Promise.allSettled مع التقاط شامل للأخطاء (try/catch). لو سقط تليجرام، بيتم تسجيل الفشل صامتاً جوه الـ LoggerChannel دون تأثر خط معالجة الطلب الأصلي.
+
+📂 4. الهيكل الميداني لشجرة الملفات (File Tree Architecture)
+Plaintext
+src/lib/alerts/
+├── types.ts                    # العقود الموحدة (AlertSeverity, EventScopes, Payloads, AlertResult)
+├── formatters/
+│   └── telegram-formatter.ts   # تحويل البيانات إلى Safe HTML Formatting
+├── channels/
+│   ├── index.ts                # مجمع القنوات (Parallel Settlement Dispatcher)
+│   ├── telegram.ts             # قناة إرسال Telegram (Fetch API Mapped)
+│   └── logger.ts               # قناة السجلات المنظمة (Structured Console Logs)
+└── alert-service.ts            # الموجه الرئيسي + In-Memory Deduplication Cache
+🚀 5. خطة التنفيذ الميداني Step-by-Step
+1️⃣ types.ts  ──────► 2️⃣ telegram-formatter.ts  ──────► 3️⃣ channels/ (logger & telegram & index)  ──────► 4️⃣ alert-service.ts
+الخطوة 1 (types.ts): كتابة عقود الواجهات والأنواع الموحدة لكل الأحداث والـ Payloads.
+
+الخطوة 2 (telegram-formatter.ts): بناء المحول المعتمد على الـ HTML Safe Escaping.
+
+الخطوة 3 (channels/): إنشاء القنوات المنفصلة وتجمعيها بـ Promise.allSettled.
+
+الخطوة 4 (alert-service.ts): تقفيل الموجه المباشر مع الـ Deduplication Engine ومحوّل الـ waitUntil.

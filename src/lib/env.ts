@@ -40,7 +40,6 @@ export interface Env {
   TELEGRAM_WEBHOOK_SECRET?: string;
   TELEGRAM_WEBHOOK_URL?: string;
   ERROR_BOT_TOKEN?: string;
-  ADMIN_TELEGRAM_CHAT_ID?: string;
 
   // Upstash Services (Redis & QStash)
   UPSTASH_REDIS_REST_URL: string;

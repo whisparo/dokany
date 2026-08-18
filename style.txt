@@ -1,0 +1,552 @@
+🏛️ دكاني - الدستور المعماري لنظام الأنماط (CSS Architecture Blueprint)
+الإصدار: 3.0 (النسخة المعمارية القطعية النهائية - The Ultimate Production-Ready Edition)
+الهوية: نظام إدارة الأنماط المعزول بالمجالات (Domain-Isolated CSS Architecture) يعمل على حافة Cloudflare، مع حقن صفري زمنياً (Zero-Runtime Injection)، وعزل تام بين بيئات التطبيق، ونظام توريث ذكي، واستراتيجية اختبارية متكاملة.
+
+📜 الديباجة: فلسفة "الأنماط كمواطن من الدرجة الأولى"
+الأنماط ليست مجرد أوراق أنيقة تزين الواجهة؛ بل هي جزء أساسي من دورة حياة التطبيق، يجب أن تُعامل كأي موديول آخر:
+
+لها دورة حياة كاملة (جلب → تحويل → توجيه → تطبيق).
+
+لها طبقات معزولة (Core، Shared، Domain Engines).
+
+لها بوابات دخول صارمة (Index Gates) لمنع التسرب والتشابك.
+
+لها نظام توريث ذكي مع حماية ضد التوريث الدائري.
+
+لها استراتيجية تخزين مزدوجة (KV للقراءة السريعة + D1 للمصدر الأساسي).
+
+لها أداء صفري على العميل (Zero-Runtime) عبر الحقن المباشر في تدفق HTML من الحافة.
+
+✨ المبادئ الحاكمة (9 مبادئ)
+المبدأ	الوصف
+العزل المطلق للمجال (Strict Domain Isolation)	كل بيئة (Storefront، Builder، Dashboard، Mini-App) لها مجلد مستقل تماماً. لا يُسمح بتسرب أي كلاس أو نمط بين البيئات.
+الحقن الصفري زمنياً (Zero-Runtime Injection)	الأنماط تُحقن في تدفق HTML من الحافة (Edge/Server) قبل وصولها للمتصفح. لا يوجد أي انتظار لـ JavaScript أو IndexedDB أثناء التصيير الأولي.
+الفصل بين الجلب والتحويل والتطبيق	الطبقات منفصلة: shared/theme-provider (جلب)، shared/css-vars-generator (تحويل)، وكل Domain Engine (تطبيق).
+التوجيه بالسياق (Context-Aware Routing)	كل بيئة لها Domain Engine خاص بها يقرر كيفية دمج الـ Core مع الـ CSS الخاص بالبيئة.
+الاعتماد على البوابات (Index Gates)	لا يمكن لأي ملف خارج الموديول استيراد ملف داخلي مباشرة. كل التفاعل يتم عبر البوابات (styles/index.ts أو styles/[domain]/index.ts).
+نظام التوريث الذكي (Theme Inheritance)	دعم توريث الثيمات مع دمج عميق (Deep Merge) وحماية ضد التوريث الدائري (Circular Inheritance Protection).
+استراتيجية التخزين المزدوجة (KV + D1)	استخدام Edge KV للقراءة فائقة السرعة (0ms)، مع D1 كمصدر أساسي للبيانات ونسخ احتياطي.
+إبطال الكاش الفوري (Cache Invalidation)	آلية واضحة لإبطال الكاش عند تحديث الثيم، لضمان ظهور التغييرات فوراً.
+استراتيجية اختبارية شاملة (Testing Strategy)	اختبارات وحدة، اختبارات لقطات، اختبارات تكامل، واختبارات عقود.
+📁 الهيكلية المعمارية للملفات (v3.0 - النسخة النهائية)
+text
+styles/
+│
+├── index.ts                      # 🚪 البوابة الرئيسية (Global Entry Gate)
+├── types.ts                      # 📜 العقود المركزية (Theme Types & Interfaces)
+│
+├── core/                         # 🧠 النواة الثابتة (System Tokens & Reset)
+│   ├── variables.css             # Root CSS Variables (Spacing, Typography, Base Radii)
+│   ├── reset.css                 # CSS Reset (Light & Modern)
+│   └── index.ts                  # 🚪 Core Gate
+│
+├── shared/                       # ⚙️ المحرك المشترك (Edge-Ready)
+│   ├── theme-provider.ts         # جلب الثيم من D1/KV مع آلية إبطال الكاش
+│   ├── theme-inheritance.ts      # محرك توريث الثيمات (دمج عميق + حماية ضد التوريث الدائري)
+│   ├── base-domain-engine.ts     # 🆕 الكلاس الأساسي للتوجيه (يشترك فيه جميع الـ Domain Engines)
+│   ├── css-vars-generator.ts     # محول JSON → CSS Variables String (Pure Transformer)
+│   ├── validators/               # 🛡️ حماية البيانات (Zod Validation)
+│   │   ├── theme.schema.ts       # مخطط التحقق من هيكل الثيم
+│   │   └── color.schema.ts       # مخطط التحقق من صحة الألوان
+│   └── index.ts                  # 🚪 Shared Gate
+│
+├── storefront/                   # 🛍️ بيئة متجر العميل (Storefront Domain)
+│   ├── storefront.css            # 🎨 الهيكل الثابت للـ Layout والـ Components
+│   ├── storefront.ts             # ⚡ (Adapter + Orchestrator) في ملف واحد
+│   └── index.ts                  # 🚪 Storefront Gate
+│
+├── store-builder/                # 🎨 بيئة محرر المتجر (Builder Domain)
+│   ├── builder.css               # 🎨 أنماط الكانفاس والـ Drag & Drop
+│   ├── builder.ts                # ⚡ (Adapter + Orchestrator) مع Live Preview
+│   └── index.ts                  # 🚪 Builder Gate
+│
+├── admin-dashboard/              # 📊 بيئة لوحة تحكم التاجر (Admin Domain)
+│   ├── admin.css                 # 🎨 أنماط الجداول والـ Charts
+│   ├── admin.ts                  # ⚡ (Adapter + Orchestrator)
+│   └── index.ts                  # 🚪 Admin Gate
+│
+├── mini-app/                     # 📱 بيئة تطبيق تليجرام الميني (Mini-App Domain)
+│   ├── mini-app.css              # 🎨 أنماط التاتش والتليجرام
+│   ├── mini-app.ts               # ⚡ (Adapter + Orchestrator) مع مزامنة ثيم تليجرام
+│   └── index.ts                  # 🚪 Mini-App Gate
+│
+└── __tests__/                    # 🧪 اختبارات النظام
+    ├── unit/                     # اختبارات الوحدة (Pure Functions)
+    │   ├── css-vars-generator.test.ts
+    │   └── theme-inheritance.test.ts
+    ├── snapshot/                 # اختبارات اللقطات (Adapters)
+    │   └── storefront.test.ts
+    ├── integration/              # اختبارات التكامل (Orchestrators)
+    │   └── orchestrators.test.ts
+    └── contract/                 # اختبارات العقود (Validators)
+        └── theme.schema.test.ts
+🎼 الباب الأول: العقود والأنواع (types.ts)
+1.1 الـ Interfaces القابلة لإعادة الاستخدام
+typescript
+// ============================================================
+// 📦  وحدات الألوان القابلة لإعادة الاستخدام
+// ============================================================
+
+export interface ColorPalette {
+  main: string;
+  light: string;
+  dark: string;
+  contrastText: string;
+}
+
+export interface ColorSystem {
+  primary: ColorPalette;
+  secondary: ColorPalette;
+  success: ColorPalette;
+  warning: ColorPalette;
+  danger: ColorPalette;
+  background: {
+    default: string;
+    paper: string;
+    elevated: string;
+  };
+  text: {
+    primary: string;
+    secondary: string;
+    disabled: string;
+    hint: string;
+  };
+  border: {
+    subtle: string;
+    strong: string;
+    glow: string;
+  };
+}
+
+// ============================================================
+// 📝  وحدات الطباعة القابلة لإعادة الاستخدام
+// ============================================================
+
+export interface TypographyScale {
+  fontFamily: string;
+  fontFamilyArabic: string;
+  fontSize: {
+    xs: string;
+    sm: string;
+    md: string;
+    lg: string;
+    xl: string;
+    xxl: string;
+  };
+  fontWeight: {
+    light: number;
+    regular: number;
+    medium: number;
+    bold: number;
+  };
+  lineHeight: {
+    tight: number;
+    normal: number;
+    relaxed: number;
+  };
+}
+
+// ============================================================
+// 📐  وحدات الأبعاد القابلة لإعادة الاستخدام
+// ============================================================
+
+export interface SpacingSystem {
+  unit: number;
+  xs: string;
+  sm: string;
+  md: string;
+  lg: string;
+  xl: string;
+}
+
+export interface RadiusSystem {
+  sm: string;
+  md: string;
+  lg: string;
+  xl: string;
+  full: string;
+}
+
+// ============================================================
+// 🎨  الثيم الرئيسي (مع دعم التوريث)
+// ============================================================
+
+export interface Theme {
+  // الهوية
+  id: string;
+  name: string;
+  version: string;
+  slug: string;
+
+  // 🔄 التوريث (Theme Inheritance)
+  extends?: string; // معرف الثيم الأب (Parent Theme ID)
+  overrides?: Partial<Omit<Theme, 'id' | 'name' | 'version' | 'slug' | 'extends' | 'overrides'>>;
+
+  // الألوان
+  colors: ColorSystem;
+
+  // الطباعة
+  typography: TypographyScale;
+
+  // الأبعاد
+  spacing: SpacingSystem;
+  radius: RadiusSystem;
+
+  // الأزرار
+  button: {
+    borderRadius: string;
+    padding: {
+      small: string;
+      medium: string;
+      large: string;
+    };
+  };
+
+  // البطاقات
+  card: {
+    borderRadius: string;
+    shadow: string;
+    padding: string;
+  };
+
+  // التخطيط
+  layout: {
+    maxWidth: string;
+    containerPadding: string;
+    headerHeight: string;
+    footerHeight: string;
+  };
+
+  // ⏱️  بيانات التحكم (للكاش والإبطال)
+  updatedAt: number; // Timestamp لآخر تحديث
+
+  // التخصيص المفتوح (Custom Extensions)
+  custom?: Record<string, unknown>;
+}
+
+// ============================================================
+// 🎯  أنواع السياق لكل بيئة (Type-Safe Contexts)
+// ============================================================
+
+export interface StorefrontContext {
+  storeSlug: string;
+  locale: string;
+  userAgent?: string;
+  previewMode?: boolean;
+}
+
+export interface BuilderContext {
+  storeId: string;
+  merchantId: string;
+  draftThemeId?: string; // للـ live preview
+}
+
+export interface AdminContext {
+  storeId: string;
+  merchantId: string;
+  userId: string;
+  role: 'admin' | 'editor' | 'viewer';
+}
+
+export interface MiniAppContext {
+  storeSlug: string;
+  telegramUserId: string;
+  telegramTheme: {
+    bg_color: string;
+    text_color: string;
+    hint_color: string;
+    link_color: string;
+    button_color: string;
+    button_text_color: string;
+  };
+}
+1.2 واجهة الـ Domain Engine
+typescript
+/**
+ * 🎼 الـ Domain Engine (يجمع بين الـ Adapter والـ Orchestrator)
+ * كل بيئة (Storefront، Builder، Admin، Mini-App) لها Domain Engine خاص بها
+ */
+export interface DomainEngine<T = Theme, C = unknown> {
+  /**
+   * اسم المحرك (للتصحيح)
+   */
+  readonly name: string;
+
+  /**
+   * إصدار المحرك
+   */
+  readonly version: string;
+
+  /**
+   * تحويل الثيم إلى كائن CSS Variables (خاص بالبيئة)
+   */
+  transform(theme: T, context: C): Record<string, string>;
+
+  /**
+   * جلب الثيم المناسب للسياق
+   */
+  getTheme(context: C): Promise<T> | T;
+
+  /**
+   * توليد كود CSS كامل جاهز للحقن في <head>
+   */
+  render(context: C): Promise<string>;
+
+  /**
+   * تحديث الثيم (للـ Live Preview أو التحديثات)
+   */
+  updateTheme(identifier: string, newTheme: Partial<T>): Promise<void>;
+}
+🔄 الباب الثاني: تدفق البيانات المعماري
+2.1 استراتيجية التخزين (KV vs D1)
+المصدر	الاستخدام	السرعة	التكلفة
+Edge KV	قراءة الـ Theme Snapshots للـ Storefront	0ms (فورية)	مجاناً (ضمن 1GB)
+D1	المصدر الأساسي للثيمات (مع جدول store_themes)	~50ms	مجاناً (ضمن 5GB)
+IndexedDB	Cache احتياطي للتصفح غير المتصل (Offline PWA)	غير متزامن	مجاناً
+استراتيجية القراءة:
+
+الـ Storefront: يقرأ من Edge KV أولاً (0ms)، فإن لم يجد يقرأ من D1 ويُخزّن في KV.
+
+الـ Builder / Dashboard: يقرأ من D1 مباشرة (لأن الثيم قد يكون قيد التحرير).
+
+الـ Mini-App: يقرأ من Edge KV (للسرعة) مع مزامنة مع ثيم تليجرام.
+
+استراتيجية الكتابة:
+
+الكتابة تتم في D1 أولاً (المصدر الأساسي).
+
+ثم يتم تحديث Edge KV (للقراءة السريعة).
+
+ثم يتم إرسال إشارة Purge إلى الـ Edge Cache.
+
+2.2 تدفق البيانات للـ Storefront (الحقن الصفري)
+text
+[طلب المتجر يصل إلى Edge Worker]
+        │
+        ▼
+[Edge Worker يقرأ الـ Theme Snapshot من Edge KV (في 0ms)]
+        │
+        ▼ (إن لم يوجد في KV)
+[يقرأ من D1 ثم يخزّن في KV]
+        │
+        ▼
+[يُطبّق نظام التوريث (Theme Inheritance) إن وجد]
+        │
+        ▼
+[Storefront Engine يحول الـ JSON إلى CSS Variables String]
+        │
+        ▼
+[حقن المتغيرات مباشرة في <head><style id="theme-vars">...</style></head>]
+        │
+        ▼
+[HTML يصل لمتصفح الزبون ملون ومجهز بالكامل بدون جافاسكريبت!]
+2.3 تدفق البيانات للـ Builder / Dashboard / Mini-App
+text
+[المستخدم يفتح لوحة التحكم / المحرر]
+        │
+        ▼
+[يُجلب الثيم من الـ D1 مع بيانات المستخدم]
+        │
+        ▼
+[يُطبّق نظام التوريث (Theme Inheritance) إن وجد]
+        │
+        ▼
+[يُحول عبر الـ Domain Engine المناسب]
+        │
+        ▼
+[يُحقن في الـ DOM باستخدام React Context / CSS-in-JS]
+        │
+        ▼
+[يدعم التحديث الحي (Live Preview) عبر State Management]
+🛠️ الباب الثالث: تفاصيل التنفيذ
+3.1 الـ Base Domain Engine (shared/base-domain-engine.ts)
+الدور: كلاس أساسي للتوجيه، يُورث منه كل Domain Engines.
+
+الميزات المشتركة:
+
+منطق جلب الثيم (باستخدام theme-provider مع استراتيجية KV/D1).
+
+منطق تحويل الثيم (باستخدام css-vars-generator).
+
+منطق تطبيق التوريث (باستخدام theme-inheritance).
+
+منطق تخزين الثيم في الـ Cache (إن أمكن).
+
+دوال مساعدة للتصحيح (Logging، Metrics).
+
+typescript
+// مثال على هيكل BaseDomainEngine
+export abstract class BaseDomainEngine<T extends Theme, C> implements DomainEngine<T, C> {
+  abstract readonly name: string;
+  abstract readonly version: string;
+
+  // دوال مشتركة (جلب، تحويل، تطبيق)
+  async getTheme(context: C): Promise<T> {
+    // استخدام theme-provider مع استراتيجية KV/D1
+  }
+
+  abstract transform(theme: T, context: C): Record<string, string>;
+
+  async render(context: C): Promise<string> {
+    const theme = await this.getTheme(context);
+    const vars = this.transform(theme, context);
+    return generateCSSVariables(vars);
+  }
+
+  abstract updateTheme(identifier: string, newTheme: Partial<T>): Promise<void>;
+}
+3.2 نظام التوريث (shared/theme-inheritance.ts)
+الدور: دمج الثيم الأب مع الـ overrides الخاصة بالثيم الفرعي.
+
+آلية العمل:
+
+يستخدم الدمج العميق (Deep Merge) لدمج الـ overrides مع الثيم الأب.
+
+يدعم التوريث المتعدد المستويات (جد → أب → ابن).
+
+يحتوي على حماية ضد التوريث الدائري (Circular Inheritance Protection).
+
+استراتيجية الـ Deep Merge:
+
+دمج الكائنات المتداخلة (Nested Objects) بدلاً من استبدالها.
+
+الحفاظ على القيم غير المغطاة من الثيم الأب.
+
+تطبيق الـ overrides فقط على الحقول المحددة.
+
+حماية التوريث الدائري:
+
+تتبع سلسلة التوريث (Parent Chain) أثناء الدمج.
+
+إذا تم اكتشاف دورة (مثل: A ← B ← A)، يتم إيقاف الدمج وإرجاع خطأ.
+
+أقصى عمق مسموح: 10 مستويات (لحماية من التكرار اللانهائي).
+
+3.3 الـ Theme Provider (shared/theme-provider.ts)
+الدور: جلب الثيم من المصدر المناسب حسب البيئة مع دعم إبطال الكاش.
+
+آلية العمل:
+
+الـ Storefront: يقرأ من Edge KV أولاً (0ms)، فإن لم يجد يقرأ من D1.
+
+الـ Builder / Dashboard: يقرأ من D1 مباشرة (لأن الثيم قد يكون قيد التحرير).
+
+الـ Mini-App: يقرأ من Edge KV مع مزامنة مع ثيم تليجرام.
+
+آلية إبطال الكاش (Cache Invalidation):
+
+عند تحديث الثيم، يتم تحديث حقل updatedAt في D1.
+
+يتم حذف المفتاح من Edge KV فوراً.
+
+يتم إرسال إشارة Purge إلى الـ Edge Cache عبر Cloudflare API.
+
+theme-provider يتحقق من updatedAt قبل إرجاع الثيم من الكاش.
+
+3.4 الـ CSS Variables Generator (shared/css-vars-generator.ts)
+الدور: تحويل كائن Theme إلى CSS Variables String جاهز للحقن.
+
+آلية العمل:
+
+يستقبل Theme (كائن) ويُخرج نصاً مثل:
+
+css
+:root {
+  --primary-main: #6366f1;
+  --primary-light: #818cf8;
+  --text-primary: #111827;
+  /* ... */
+}
+يدعم تحويل الـ Nesting (مثل colors.primary.main → --colors-primary-main).
+
+يدعم تحويل الأرقام إلى وحدات (مثل spacing.unit: 4 → --spacing-unit: 4px).
+
+هو Pure Function، مما يسهل اختباره بشكل كبير.
+
+🛡️ الباب الرابع: الأمان والعزل
+الآلية	التفاصيل
+عزل المجالات (Domain Isolation)	كل بيئة لها مجلد مستقل. لا يُسمح باستيراد مباشر بين المجالات.
+البوابات (Index Gates)	لا يمكن لأي ملف خارج الموديول استيراد ملف داخلي مباشرة. كل التفاعل عبر index.ts.
+التحقق من صحة البيانات (Zod)	التحقق من هيكل الثيم قبل استخدامه لمنع الأخطاء والتسلل.
+تنقية الألوان	التأكد من أن الألوان المدخلة آمنة (لا تحتوي على كود ضار).
+عزل الـ CSS	استخدام CSS Modules أو Scoped CSS في كل بيئة لمنع تسرب الأنماط.
+حماية التوريث الدائري	منع حلقات التوريث اللانهائية (أقصى عمق 10 مستويات).
+🧪 الباب الخامس: استراتيجية الاختبار
+5.1 اختبارات الوحدة (Unit Tests)
+الملف	المُختبر	الأدوات
+css-vars-generator.ts	تحويل Theme → CSS Variables String	Vitest / Jest
+theme-inheritance.ts	دمج الثيم الأب مع الـ overrides	Vitest / Jest
+validators/*.schema.ts	التحقق من صحة البيانات	Vitest / Jest
+5.2 اختبارات اللقطات (Snapshot Tests)
+الملف	المُختبر	الأدوات
+storefront.ts	Input Theme → Output CSS	Vitest / Jest
+builder.ts	Input Theme → Output CSS	Vitest / Jest
+admin.ts	Input Theme → Output CSS	Vitest / Jest
+5.3 اختبارات التكامل (Integration Tests)
+الملف	المُختبر	الأدوات
+storefront.orchestrator.ts	جلب → تحويل → حقن	Vitest / Jest + MSW
+builder.orchestrator.ts	جلب → تحويل → حقن مع Live Preview	Vitest / Jest + React Testing Library
+📊 الباب السادس: تحليل الأداء
+البيئة	وقت الحقن	حجم CSS	مصدر البيانات
+Storefront	0ms (حقن في Edge)	~5KB	Edge KV (0ms)
+Store-Builder	~50ms (مع React)	~15KB	D1 (~50ms)
+Admin-Dashboard	~100ms (مع Charts)	~20KB	D1 (~50ms)
+Mini-App	~30ms (مع Telegram SDK)	~10KB	Edge KV (0ms)
+📌 الباب السابع: دليل النشر السريع
+7.1 متغيرات البيئة المطلوبة
+env
+# Edge KV (لتخزين الـ Theme Snapshots)
+THEME_KV_BINDING=your-kv-namespace
+
+# D1 (لتخزين ثيمات المتاجر)
+DB=your-d1-database
+
+# Storefront Theme Cache
+STORE_THEME_CACHE_TTL=3600
+
+# Cloudflare API Token (لـ Purge Cache)
+CLOUDFLARE_API_TOKEN=your-token
+CLOUDFLARE_ZONE_ID=your-zone-id
+7.2 خطوات النشر
+إنشاء KV Namespace: لتخزين Snapshots.
+
+إعداد D1: مع جدول store_themes لتخزين الثيمات.
+
+تفعيل Edge Worker: لقراءة الثيم من KV/D1 وحقنه في HTML.
+
+توليد الـ CSS Variables: في الـ Edge Worker وتحويلها إلى <style>.
+
+إعداد IndexedDB: في المتصفح كـ Cache للتصفح غير المتصل.
+
+تشغيل الاختبارات: npm test للتأكد من سلامة النظام.
+
+🔮 الباب الثامن: الرؤية المستقبلية (v4.0)
+التوليد التلقائي للثيمات (AI-Powered Themes): استخدام الذكاء الاصطناعي لتوليد ثيمات مخصصة.
+
+دعم الـ Dark Mode التلقائي: مزامنة مع تفضيلات نظام المستخدم.
+
+تحليل أداء الـ CSS: تتبع زمن تحميل الأنماط وتحسينها.
+
+دعم الـ RTL التلقائي: انعكاس تلقائي للثيمات في اللغات التي تكتب من اليمين لليسار.
+
+📋 الباب التاسع: الملخص النهائي
+الميزة	التوضيح
+العزل المطلق للمجال	كل بيئة مستقلة تماماً (Storefront، Builder، Dashboard، Mini-App).
+الحقن الصفري زمنياً	الـ Storefront يحقن الأنماط في Edge، مما يمنع FOUC تماماً.
+نظام التوريث الذكي	دمج الثيم الأب مع الـ overrides مع حماية ضد التوريث الدائري.
+استراتيجية التخزين المزدوجة	KV للقراءة السريعة (0ms) + D1 للمصدر الأساسي.
+إبطال الكاش الفوري	عند تحديث الثيم، يتم حذف الكاش فوراً.
+Base Domain Engine	كلاس أساسي يشترك فيه جميع الـ Domain Engines.
+استراتيجية اختبارية شاملة	Unit, Snapshot, Integration, Contract Tests.
+التوافق مع الـ Edge	جميع المكونات تعمل في Cloudflare Workers.
+🏛️ نهاية الدستور — الإصدار 3.0 (النسخة المعمارية القطعية النهائية - The Ultimate Production-Ready Edition)
+
+ملخص التعديلات المُطبَّقة:
+
+النقطة	التعديل	الحالة
+1️⃣	إضافة base-domain-engine.ts للهيكل	✅ مُطبَّق
+2️⃣	تحديد Deep Merge strategy (دمج عميق)	✅ مُطبَّق
+3️⃣	إضافة Circular Inheritance protection (حماية التوريث الدائري)	✅ مُطبَّق
+4️⃣	تحديد KV vs D1 strategy (استراتيجية التخزين المزدوجة)	✅ مُطبَّق
+دكاني CSS Architecture ليس مجرد نظام أنماط — إنها معمارية متكاملة تعامل الأنماط كمواطن من الدرجة الأولى، مع عزل تام بين البيئات، وأداء صفري على العميل، ونظام توريث ذكي، واستراتيجية تخزين مزدوجة، وقابلية للتوسع بلا حدود. 🚀
+

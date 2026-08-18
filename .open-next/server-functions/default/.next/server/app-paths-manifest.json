@@ -4,6 +4,6 @@
   "/page": "app/page.js",
   "/[locale]/(storefront)/[storeSlug]/order-confirmation/page": "app/[locale]/(storefront)/[storeSlug]/order-confirmation/page.js",
   "/[locale]/(storefront)/[storeSlug]/checkout/page": "app/[locale]/(storefront)/[storeSlug]/checkout/page.js",
-  "/[locale]/(storefront)/[storeSlug]/products/[slug]/page": "app/[locale]/(storefront)/[storeSlug]/products/[slug]/page.js",
-  "/[locale]/(storefront)/[storeSlug]/page": "app/[locale]/(storefront)/[storeSlug]/page.js"
+  "/[locale]/(storefront)/[storeSlug]/page": "app/[locale]/(storefront)/[storeSlug]/page.js",
+  "/[locale]/(storefront)/[storeSlug]/products/[slug]/page": "app/[locale]/(storefront)/[storeSlug]/products/[slug]/page.js"
 }

@@ -1,6 +1,6 @@
 // lib/errors/orchestrator.ts
-// الإصدار: 1.4.1
-// الدور: المنسق الرئيسي المباشر - موجه الاستثناءات اللحظية (Runtime Exception Pipeline)
+// الإصدار: 1.5.3
+// الدور: المنسق الرئيسي المباشر - موجه الاستثناءات اللحظية والمعالجة الخلفية
 
 import {
   SystemError,
@@ -20,10 +20,8 @@ import {
   QueueManager,
   ErrorCounter,
   getRedisClient,
-  createB2StoreFromEnv,
-  B2Store,
-  enqueueErrorKey,
   type QueueEnv,
+  type RedisEnv,
 } from './storage';
 
 import {
@@ -31,25 +29,12 @@ import {
   getDeduplicator,
 } from './guards';
 
-import {
-  TelegramAdapter,
-} from './adapters';
+import { processErrorQueue as runProcessor } from './background/processor';
+import { alertService } from '@/lib/alerts';
+import type { SystemEnvironment } from '@/lib/env';
 
-import type {
-  TelegramEnvBindings,
-} from './clients';
-
-export interface SystemEnvironment extends TelegramEnvBindings {
-  ENVIRONMENT?: string;
-  DB?: unknown;
-  UPSTASH_REDIS_REST_URL?: string;
-  UPSTASH_REDIS_REST_TOKEN?: string;
-  B2_ENDPOINT?: string;
-  B2_BUCKET_NAME?: string;
-  B2_APPLICATION_KEY_ID?: string;
-  B2_APPLICATION_KEY?: string;
-  [key: string]: unknown;
-}
+// إعادة تصدير النوع الموحد من النواة
+export type { SystemEnvironment };
 
 export interface HandleErrorOptions {
   code?: string;
@@ -165,6 +150,21 @@ export class ErrorOrchestrator {
   }
 
   /**
+   * إدارة وتنسيق عملية معالجة الـ Queue في الخلفية (Cron Processing)
+   */
+  async processQueue(
+    env?: SystemEnvironment,
+    options?: { batchSize?: number }
+  ) {
+    const activeEnv = env || this.env;
+    if (!activeEnv) {
+      throw new Error('[Orchestrator] Environment configuration is missing for queue processing.');
+    }
+
+    return await runProcessor(activeEnv, options);
+  }
+
+  /**
    * صياغة الـ API Response
    */
   formatApiError(
@@ -194,7 +194,8 @@ export class ErrorOrchestrator {
   }
 
   /**
-   * استدعاء موديول التخزين بأمان (Redis + B2 Storage)
+   * استدعاء موديول التخزين بأمان (Redis Queue فقط)
+   * الـ Cron Job + Background Processor هما المسئولين عن السحب والرفع لـ B2
    */
   private async dispatchStorageTasks(
     error: SystemError,
@@ -204,7 +205,11 @@ export class ErrorOrchestrator {
 
     // 1. تحديث عدادات Redis
     try {
-      const redis = getRedisClient(env);
+      const redisEnv: RedisEnv = {
+        UPSTASH_REDIS_REST_URL: env.UPSTASH_REDIS_REST_URL,
+        UPSTASH_REDIS_REST_TOKEN: env.UPSTASH_REDIS_REST_TOKEN,
+      };
+      const redis = getRedisClient(redisEnv);
       if (redis) {
         const errorCounter = new ErrorCounter({ redis });
         tasks.push(errorCounter.incrementDailyCounter(error.code, error.storeId));
@@ -213,59 +218,49 @@ export class ErrorOrchestrator {
       console.error('[Orchestrator] Redis counter failed:', redisErr);
     }
 
-    // 2. توليد المفتاح، الرفع إلى B2، وإضافة المفتاح المولد إلى Redis Queue
+    // 2. التوجيه الصحيح: الرمي المباشر في الـ Queue فقط للتعامل معاه لاحقاً
     try {
-      const b2Store = createB2StoreFromEnv(env as Record<string, string | undefined>);
-      const generatedKey = B2Store.createErrorKey();
-
-      const b2WriteTask = b2Store
-        .write({
-          content: error,
-          key: generatedKey,
-          compress: true,
-          enqueue: false,
-          env: env as unknown as QueueEnv,
-        })
-        .then(async (result) => {
-          // بعد نجاح الكتابة في B2 يتم زق المفتاح المولد بالدقة في قائمة Redis
-          const queueEnv = env as unknown as QueueEnv;
-          await enqueueErrorKey(queueEnv, result.key);
-        });
-
-      tasks.push(b2WriteTask);
-    } catch (b2Err) {
-      console.error('[Orchestrator] B2 Store setup failed:', b2Err);
-
-      // Fallback: لو B2 فشل، نحفظ الـ correlationId في Redis Queue كبديل
-      try {
-        const redis = getRedisClient(env);
-        if (redis) {
-          const queueManager = new QueueManager({ redis });
-          tasks.push(queueManager.push(error.correlationId));
-        }
-      } catch (queueErr) {
-        console.error('[Orchestrator] Queue fallback failed:', queueErr);
+      const queueEnv: QueueEnv = {
+        UPSTASH_REDIS_REST_URL: env.UPSTASH_REDIS_REST_URL,
+        UPSTASH_REDIS_REST_TOKEN: env.UPSTASH_REDIS_REST_TOKEN,
+      };
+      const redis = getRedisClient(queueEnv);
+      if (redis) {
+        const queueManager = new QueueManager({ redis });
+        // دفع الـ Error Raw / Correlation ID في القائمة للمالجة في الخلفية
+        tasks.push(queueManager.push(JSON.stringify(error)));
       }
+    } catch (queueErr) {
+      console.error('[Orchestrator] Queue push failed:', queueErr);
     }
 
     await Promise.allSettled(tasks);
   }
 
   /**
-   * استدعاء موديول التنبيهات بأمان تام
+   * استدعاء موديول التنبيهات بأمان تام عبر AlertService الموحد
    */
   private async dispatchNotifications(
     error: SystemError,
     env: SystemEnvironment
   ): Promise<void> {
     try {
-      if (!env.TELEGRAM_BOT_TOKEN) return;
-
-      const telegramAdapter = new TelegramAdapter(env);
-      await telegramAdapter.notifyError(error);
+      await alertService.dispatch(
+        {
+          type: 'CRITICAL_FAILURE',
+          severity: error.severity === 'critical' ? 'CRITICAL' : 'WARNING',
+          payload: {
+            storeId: error.storeId || 'system',
+            action: error.code,
+            error: error.technicalMessage || error.userMessage,
+            stack: error.stack,
+          },
+        },
+        env
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown notification error';
-      console.error('[Orchestrator Safe-Catch] Telegram dispatch error:', msg);
+      console.error('[Orchestrator Safe-Catch] AlertService dispatch error:', msg);
     }
   }
 }

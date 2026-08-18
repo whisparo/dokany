@@ -19,6 +19,7 @@ import { cartRouter } from './routes/cart';
 import { couponsRouter } from './routes/coupons';
 import { haggleRouter } from './routes/haggle';
 import { snapshotRouter } from './routes/snapshot';
+import testAlertsRouter from './routes/test-alerts';
 
 // 🟢 الاستيراد الموحد من البوابة الرئيسية
 import { safeExecute, SystemError, errorOrchestrator, type SystemEnvironment } from '@/lib/errors';
@@ -203,6 +204,7 @@ app.route('/api', cartRouter);
 app.route('/api', couponsRouter);
 app.route('/api', haggleRouter);
 app.route('/api', snapshotRouter);
+app.route('/api', testAlertsRouter);
 
 // 🎯 Pass-through Fallback: تمرير باقي الطلبات إلى OpenNext
 app.all('*', async (c) => {
