@@ -6,6 +6,11 @@ export const authClient = createAuthClient({
 });
 
 /**
+ * ✅ تصدير الـ Hooks المباشرة من authClient لاستخدامها في الفرونت إند
+ */
+export const { useSession } = authClient;
+
+/**
  * ✅ تسجيل الدخول عبر الـ Providers مع معالجة آمنة للأخطاء
  */
 export async function signInWithProvider(providerId: string, body: Record<string, unknown>) {

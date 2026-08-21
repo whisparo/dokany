@@ -33,122 +33,86 @@ Unified Financial Precision Standard:
 توحيد كافة الأسعار والمبالغ في كافة الجداول (products و product_variants) كـ INTEGER بأصغر وحدة عملة (فلس / سنت / هللة) للحد التام من أخطاء التقريب بكسور النقطة العائمة (Floating Point Imprecision) عند الفواتير والخصومات.
 
 🌳 شجرة المجلدات الكاملة والمحدثة (Directory Tree)
-Plaintext
 src/
 ├── app/                                  # Next.js App Router (Routing Layer Only)
 │   ├── [locale]/
-│   │   ├── (auth)/                       # 🔑 مسارات المصادقة (مطابقة لـ AUTH_PATTERNS)
+│   │   ├── (auth)/                       # 🔑 مسارات تسجيل الدخول والحسابات
 │   │   │   └── auth/
 │   │   │       ├── login/
 │   │   │       └── register/
-│   │   ├── (dashboard)/                  # 🛡️ لوحة تحكم التاجر (تطابق /dashboard/* للحماية)
+│   │   │
+│   │   ├── (dashboard)/                  # 🛡️ لوحة تحكم التاجر الشاملة (حماية كاملة)
 │   │   │   └── dashboard/
-│   │   │       ├── overview/             # نظرة عامة (Checklist / Analytics)
-│   │   │       ├── products/             # إدارة المنتجات والتنوعات الشاملة
-│   │   │       ├── orders/               # إدارة الطلبات والجداول
+│   │   │       ├── overview/             # الإحصائيات ومرشد الإعداد
+│   │   │       ├── builder/              # 🎨 محرر المتجر المستقل (Iframe Preview)
+│   │   │       ├── products/             # إدارة المنتجات والـ Variants
+│   │   │       ├── orders/               # إدارة الطلبات
 │   │   │       ├── customers/            # إدارة العملاء
-│   │   │       └── settings/             # إعدادات المتجر (العملة، الدفع، الشحن)
-│   │   └── (storefront)/                 # 🛍️ متجر الزبون الخفيف (Pure & Lightweight)
-│   │       └── [storeSlug]/
-│   └── api/                              # Route Handlers / Webhooks
+│   │   │       └── settings/             # إعدادات المتجر والدومين وتليجرام
+│   │   │
+│   │   ├── (storefront)/                 # 🛍️ متجر الزبون الخفيف على الويب (Pure & Edge-Cached)
+│   │   │   └── [storeSlug]/
+│   │   │       ├── page.tsx              # الصفحة الرئيسية للمتجر
+│   │   │       └── products/[slug]/      # صفحة المنتج
+│   │   │
+│   │   └── (telegram)/                   # 📱 مسارات الـ Telegram Mini Apps
+│   │       ├── admin-mini-app/           # لوحة تحكم التاجر السريعة جوه تليجرام
+│   │       └── store-mini-app/[storeSlug]/# متجر الزبون جوه تليجرام (Premium Feature)
+│   │
+│   └── api/                              # API Routes & Webhooks
+│       ├── telegram/
+│       │   ├── platform-bot/route.ts    # Webhook بوت المنصة الرئيسي
+│       │   └── merchant-bot/route.ts    # Webhook بوتات التجار (البريميوم)
+│       └── media/                       # Cloudinary / B2 Upload Pipelines
 │
 ├── features/                             # الميزات المعزولة (Core Business Logic)
-│   ├── store-editor/                     # 🚀 محرر المتجر التفاعلي (Inline Overlay Engine)
+│   ├── store-builder/                    # 🎨 محرر المظهر الجديد (Iframe-Based Builder)
 │   │   ├── components/
-│   │   │   ├── overlay/                  # طبقة العرض الشفافة للتاجر
-│   │   │   │   ├── EditorOverlayWrapper.tsx
-│   │   │   │   └── InlineActionToolbar.tsx
-│   │   │   ├── slots/                    # أزرار الإضافة والتعديل التفاعلية (+)
-│   │   │   │   ├── AddHeroSlot.tsx
-│   │   │   │   ├── AddCategorySlot.tsx
-│   │   │   │   └── AddProductSlot.tsx
-│   │   │   ├── sheets/                   # النوافذ المنزلقة السريعة (Bottom Sheets)
-│   │   │   │   ├── QuickHeroSheet.tsx
-│   │   │   │   ├── QuickCategorySheet.tsx
-│   │   │   │   └── QuickProductSheet.tsx
-│   │   │   └── preview/                  # شريط التحكم بالوضع السريع
-│   │   │       └── EditorControlBar.tsx
-│   │   ├── hooks/                        # إدارة حالة المحرر والرفع اللحظي
-│   │   │   ├── useEditorOverlay.ts
-│   │   │   └── useQuickUpload.ts
-│   │   ├── store/                        # Zustand Store لمتابعة وضع التحرير الحالي
-│   │   │   └── useEditorStore.ts
-│   │   ├── server/                       # Server Actions (محمية بـ Session + Ownership + Idempotency)
-│   │   │   └── editorActions.ts
-│   │   └── types/                        # أنماط بيانات المحرر
-│   │       └── editor.types.ts
+│   │   │   ├── iframe/                   # مكون الـ Iframe وعارض المتجر
+│   │   │   │   └── StorefrontPreviewIframe.tsx
+│   │   │   ├── panels/                   # لوحات التحكم الجانبية (Sidebar Tools)
+│   │   │   │   ├── ThemeSettingsPanel.tsx
+│   │   │   │   ├── HeaderConfigPanel.tsx
+│   │   │   │   └── SectionOrderingPanel.tsx
+│   │   │   └── sheets/                   # النوافذ المنزلقة للتعديل السريع
+│   │   │       ├── QuickProductSheet.tsx
+│   │   │       └── QuickCategorySheet.tsx
+│   │   ├── hooks/
+│   │   │   ├── useIframeBridge.ts        # لإرسال إشارات postMessage للـ Iframe
+│   │   │   └── useBuilderStore.ts
+│   │   ├── server/
+│   │   │   └── builderActions.ts         # حفظ التنسيقات وترتيب الأقسام
+│   │   └── types/
+│   │       └── builder.types.ts
+│   │
+│   ├── telegram-integration/             # 🤖 لوجيك منظومة تليجرام المزدوجة
+│   │   ├── server/
+│   │   │   ├── platformBotService.ts     # إرسال إشعارات الأوردرات للتاجر
+│   │   │   ├── merchantBotService.ts     # معالجة طلبات زبائن تليجرام
+│   │   │   └── telegramAuth.ts           # فحص أمان initData من تليجرام
+│   │   ├── hooks/
+│   │   │   └── useTelegramWebApp.ts      # Hook للربط مع Telegram WebApp SDK
+│   │   └── types/
+│   │       └── telegram.types.ts
 │   │
 │   ├── products-management/              # 🛒 إدارة المنتجات المتقدمة والخصائص
 │   │   ├── components/
-│   │   │   ├── table/                    # جداول العرض الشاملة
-│   │   │   │   ├── ProductTable.tsx
-│   │   │   │   └── ProductRowActions.tsx
-│   │   │   ├── forms/                    # استمارة التعديل المتقدم الشاملة
-│   │   │   │   ├── ProductFullForm.tsx
-│   │   │   │   ├── BasicInfoSection.tsx
-│   │   │   │   └── MediaGallerySection.tsx
-│   │   │   └── variants/                 # إدارة الألوان والمقاسات والمخزون الذري
-│   │   │       ├── VariantManager.tsx
-│   │   │       ├── OptionsConfigurator.tsx
-│   │   │       └── VariantCombinationsGrid.tsx
-│   │   ├── hooks/
-│   │   │   ├── useProductVariants.ts
-│   │   │   └── useProductFilters.ts
+│   │   │   ├── table/
+│   │   │   ├── forms/
+│   │   │   └── variants/
 │   │   ├── server/
 │   │   │   └── productActions.ts
 │   │   └── types/
 │   │       └── product.types.ts
 │   │
-│   ├── dashboard-overview/               # 📊 شاشة النظرة العامة التكيفية
-│   │   ├── components/
-│   │   │   ├── onboarding/               # قائمة الإنجاز للتاجر الجديد
-│   │   │   │   ├── OnboardingChecklist.tsx
-│   │   │   │   └── SetupStepCard.tsx
-│   │   │   └── analytics/                # الرسوم البيانية للتاجر النشط
-│   │   │       ├── SalesChart.tsx
-│   │   │       ├── RevenueStatCards.tsx
-│   │   │       └── RecentOrdersWidget.tsx
-│   │   ├── hooks/
-│   │   │   └── useOverviewState.ts
-│   │   └── server/
-│   │       └── overviewActions.ts
-│   │
-│   ├── store-settings/                   # ⚙️ إعدادات المتجر الإدارية
-│   │   ├── components/
-│   │   │   ├── GeneralSettingsForm.tsx   # الاسم والعملة واللوجو
-│   │   │   ├── ShippingMethodsForm.tsx   # مناطق وأسعار الشحن
-│   │   │   └── PaymentGatewaysForm.tsx   # طرق الدفع المتاحة
-│   │   ├── server/
-│   │   │   └── settingsActions.ts
-│   │   └── types/
-│   │       └── settings.types.ts
-│   │
-│   ├── orders-management/                # 📦 إدارة الطلبات
-│   └── customers-management/             # 👥 إدارة العملاء
+│   ├── orders-management/                # 📦 إدارة الطلبات والفواتير
+│   ├── dashboard-overview/               # 📊 شاشة النظرة العامة
+│   └── store-settings/                   # ⚙️ إعدادات المتجر، الربط، والبوتات
 │
 ├── shared/                               # المكونات والخدمات المشتركة عالمياً
-│   ├── components/                       # Design System Components
-│   │   ├── ui/                           # Buttons, Inputs, Modals, Sheets, Badges
-│   │   └── feedback/                     # Loaders, Skeleton Screens, Empty States
-│   ├── hooks/                            # Common Custom Hooks
-│   ├── lib/                              # Utility Functions, Clients (D1, B2, Cloudinary)
-│   └── types/                            # Shared Domain Types
-
-features/
-└── storefront-order-confirmation/
-    ├── actions/
-    │   └── order-confirmation.actions.ts
-    ├── adapters/
-    │   └── order-confirmation-page.adapter.ts
-    ├── components/
-    │   
-    │       ├── OrderStatusBanner.tsx
-    │       ├── OrderSummaryCard.tsx
-    │       ├── OrderItemsList.tsx
-    │       ├── ShippingAddressCard.tsx
-    │       ├── OrderConfirmation.theme.ts
-    │       └── index.ts
-    ├── data/
-    │   └── order-confirmation-data-fetcher.ts
-    └── orchestrators/
-        └── order-confirmation.orchestrator.ts
+│   ├── components/
+│   │   ├── ui/                           # Design System (Buttons, Sheets, Modals)
+│   │   └── feedback/
+│   ├── hooks/
+│   ├── lib/                              # Drizzle DB, Cloudinary, B2, Telegram Client
+│   └── types/

@@ -7,12 +7,18 @@ import { StorefrontOrchestrator } from '@/features/storefront-home/orchestrators
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { Env } from '@/lib/env';
 
-// 🎯 تحسين الأداء: تحميل CartDrawerWrapper ديناميكياً بدعم SSR لتوافق Server Components
+// 🎨 استدعاء محرك الاستايل
+import { renderStorefront } from '@/styles/storefront';
+
+// 🎯 تحسين الأداء: تحميل CartDrawerWrapper ديناميكياً
 const CartDrawerWrapper = dynamic(
   () => import('@/features/storefront-home/components/CartDrawerWrapper').then((mod) => mod.CartDrawerWrapper)
 );
 
 export const revalidate = 60;
+
+// 🛑 المسارات الاستثنائية التي لا تمثل متجراً
+const RESERVED_SLUGS = new Set(['privacy', 'terms', 'about', 'contact', 'api', 'faq']);
 
 interface StorefrontLayoutProps {
   children: React.ReactNode;
@@ -20,6 +26,11 @@ interface StorefrontLayoutProps {
 }
 
 const getCachedPagePayload = cache(async (decodedStoreSlug: string, env: Env) => {
+  // 🛡️ حماية: لو الـ Slug فاضي أو ينتمي للمسارات الثابتة نلغي الطلب فوراً
+  if (!decodedStoreSlug || RESERVED_SLUGS.has(decodedStoreSlug.toLowerCase())) {
+    return null;
+  }
+
   try {
     return await StorefrontOrchestrator.fetchPagePayload(decodedStoreSlug, env, {});
   } catch (error) {
@@ -31,6 +42,14 @@ const getCachedPagePayload = cache(async (decodedStoreSlug: string, env: Env) =>
 export async function generateMetadata({ params }: StorefrontLayoutProps): Promise<Metadata> {
   const { storeSlug } = await params;
   const decodedStoreSlug = decodeURIComponent(storeSlug || '');
+
+  // لو صفحة ثنائية مش متجر نرجع Metadata افتراضية مباشرة بدون استعلام
+  if (RESERVED_SLUGS.has(decodedStoreSlug.toLowerCase())) {
+    return {
+      metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://dokany.com'),
+      title: 'الشروط والسياسات',
+    };
+  }
 
   const storeName = decodedStoreSlug
     ? decodedStoreSlug.charAt(0).toUpperCase() + decodedStoreSlug.slice(1)
@@ -77,18 +96,57 @@ export async function generateMetadata({ params }: StorefrontLayoutProps): Promi
 
 export default async function StorefrontLayout({ children, params }: StorefrontLayoutProps) {
   const { storeSlug } = await params;
-  const decodedStoreSlug = decodeURIComponent(storeSlug);
+  const decodedStoreSlug = decodeURIComponent(storeSlug || '');
 
-  const { env } = await getCloudflareContext<{ env: Env }>();
+  // 1. فحص ما إذا كان المسار صفحة ثابتة
+  const isReservedRoute = RESERVED_SLUGS.has(decodedStoreSlug.toLowerCase());
 
-  const payload = await getCachedPagePayload(decodedStoreSlug, env);
+  let payload = null;
+  let storeThemeCSS = '';
+
+  if (!isReservedRoute) {
+    const { env } = await getCloudflareContext<{ env: Env }>();
+    payload = await getCachedPagePayload(decodedStoreSlug, env);
+
+    if (payload) {
+      try {
+        // 🔍 طباعة الـ payload بالكامل والـ theme المستخرج لتحديد أصل المشكلة بدقة
+        console.log('[Layout Debug] Full storeInfo:', payload.storeInfo);
+        console.log('[Layout Debug] Theme value:', payload.storeInfo?.theme);
+
+        // 🎯 ضبط بيانات الـ Context
+        const context = {
+          storeSlug: decodedStoreSlug,
+          storeInfo: payload.storeInfo,
+          theme: payload.storeInfo?.theme || 'default',
+        };
+
+        storeThemeCSS = await renderStorefront(
+          env as unknown as Parameters<typeof renderStorefront>[0],
+          context as unknown as Parameters<typeof renderStorefront>[1]
+        );
+      } catch (error) {
+        console.error('[Layout] Theme rendering failed:', error);
+      }
+    }
+  }
 
   return (
-    <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950">
-      {payload && <Header payload={payload.header} />}
-      <main className="flex-1 flex flex-col w-full">{children}</main>
-      {payload && <Footer payload={payload.footer} />}
-      <CartDrawerWrapper />
-    </div>
+    <>
+      {/* 2. حقن الـ CSS Variables */}
+      {storeThemeCSS && (
+        <style
+          id="storefront-theme-style"
+          dangerouslySetInnerHTML={{ __html: storeThemeCSS }}
+        />
+      )}
+
+      <div className="min-h-screen flex flex-col bg-store-background text-store-text">
+        {payload && <Header payload={payload.header} />}
+        <main className="flex-1 flex flex-col w-full">{children}</main>
+        {payload && <Footer payload={payload.footer} />}
+        <CartDrawerWrapper />
+      </div>
+    </>
   );
 }

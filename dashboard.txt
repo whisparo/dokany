@@ -1,0 +1,781 @@
+📐 الميثاق المعماري للوحة تحكم التاجر (دكاني داشبورد) — النسخة المستقلة الصفرية
+الإصدار 1.2 — "النسخة التنفيذية المُحكَّمة" (The Production-Ready & Simplified Edition)
+🧭 الديباجة — فلسفة "الاستقلالية المطلقة"
+تُعد لوحة تحكم التاجر (Dashboard) كياناً مستقلاً تماماً عن متجر الزبون (Storefront) من حيث:
+
+هيكل الكود (Code Isolation): مجلدات منفصلة، وميزات معزولة، ولا يوجد أي تداخل في شجرة المكونات.
+
+إدارة الحالة (State Management): تعتمد على TanStack Query كطبقة أساسية لإدارة البيانات، التزامن، والتخزين المؤقت، مع Zustand للحالة العابرة (مثل التبويب النشط، حالة المودال)، و IndexedDB كتخزين محلي غير متزامن.
+
+الاتصال الحي (Real-time): تمتلك محرك نبضات (SSE) خاصاً بها مع Composite Key و Master Tab Pattern، ولا تشارك أي اتصال مع الزبائن.
+
+الأمان (Security): طبقة حماية مستقلة مع مصادقة صارمة، وعزل تام للبيانات عبر store_id، و Rate Limiting في الـ Middleware.
+
+الهدف الأسمى: تقديم تجربة "تعديل فوري، انعكاس آني، وصفر اعتماد على اتصالات الزبائن"، مع بقاء التكلفة التشغيلية عند $0 حتى مع نمو آلاف التجار.
+
+🎨 المبادئ المعمارية الحاكمة (Dashboard-Specific Pillars)
+1. العزل التام للواجهة (Clean Overlay & Route Isolation)
+جميع مسارات الداشبورد تبدأ بـ (dashboard) في Next.js App Router، مما يسمح بتطبيق Middleware خاص (فحص JWT، التحقق من store_id، Rate Limiting).
+
+لا يمكن الوصول لأي مسار داخلي (/dashboard/*) إلا عبر جلسة مصادقة صالحة، ويُمنع تخزين هذه الصفحات في الـ Edge Cache (عكس الـ Storefront).
+
+2. التعديل التفاؤلي عبر TanStack Query (Pure TanStack Optimistic UI)
+القاعدة الذهبية: المستخدم (التاجر) لا ينتظر الخادم أبداً.
+
+آلية العمل: استخدام useMutation مع onMutate لتحديث الـ Cache فوراً (0ms)، و onError للـ Rollback التلقائي، و onSettled لإعادة التحقق (Revalidate).
+
+التعامل مع التعديلات المتتالية: استخدام queryClient.cancelQueries() لإلغاء أي طلبات سابقة على نفس الكيان، وأخذ Snapshot من الـ Cache قبل التعديل لاستخدامه في Rollback.
+
+انقطاع الشبكة: الاعتماد على persistQueryClient مع createAsyncStoragePersister لتخزين الـ Cache في IndexedDB، مع retry تلقائي عند عودة الاتصال.
+
+3. اليقظة الحصرية مع Master Tab Pattern (Exclusive Real-Time Pulse)
+تُستخدم تقنية SSE (Server-Sent Events) حصرياً مع لوحة التحكم لمتابعة الطلبات الجديدة.
+
+Master Tab Pattern:
+
+التبويب الأول (Master) يفتح اتصال SSE ويكتب في IndexedDB.
+
+التبويبات الأخرى تستخدم BroadcastChannel (مع Fallback لـ localStorage) للاستماع للتحديثات.
+
+Composite Key: ${storeId}:${tabId} لمنع تعارض التبويبات.
+
+حد أقصى 5 اتصالات لكل storeId، مع رفض أي اتصال إضافي بـ 429 Too Many Requests.
+
+Stateless SSE Worker: يُغلق الاتصال تلقائياً بعد 30 ثانية من الخمول.
+
+Polling Fallback: إذا تعذر فتح SSE، يتحول العميل إلى Polling مع Exponential Backoff (حد أقصى 10 ثوانٍ) مع Jitter عشوائي، وإعادة اتصال فوري عند عودة navigator.onLine.
+
+4. الإبطال القائم على الإصدار (Version-Based Invalidation)
+بدلاً من Cache Purge: كل Edge Snapshot يحمل version (رقم متزايد في KV).
+
+العميل يُرسل If-None-Match: version_{version} في طلب Snapshot.
+
+إذا كان version مطابقاً، يرد الـ Worker بـ 304 Not Modified (بدون إعادة توليد).
+
+إذا كان مختلفاً، يُعيد الـ Worker Snapshot الجديد ويُحدّث version.
+
+النتيجة: لا حاجة لمسح الكاش نهائياً (caches.default.delete يُلغى)، مما يُقلل التكلفة والـ Latency بنسبة 99%.
+
+5. المصدر الوحيد للحقيقة مع Atomic Updates (Single Source of Truth)
+D1 هي الفيصل النهائي لأي عملية كتابة.
+
+Atomic Updates: استخدام UPDATE ... WHERE id = ? AND store_id = ? مباشرة (مع Drizzle ORM) لضمان الذرية ومنع Race Conditions.
+
+التحقق من عدد الصفوف المتأثرة (returning أو rowsAffected) لتحديد نجاح أو فشل العملية.
+
+🏗️ هيكل المجلدات الخاص بالداشبورد (Isolated Directory Tree)
+src/
+├── app/
+│   └── [locale]/
+│       └── (dashboard)/                 # 🛡️ منطقة معزولة بحماية Middleware
+│           └── dashboard/
+│               ├── overview/            # لوحة الملخصات السريعة
+│               ├── products/            # إدارة المنتجات والتنوعات
+│               ├── orders/              # إدارة الطلبات والحالات
+│               ├── builder/             # 🎨 صفحة محرر وتخصيص المتجر
+│               ├── customers/           # إدارة العملاء
+│               └── settings/            # إعدادات المتجر
+│
+├── components/
+│   └── shared/                          # 🎨 المكونات الأساسية العامة (UI Components: Buttons, Inputs, Tables)
+│
+├── dashboard/                           # 🛡️ (Root Feature Folder) الميزات الخاصة بالداشبورد
+│   ├── dashboard-core/                  # ❤️ النواة المشتركة للداشبورد
+│   │   ├── hooks/
+│   │   │   ├── useDashboardSSE.ts       # اتصال SSE مع Composite Key + Master Tab
+│   │   │   └── useMasterTab.ts          # Master Election + BroadcastChannel
+│   │   ├── stores/                      # Zustand Stores (للحالة العابرة فقط)
+│   │   │   ├── useDashboardStore.ts     # الحالة العامة (تبويب نشط، مودال)
+│   │   │   └── useRealtimeStore.ts      # الطلبات والرسائل الحية
+│   │   ├── components/
+│   │   │   └── QueueBadge.tsx           # عدد العمليات المعلقة في الـ Sidebar
+│   │   └── types/
+│   │       └── dashboard.types.ts
+│   │
+│   ├── products-management/             # 🛒 إدارة المنتجات (مستقلة)
+│   │   ├── components/ ...
+│   │   ├── hooks/
+│   │   │   └── useProductMutations.ts   # TanStack Query Mutations
+│   │   ├── server/
+│   │   │   └── productActions.ts        # Server Actions (مع Drizzle ORM)
+│   │   └── types/ ...
+│   │
+│   ├── orders-management/               # 📦 إدارة الطلبات
+│   │   ├── components/ ...
+│   │   ├── hooks/
+│   │   │   └── useOrderPulse.ts         # استقبال الطلبات الجديدة عبر SSE
+│   │   └── server/
+│   │       └── orderActions.ts
+│   │
+│   ├── store-builder/                   # 🎨 أداة محرر المتجر (مستقلة جوه الداشبورد)
+│   │   ├── components/                  # Live Preview, Canvas, Sidebar Controls
+│   │   ├── hooks/                       # useQuickUpload, useEditorHistory
+│   │   ├── stores/                      # Zustand Store للتعديل اللحظي للثيم
+│   │   └── server/                      # editorActions.ts (حفظ وتطبيق الثيم)
+│   │
+│   └── dashboard-settings/              # ⚙️ الإعدادات
+│
+└── shared/                              # ⚙️ البنية التحتية والخدمات الأساسية للسيستم
+    ├── lib/
+    │   ├── db.ts                        # اتصال D1 (Drizzle ORM)
+    │   └── cache.ts                     # دوال الإبطال (Version-based)
+    └── types/ ...⚙️ إدارة الحالة والتزامن اللحظي (The Heart of the Dashboard)
+1. الطبقات الثلاث للبيانات
+الطبقة	الموقع	الوظيفة	زمن الوصول
+الحالة العابرة (UI State)	Zustand (ذاكرة المتصفح)	التبويب النشط، حالة المودال، مؤشرات التحميل	0ms
+إدارة البيانات والتزامن (Data & Sync)	TanStack Query Cache + IndexedDB	تخزين البيانات، التحديث التفاؤلي، إعادة المحاولة، التخزين المؤقت غير المتزامن	< 5ms
+المصدر الرسمي (Source of Truth)	D1 (سحابة)	المرجع النهائي للمخزون، الأسعار، وحالات الطلبات	متغير (حسب الشبكة)
+2. التعديل التفاؤلي مع TanStack Query (النمط القياسي)
+يُستخدم هذا النمط في كل useMutation داخل الداشبورد.
+
+typescript
+// مثال: تحديث سعر المنتج
+const updateProductMutation = useMutation({
+  mutationFn: (data: UpdateProductData) => updateProductPrice(data),
+  
+  // 1. 🚀 Optimistic Update (0ms)
+  onMutate: async (newData) => {
+    // أ. إلغاء أي طلبات سابقة على نفس المنتج (لمنع الـ Race Conditions)
+    await queryClient.cancelQueries({ 
+      queryKey: ['product', newData.productId] 
+    });
+
+    // ب. أخذ Snapshot من الـ Cache الحالي (للـ Rollback)
+    const previousProduct = queryClient.getQueryData(
+      ['product', newData.productId]
+    );
+
+    // ج. تحديث الـ Cache فوراً بالبيانات الجديدة (Optimistic UI)
+    queryClient.setQueryData(
+      ['product', newData.productId], 
+      (old: any) => ({ ...old, price: newData.newPrice })
+    );
+
+    // د. إرجاع الـ Snapshot لاستخدامه في حالة الفشل
+    return { previousProduct };
+  },
+
+  // 2. ❌ Rollback عند فشل الطلب
+  onError: (error, newData, context) => {
+    // إعادة الـ Cache إلى الحالة السابقة
+    queryClient.setQueryData(
+      ['product', newData.productId],
+      context?.previousProduct
+    );
+    // إظهار تنبيه للتاجر
+    showToast('❌ فشل تحديث السعر، يرجى المحاولة مجدداً');
+  },
+
+  // 3. ✅ تحديث نهائي عند النجاح أو الفشل
+  onSettled: (data, error, newData) => {
+    // إعادة التحقق (Revalidate) من الخادم للتأكد من التطابق
+    queryClient.invalidateQueries({ 
+      queryKey: ['product', newData.productId] 
+    });
+  },
+});
+لماذا هذا النمط هو الأفضل؟
+
+لا حاجة لـ OptimisticUpdateManager خارجي (تجنب Duplication of Truth).
+
+cancelQueries يمنع أي تحديثات متداخلة (Rapid Consecutive Edits) من التسبب في سباقية.
+
+الـ Rollback يحدث تلقائياً عند أي خطأ (4xx/5xx).
+
+3. التخزين المحلي غير المتزامن (IndexedDB) مع TanStack Query
+نستخدم createAsyncStoragePersister مع idb-keyval لتخزين الـ Cache في IndexedDB.
+
+typescript
+// lib/storagePersister.ts
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import { get, set, del } from 'idb-keyval';
+
+export const asyncPersister = createAsyncStoragePersister({
+  storage: {
+    getItem: (key) => get(key),
+    setItem: (key, value) => set(key, value),
+    removeItem: (key) => del(key),
+  },
+  // ✅ منع الكتابة المتكررة في IndexedDB (يحافظ على أداء الـ UI)
+  throttleTime: 1000, // يكتب في IndexedDB مرة واحدة كل ثانية كحد أقصى
+});
+typescript
+// app/layout.tsx أو providers.tsx
+import { persistQueryClient } from '@tanstack/react-query-persist-client';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 دقائق
+      gcTime: 1000 * 60 * 60 * 24 * 7, // 7 أيام
+      retry: 3,
+      retryDelay: (attemptIndex) => 
+        Math.min(1000 * 2 ** attemptIndex, 10000), // حد أقصى 10 ثوانٍ
+    },
+  },
+});
+
+persistQueryClient({
+  queryClient,
+  persister: asyncPersister,
+  maxAge: 1000 * 60 * 60 * 24 * 7, // الاحتفاظ بالـ Cache لمدة 7 أيام
+});
+4. إعادة المحاولة التلقائية عند عودة الشبكة
+typescript
+// استخدام TanStack Query's onlineManager
+import { onlineManager } from '@tanstack/react-query';
+
+// عند عودة الـ Internet، يتم إعادة المحاولة تلقائياً
+onlineManager.setEventListener((setOnline) => {
+  const handleOnline = () => setOnline(true);
+  const handleOffline = () => setOnline(false);
+  
+  window.addEventListener('online', handleOnline);
+  window.addEventListener('offline', handleOffline);
+  
+  return () => {
+    window.removeEventListener('online', handleOnline);
+    window.removeEventListener('offline', handleOffline);
+  };
+});
+📡 محرك النبضة الحية (Real-Time Pulse Engine)
+1. النطاق والغرض
+يُستخدم فقط في صفحات (dashboard)/orders و (dashboard)/overview.
+
+Zero-Idle Cost: الاتصال يُفتح عند الطلب فقط (On-Demand) ويُغلق بعد 30 ثانية خمول.
+
+2. آلية العمل الفنية
+أ. فتح الاتصال (العميل)
+typescript
+// useDashboardSSE.ts
+export function useDashboardSSE(storeId: string) {
+  const [isMaster, setIsMaster] = useMasterElection(storeId);
+  const tabId = useRef(crypto.randomUUID());
+  const channel = useRef<CrossTabBus | null>(null);
+
+  useEffect(() => {
+    if (!isMaster) {
+      // الاستماع للتبويب الرئيسي عبر BroadcastChannel
+      channel.current = new CrossTabBus(`dokany_audit_${storeId}`);
+      channel.current.onMessage((data) => {
+        handlePulseEvent(data);
+        // تحديث Zustand Store و TanStack Cache
+        useRealtimeStore.getState().addEvent(data);
+      });
+      return;
+    }
+
+    // ✅ فتح SSE (التبويب الرئيسي فقط)
+    const eventSource = new EventSource(
+      `/api/dashboard/pulse?storeId=${storeId}&tabId=${tabId.current}`
+    );
+
+    eventSource.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      handlePulseEvent(data);
+      
+      // تحديث IndexedDB/TanStack Cache
+      queryClient.setQueryData(['orders', storeId], (old: any) => ({
+        ...old,
+        orders: [data.order, ...(old?.orders || [])],
+      }));
+
+      // بث التحديث للتبويبات الأخرى
+      channel.current?.postMessage(data);
+    };
+
+    // ✅ إغلاق تلقائي بعد 30 ثانية خمول
+    const timeout = setTimeout(() => eventSource.close(), 30000);
+    
+    return () => {
+      clearTimeout(timeout);
+      eventSource.close();
+    };
+  }, [storeId, isMaster]);
+}
+ب. الـ SSE Handler (Worker) — مع Composite Key و Rate Limit
+typescript
+// Worker: SSE Handler
+const activeConnections = new Map<string, ReadableStreamDefaultController>();
+const MAX_CONNECTIONS_PER_STORE = 5;
+
+async function handleSSE(request: Request, storeId: string) {
+  const url = new URL(request.url);
+  const tabId = url.searchParams.get('tabId') || 'default';
+  const connectionKey = `${storeId}:${tabId}`;
+
+  // ✅ التحقق من الحد الأقصى للاتصالات
+  let count = 0;
+  for (const key of activeConnections.keys()) {
+    if (key.startsWith(`${storeId}:`)) count++;
+  }
+  if (count >= MAX_CONNECTIONS_PER_STORE) {
+    return new Response('Too many connections', { status: 429 });
+  }
+
+  const { 0: response, 1: controller } = new TransformStream();
+  activeConnections.set(connectionKey, controller);
+
+  // ✅ إغلاق تلقائي بعد 30 ثانية خمول
+  const timeoutId = setTimeout(() => {
+    controller.close();
+    activeConnections.delete(connectionKey);
+  }, 30000);
+
+  // ✅ Keep-Alive كل 20 ثانية
+  const keepAlive = setInterval(() => {
+    try { controller.enqueue(`: ping\n\n`); } catch { clearInterval(keepAlive); }
+  }, 20000);
+
+  request.signal.addEventListener('abort', () => {
+    clearTimeout(timeoutId);
+    clearInterval(keepAlive);
+    activeConnections.delete(connectionKey);
+  });
+
+  return new Response(response, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
+}
+
+// إرسال نبضة للاتصالات المفتوحة
+async function sendSSEPulse(storeId: string, data: any) {
+  const events: Promise<void>[] = [];
+  for (const [key, controller] of activeConnections) {
+    if (key.startsWith(`${storeId}:`)) {
+      events.push(
+        new Promise(resolve => {
+          try { controller.enqueue(`data: ${JSON.stringify(data)}\n\n`); } catch {}
+          resolve();
+        })
+      );
+    }
+  }
+  await Promise.all(events);
+}
+ج. Polling Fallback (عند فشل SSE)
+typescript
+// AdaptivePoller.ts
+class AdaptivePoller {
+  private backoff = 1000;
+  private maxBackoff = 10000;
+  private isPolling = false;
+
+  async start(storeId: string) {
+    this.isPolling = true;
+    await this.poll(storeId);
+  }
+
+  stop() { this.isPolling = false; }
+
+  private async poll(storeId: string) {
+    if (!this.isPolling) return;
+
+    if (!navigator.onLine) {
+      await this.waitForOnline();
+      this.backoff = 1000;
+    }
+
+    try {
+      const res = await fetch(`/api/pulse?storeId=${storeId}&ts=${Date.now()}`, {
+        headers: { 'If-None-Match': this.getLastETag() }
+      });
+
+      if (res.status === 304) {
+        this.backoff = Math.min(this.backoff * 1.5, this.maxBackoff);
+      } else if (res.ok) {
+        const events = await res.json();
+        this.handleEvents(events);
+        this.backoff = 1000;
+      } else {
+        throw new Error('Server error');
+      }
+    } catch {
+      this.backoff = Math.min(this.backoff * 2, this.maxBackoff);
+      this.backoff += (Math.random() * 2000) - 1000; // Jitter
+    }
+
+    setTimeout(() => this.poll(storeId), this.backoff);
+  }
+
+  private waitForOnline(): Promise<void> {
+    return new Promise(resolve => {
+      if (navigator.onLine) return resolve();
+      window.addEventListener('online', () => resolve(), { once: true });
+    });
+  }
+}
+د. Cross-Tab Bus (BroadcastChannel + Fallback)
+typescript
+// CrossTabBus.ts
+class CrossTabBus {
+  private channel: BroadcastChannel | null = null;
+  private listeners: Set<(data: any) => void> = new Set();
+
+  constructor(private channelName: string) {
+    if ('BroadcastChannel' in window) {
+      this.channel = new BroadcastChannel(channelName);
+      this.channel.onmessage = (e) => this.notify(e.data);
+    } else {
+      // Fallback للمتصفحات القديمة
+      window.addEventListener('storage', (e) => {
+        if (e.key === this.channelName && e.newValue) {
+          this.notify(JSON.parse(e.newValue));
+        }
+      });
+    }
+  }
+
+  postMessage(data: any) {
+    if (this.channel) {
+      this.channel.postMessage(data);
+    } else {
+      localStorage.setItem(this.channelName, JSON.stringify(data));
+      setTimeout(() => localStorage.removeItem(this.channelName), 100);
+    }
+  }
+
+  onMessage(callback: (data: any) => void) {
+    this.listeners.add(callback);
+  }
+
+  private notify(data: any) {
+    for (const listener of this.listeners) listener(data);
+  }
+}
+🧹 الإبطال القائم على الإصدار (Version-Based Invalidation) — بديل الـ Cache Purge
+آلية العمل (Worker)
+typescript
+// Worker: Snapshot Handler
+async function getSnapshot(storeId: string, clientVersion?: number) {
+  const currentVersion = await env.KV.get(`snapshot_version:${storeId}`);
+  const currentData = await env.KV.get(`snapshot:${storeId}`);
+
+  // ✅ إذا كان الإصدار مطابقاً، يُرجع 304 (بدون بيانات)
+  if (clientVersion && clientVersion === parseInt(currentVersion || '0')) {
+    return new Response(null, { status: 304 });
+  }
+
+  // توليد Snapshot جديد (إذا لم يكن موجوداً أو الإصدار أقدم)
+  const newData = await generateSnapshot(storeId);
+  const newVersion = (parseInt(currentVersion || '0') || 0) + 1;
+
+  await env.KV.put(`snapshot:${storeId}`, JSON.stringify(newData));
+  await env.KV.put(`snapshot_version:${storeId}`, newVersion.toString());
+
+  return new Response(JSON.stringify(newData), {
+    headers: { 'ETag': `version_${newVersion}` }
+  });
+}
+آلية العمل (العميل)
+typescript
+// fetchSnapshot.ts
+async function fetchSnapshot(storeId: string) {
+  const cachedVersion = localStorage.getItem(`snapshot_version_${storeId}`);
+
+  const response = await fetch(`/api/snapshot/${storeId}`, {
+    headers: { 'If-None-Match': `version_${cachedVersion || '0'}` }
+  });
+
+  if (response.status === 304) {
+    return; // لا تغيير، استخدم الـ Cache المحلي
+  }
+
+  const data = await response.json();
+  const etag = response.headers.get('ETag');
+  const newVersion = etag?.replace('version_', '');
+  
+  if (newVersion) {
+    localStorage.setItem(`snapshot_version_${storeId}`, newVersion);
+    // تخزين البيانات في TanStack Query Cache
+    queryClient.setQueryData(['snapshot', storeId], data);
+  }
+}
+الفوائد:
+
+لا حاجة لـ caches.default.delete() مطلقاً (يوفر 100% من عمليات Purge).
+
+تكلفة صفرية: KV مجاني ضمن 1GB.
+
+زمن استجابة أقل: الـ 304 Not Modified سريع جداً (< 50ms).
+
+🔐 طبقة الأمان والعزل (Dashboard-Specific Security)
+1. حماية المسارات (Middleware) مع Rate Limiting
+typescript
+// middleware.ts
+import { Ratelimit } from '@upstash/ratelimit';
+import { kv } from '@vercel/kv';
+
+const ratelimit = new Ratelimit({
+  redis: kv,
+  limiter: Ratelimit.slidingWindow(100, '1m'), // 100 طلب/دقيقة لكل Session
+});
+
+export function middleware(request: NextRequest) {
+  if (request.nextUrl.pathname.includes('/dashboard')) {
+    const session = request.cookies.get('session');
+    if (!session || !isValidJWT(session.value)) {
+      return NextResponse.redirect('/auth/login');
+    }
+
+    // ✅ Rate Limiting
+    const sessionId = session.value;
+    const { success } = await ratelimit.limit(sessionId);
+    if (!success) {
+      return new Response('Too Many Requests', { status: 429 });
+    }
+
+    const storeId = extractStoreId(session.value);
+    const response = NextResponse.next();
+    response.headers.set('x-store-id', storeId);
+    return response;
+  }
+}
+2. العزل داخل Server Actions (مع Drizzle ORM — بديل Prisma)
+typescript
+// productActions.ts
+import { db } from '@/shared/lib/db';
+import { products } from '@/shared/lib/schema';
+import { eq, and } from 'drizzle-orm';
+
+export async function updateProductPrice(productId: string, newPrice: number) {
+  const session = await getSession();
+  const storeId = session.storeId;
+
+  // ✅ Atomic Update (بدون findUnique + update)
+  const result = await db.update(products)
+    .set({ 
+      price: newPrice, 
+      updatedAt: new Date() 
+    })
+    .where(and(
+      eq(products.id, productId),
+      eq(products.storeId, storeId)
+    ))
+    .returning({ id: products.id });
+
+  if (result.length === 0) {
+    throw new Error('Unauthorized or product not found');
+  }
+
+  // ✅ تحديث Version (بدلاً من Cache Purge)
+  await incrementSnapshotVersion(storeId);
+
+  return { success: true };
+}
+3. الحماية من التكرار (Idempotency) — عبر D1
+sql
+-- جدول Idempotency Keys (D1)
+CREATE TABLE idempotency_keys (
+  key TEXT PRIMARY KEY,
+  store_id TEXT NOT NULL,
+  created_at INTEGER DEFAULT (unixepoch())
+);
+CREATE INDEX idx_idempotency_store ON idempotency_keys(store_id);
+
+-- تنظيف يومي (Cron Job عبر QStash)
+DELETE FROM idempotency_keys WHERE created_at < (unixepoch() - 86400);
+typescript
+// Capture Worker (مقتطف)
+async function handleCapture(request: Request) {
+  const event = await request.json();
+  const { idempotency_key, storeId } = event;
+
+  // ✅ Idempotency Check (D1)
+  const result = await env.DB.prepare(
+    `INSERT OR IGNORE INTO idempotency_keys (key, store_id) VALUES (?, ?)`
+  ).bind(idempotency_key, storeId).run();
+
+  if (result.changes === 0) {
+    return new Response('Duplicate event (ignored)', { status: 200 });
+  }
+
+  // معالجة الحدث...
+}
+📊 مراقبة أداء الداشبورد (Self-Monitoring)
+المقياس	المصدر	الإجراء عند التجاوز
+زمن استجابة SSE	Worker Logs	تنبيه إذا تجاوز 500ms
+عدد العمليات المعلقة (Queue)	TanStack Query useIsMutating()	Badge في الـ Sidebar (عدد العمليات المعلقة)
+نسبة نجاح التزامن	TanStack Query onError	إشعار فوري في الواجهة
+فشل الـ Version-based Fetch	Worker Logs	إعادة محاولة تلقائياً بعد 5 ثوانٍ
+Error Boundaries	React	تسجيل الخطأ وعرض Fallback UI
+Queue Badge في الـ Sidebar
+tsx
+// components/QueueBadge.tsx
+import { useIsMutating } from '@tanstack/react-query';
+
+export function QueueBadge() {
+  const pendingMutations = useIsMutating();
+  
+  if (pendingMutations === 0) return null;
+  
+  return (
+    <div className="queue-badge">
+      <span>{pendingMutations}</span>
+      <span> عملية معلقة</span>
+    </div>
+  );
+}
+🧩 خريطة تدفق البيانات الشاملة (Data Flow Diagram)
+plaintext
+[ التاجر ] 
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  واجهة الداشبورد (React + Zustand + TanStack Query)           │
+│  1. تعديل فوري (Optimistic UI) → 0ms عبر setQueryData        │
+│  2. إرسال في الخلفية (mutationFn)                              │
+│  3. تخزين تلقائي في IndexedDB (asyncPersister)               │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ├── (اتصال طبيعي) ──► [ Server Action (Worker) ]
+    │                        │
+    │                        ▼
+    │                   ┌──────────────────┐
+    │                   │  D1 (DB)         │
+    │                   │  - Atomic Update │
+    │                   │  - Idempotency   │
+    │                   └──────────────────┘
+    │                        │
+    │                        ▼
+    │                   ┌──────────────────┐
+    │                   │  Version-Based   │
+    │                   │  Invalidation    │
+    │                   │  (KV: version++) │
+    │                   └──────────────────┘
+    │
+    ├── (فشل الشبكة) ──► [ TanStack Query Retry ]
+    │                        │
+    │                        ▼
+    │                   (Exponential Backoff تلقائي)
+    │                        │
+    │                        ▼
+    │                   إعادة الإرسال عند عودة النت
+    │
+    └── (SSE) ──► [ Master Tab (Composite Key) ]
+                     │
+                     ▼
+                [ BroadcastChannel ]
+                     │
+                     ▼
+                [ بقية التبويبات ]
+📈 مقاييس التكلفة التشغيلية (الداشبورد فقط)
+الخدمة	الاستهلاك الشهري المتوقع (لـ 1000 تاجر نشط)	ضمن الحد المجاني؟
+SSE Connections	≤ 5 اتصال متزامن لكل متجر (بفضل Master Tab)	✅ نعم (ضمن Workers)
+Server Actions (كتابة)	5,000 عملية/شهر	✅ نعم (100k/يوم)
+D1 Writes	5,000/شهر	✅ نعم (100k/يوم)
+D1 Reads	5,000/شهر (بفضل Version-based & Cache)	✅ نعم (5M/يوم)
+KV Operations (Version)	5,000/شهر	✅ مجاني (ضمن 1GB)
+TanStack Query (عميل)	غير محدود (محلي)	✅ مجاني تماماً
+IndexedDB (عميل)	غير محدود (محلي)	✅ مجاني تماماً
+Rate Limiting (Upstash)	100k عملية/شهر	✅ مجاني (10k/يوم)
+✅ الخاتمة
+هذه الوثيقة (الإصدار 1.2) تُعرّف "داشبورد دكاني" كمنصة مصغرة ومستقلة بذاتها، وتجمع بين:
+
+أبسط وأقوى إدارة للحالة: الاعتماد على TanStack Query وحده لـ Optimistic Updates، Offline Queue، و Retry (مع createAsyncStoragePersister و idb-keyval).
+
+تبسيط الكود: إلغاء OptimisticUpdateManager والاعتماد على cancelQueries + onMutate + onError + onSettled النمطية من TanStack Query.
+
+سرعة فائقة: 0ms في التفاعل اليومي بفضل التعديلات التفاؤلية.
+
+مرونة قصوى: تعمل حتى في وضع الأوفلاين وتُزامن تلقائياً.
+
+تكلفة صفرية: انعدام الاتصالات المفتوحة للزبائن، وتقليل عمليات الخادم إلى أقل من 5% من الحدود المجانية.
+
+أمان منيع: عزل تام، مصادقة صارمة، Idempotency، و Rate Limiting.
+
+موثوقية عالية: Version-based Invalidation يُلغي الحاجة لـ Cache Purge، و Master Tab Pattern مع Polling Fallback يضمن وصول الأحداث.
+
+بهذا الميثاق، تصبح لوحة التحكم العمود الفقري الذكي للمنصة، القادر على الصمود أمام آلاف التجار مع الحفاظ على تجربة تُنافس التطبيقات الأصلية (Native Apps)، وبتكلفة تشغيلية تساوي صفراً مطلقاً. 🚀
+
+هذه الوثيقة هي المخطط النهائي للوحة تحكم التاجر (الإصدار 1.2)، جاهزة للتنفيذ كمرجع هندسي وحيد.
+
+
+
+
+🗺️ خارطة الطريق المكتملة والشاملة (المراحل من 1 إلى 5 بالكامل)
+[المرحلة 1: حماية المسارات والميدلوير (Dashboard Middleware & Context)]
+                         │
+                         ▼
+[المرحلة 2: المصادقة وجلسات لوحة التحكم (Auth & Dashboard Sessions)]
+                         │
+                         ▼
+[المرحلة 3: النواة المعمارية للكتالوج والواجهات (Catalog Gateway & Dynamic Routes)]
+                         │
+                         ▼
+[المرحلة 4: محرك الطلبات والنبض الحي (Order Engine & Real-time SSE)]
+                         │
+                         ▼
+[المرحلة 5: الاختبارات النهائية والتشغيل (Testing & Production Readiness)]
+🔵 المرحلة 1: حماية المسارات والميدلوير (Dashboard Middleware & Context)
+العزل المعماري للمسارات (Route Isolation): إعداد Middleware مخصص لمسارات الداشبورد (/dashboard/*) لعزلها تماماً عن مسارات واجهة المتجر (/storefront/*).
+
+استخراج السياق وتدفق التتبع (Context & Correlation ID):
+
+استخراج بيانات المتجر والتاجر وإرفاق Correlation ID لكل طلب لضمان إمكانية تتبع الأخطاء عبر السجلات.
+
+التحقق السريع من الـ Store Slug وصلاحية الوصول على مستوى الـ Edge قبل تمرير الطلب للـ Handlers.
+
+التهيئة الأولية للكاش (Double Cache Pre-flight Header Check): قراءة الـ ETag أو رقم الإصدار الحسابي من الـ Headers لإمكانية إرجاع استجابة 304 Not Modified فوراً على مستوى الـ Middleware في حال عدم تغير البيانات.
+
+🟢 المرحلة 2: المصادقة وجلسات لوحة التحكم (Auth & Dashboard Sessions)
+إدارة الجلسات المعزولة (Session Management): إعداد آلية مصادقة آمنة تعتمد على HttpOnly Cookies مع ربط جلسة التاجر بـ Merchant ID والمعرفات الخاصة بالمتجر.
+
+التحقق السريع في الـ Edge (Edge Auth Verification): التحقق من صحة التوكين والجلسة باستخدام Cloudflare KV للتأكد من صلاحية الجلسة بـ Latency منخفض وبدون إجراء استعلامات مكلفة لقاعدة البيانات D1 في كل request.
+
+التكامل مع الـ Background Error Queue: ربط محاولات الدخول الفاشلة أو انتهاء الجلسة بـ Telegram Error Adapter لتنبيه النظام بالأخطاء الأمنية أو مشاكل المصادقة بشكل لحظي.
+
+🟡 المرحلة 3: النواة المعمارية للكتالوج والواجهات الذكية (مع العمارة الهرمية والـ Double Cache)
+3.1 تأسيس موديول الأقسام وتكامل الـ Double-Edge Caching Layer
+الـ D1 Schema & Composite Ordering: إضافة جدول الأقسام بدعم التداخل الهرمي (parentId) وحقل الترتيب (sortIndex) لضمان الفرز في الـ Source of Truth (Cloudflare D1).
+
+إستراتيجية الـ Double-Edge Caching Layer:
+
+Layer 2 (Edge Cache / KV Snapshots): عند تعديل أو إضافة قسم/منتج، تقوم الـ Orchestrator بإنشاء Snapshot كامل ومضغوط للهيكل والمنتجات وتحديثه في Cloudflare KV، مع رفع Version Key خاص بالمتجر. الاستعلامات القادمة من الـ Front/Dashboard تقرأ مباشرة من KV لتوفير استجابة شبه لحظية وتقليل تكلفة القراءة من D1 إلى 0$.
+
+Layer 1 (Client/Browser Cache): مزامنة الـ KV Snapshot مع متصفح العميل عبر TanStack Query + IndexedDB Persister (createAsyncStoragePersister مع idb-keyval). يتم الاستعلام بإرسال If-None-Match: version_{v}؛ إذا لم يتغير الإصدار يُرجع الخادم 304 Not Modified وتُقرأ البيانات محلياً من IndexedDB بـ 0ms Latency.
+
+الـ Index Gateway (categories-management/index.ts): إنشاء الـ Index كبوابة خفيفة تصدر الـ API والـ Public Actions، وتحيل المعالجة والتتبع للأوركسترا المركزية ورابطها بـ Background Error Queue، مع إدارة إبطال وتحديث كاش الـ KV/IDB تلقائياً (Invalidation Flow).
+
+الـ Server Actions & Hooks: بناء الأكشنز الذرية (Atomic) مع دعم TanStack Query لتحديث الهيكل التفاؤلي (Optimistic UI) وإدارة الـ Write-Through لـ D1 مع تحديث الـ Snapshot في KV.
+
+3.2 الواجهة الهرمية لصفحة المنتجات (app/.../dashboard/products/page.tsx)
+شريط الفلترة الهرمي (CategoryFilterRibbon): بناء مكون أفقي يعرض الأقسام الرئيسية والفرعية كـ Tabs منسدلة مع Badges لأعداد المنتجات مباشرة من الـ Flat Index المجلوب من الـ Client IndexedDB Cache.
+
+الجدول الذكي المفلتر (ProductQuickTable): عرض المنتجات المفلترة بحسب القسم المحدد، مع ربطه بـ QuickStockEditor للتعديل الخاطف للمخزون والأسعار، وتمرير التعديلات عبر Optimistic Updates لتحديث الـ IDB فوراً قبل تأكيد الـ KV snapshot من السيرفر.
+
+3.3 حصر بقية مسارات الداشبورد كـ Placeholders
+إعداد الهيكل الأساسي للراوتس المتبقية (orders, customers, settings, builder) لتأمين التنقل في الـ Sidebar بدون كسر الـ Router، تمهيداً لربطها بالـ Double-Edge Pipeline في المراحل القادمة.
+
+🔴 المرحلة 4: محرك الطلبات والنبض الحي (Order Engine & Real-time SSE)
+4.1 موديول الطلبات وتأثير الـ Double Cache
+معالجة العمليات الحسابية: تفعيل الـ index.ts Gateway لموديول الطلبات وتنسيق prepareOrderItems و calculateOrderTotals مع الاعتماد الحصري على الـ Integers للمبالغ المالية لتفادي خطأ Floating Point.
+
+إبطال الكاش الحي (Cache Invalidation on New Order): عند تسجيل طلب جديد، تحديث الـ D1 وإبطال الـ Order Version Key في Cloudflare KV فوراً لضمان انعكاس الطلب في الـ Dashboard وتحديث الـ Snapshot الموزع بدون قراءة مباشرة شاقة من D1.
+
+4.2 النواة الحية للداشبورد (dashboard-core & SSE)
+تفعيل useDashboardSSE مع التنسيق بين التبويبات: تطبيق الـ Master Tab Election عبر BroadcastChannel لضمان اتصال حي واحد مرشح فقط على مستوى المتصفح.
+
+ربط الـ Events بـ Double Cache: استقبال إشارات التغيير عبر SSE يؤدي لإرسال إشارة إبطال خفيفة (Revalidate Version) للـ TanStack Query، لتحديث الـ IndexedDB محلياً إما عبر Diff أو جلب الـ Snapshot المحدث من Cloudflare KV.
+
+تحديث المؤشرات: ربط التنبيهات الحية بـ QueueBadge في الـ Sidebar.
+
+⚪ المرحلة 5: الجاهزية والاختبارات (Testing & Production Readiness)
+5.1 اختبارات العزلة والـ Double-Edge Caching Pipeline
+اختبارات سلامة الكاش المزدوج (Double Cache Validation Tests):
+
+التأكد من أن القراءة الأولى تتجه لـ Cloudflare KV ثم تُخزن في IndexedDB.
+
+اختبار سيناريو الـ Offline Mode والتأكد من عمل الداشبورد بالكامل اعتماداً على IndexedDB Layer 1.
+
+فحص استجابة الـ 304 Not Modified وتأكيد أن نسبة القراءة المباشرة من D1 تقتصر فقط على الـ Dynamic Atomic Writes والـ Complex Aggregate Queries.
+
+اختبارات الـ Orchestration والأخطاء:
+
+كتابة Unit Tests للـ Index Gateways والتأكد من تحويل واستخراج الأخطاء عبر الـ Telegram Error Adapter بدون توقف الـ Service.
+
+فحص سلامة الـ Composite Indexes وتدفق الـ Correlation ID عبر المسارات المعزولة.

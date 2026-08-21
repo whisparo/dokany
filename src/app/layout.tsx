@@ -5,14 +5,14 @@ import "@/app/globals.css";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
-  display: "swap", // ✅ تمنع حظر الرندر وتسرع FCP/LCP
+  display: "swap",
   preload: true,
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
-  display: "swap", // ✅ تمنع حظر الرندر
+  display: "swap",
   preload: true,
 });
 
@@ -21,7 +21,6 @@ export const metadata: Metadata = {
   description: "متجر موضة إلكتروني سريّع وفاخر",
 };
 
-// ✅ تحسين الـ Viewport لمنع انزياح الشاشة على الموبايل
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -40,6 +39,11 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        {/* 🚀 تسريع الاتصال بالـ CDN والشبكة لطلب الملفات فوراً */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
       <body className="min-h-full flex flex-col bg-background text-foreground selection:bg-slate-800 selection:text-white">
         {children}
       </body>

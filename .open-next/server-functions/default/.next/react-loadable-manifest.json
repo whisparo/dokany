@@ -33,9 +33,9 @@
   "features\\storefront-home\\components\\StorePageClient.tsx -> @/components/shared/ProductGrid": {
     "id": 3260,
     "files": [
-      "static/chunks/384.dca4d9e50fd95fe2.js",
-      "static/chunks/615-069ea1f17e94fe84.js",
-      "static/chunks/260.249c2576d74d3792.js"
+      "static/chunks/434.94c939e5dbed0d65.js",
+      "static/chunks/615-f44e77d13ced9029.js",
+      "static/chunks/260.7a030be0bc027a1c.js"
     ]
   }
 }

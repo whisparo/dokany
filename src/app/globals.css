@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════
    🎨 DOKANY DESIGN SYSTEM — globals.css
-   الإصدار 5.0 (نسخة أغسطس 2026 النهائية - 2026 Web Standards)
+   الإصدار 5.0 (نسخة النهائية - Web Standards)
    Tailwind v4 • oklch • View Transitions • Container Queries
    ═══════════════════════════════════════════════════════════ */
 
@@ -9,7 +9,7 @@
 @custom-variant dark (&:is([data-theme="dark"] *));
 
 /* ═══════════════════════════════════════════════════════════
-   🆕 0) @property — Type-safe Custom Properties (2026 Standard)
+   0) @property — Type-safe Custom Properties
    ═══════════════════════════════════════════════════════════ */
 @property --mesh-float-x {
   syntax: '<length>';
@@ -36,7 +36,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   🆕 View Transitions API (Next.js App Router + 2026 Browsers)
+   View Transitions API (Next.js App Router)
    ═══════════════════════════════════════════════════════════ */
 @view-transition {
   navigation: auto;
@@ -59,10 +59,10 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   1) @theme — القيم الثابتة فقط (Palettes / Radii / Fonts)
+   1) @theme — القيم الثابتة (Palettes / Radii / Fonts)
    ═══════════════════════════════════════════════════════════ */
 @theme {
-  /* ✅ Primary Palette (oklch — تدريج إدراكي متوازن) */
+  /* ✅ Primary Palette (oklch) */
   --color-primary-50:  oklch(0.97 0.015 260);
   --color-primary-100: oklch(0.93 0.04 260);
   --color-primary-200: oklch(0.87 0.08 260);
@@ -98,7 +98,7 @@
   --color-red-800: oklch(0.42 0.22 25);
   --color-red-900: oklch(0.35 0.18 25);
 
-  /* ✅ Radii (قابلة للـ override من store themes) */
+  /* ✅ Radii */
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
@@ -107,10 +107,10 @@
   --radius-3xl: 2rem;
 
   /* ✅ Fonts */
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-arabic: 'Cairo', system-ui, sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-arabic: 'Cairo', system-ui, -apple-system, sans-serif;
 
-  /* ✅ Motion Tokens (تولّد utilities: animate-fade-in ...) */
+  /* ✅ Motion Tokens */
   --animate-fade-in: fade-in 0.4s ease-out forwards;
   --animate-fade-out: fade-out 0.2s ease-out forwards;
   --animate-slide-up: slide-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -123,7 +123,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   2) @theme inline — أي token قيمته var() يعيش هنا حتماً
+   2) @theme inline — Dynamic Dynamic Aliases
    ═══════════════════════════════════════════════════════════ */
 @theme inline {
   --color-primary: var(--accent-primary);
@@ -148,7 +148,7 @@
   --color-warning: var(--accent-warning);
   --color-danger: var(--accent-danger);
 
-  /* Store-level aliases */
+  /* Storefront Engine Scope */
   --color-store-primary: var(--accent-primary);
   --color-store-secondary: var(--accent-secondary);
   --color-store-background: var(--bg-base);
@@ -164,10 +164,35 @@
    ═══════════════════════════════════════════════════════════ */
 :root {
   color-scheme: light;
-  --pearl-shimmer: linear-gradient(110deg, transparent 20%, rgba(255,255,255,0.5) 40%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0.5) 60%, transparent 80%);
+  --bg-base: #ffffff;
+  --bg-elevated: #f8fafc;
+  --bg-glass: rgba(255, 255, 255, 0.7);
+  --bg-glass-hover: rgba(241, 245, 249, 0.8);
+
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.16);
+  --border-glow: rgba(99, 102, 241, 0.25);
+
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-tertiary: #64748b;
+  --text-muted: #94a3b8;
+
+  --accent-primary: #4f46e5;
+  --accent-secondary: #7c3aed;
+  --accent-tertiary: #db2777;
+  --accent-success: #10b981;
+  --accent-warning: #f59e0b;
+  --accent-danger: #ef4444;
+
   --primary-foreground: #ffffff;
   --secondary-foreground: #ffffff;
   --accent-foreground: #ffffff;
+
+  --glow-primary: 0 4px 20px rgba(79, 70, 229, 0.12);
+  --glow-accent: 0 4px 25px rgba(124, 58, 237, 0.1);
+
+  --pearl-shimmer: linear-gradient(110deg, transparent 20%, rgba(255,255,255,0.5) 40%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0.5) 60%, transparent 80%);
 
   --mesh-float-x: 20px;
   --mesh-float-y: -20px;
@@ -179,7 +204,6 @@
     interpolate-size: allow-keywords;
   }
 
-  /* 🆕 View Transition name للـ main content */
   view-transition-name: page-content;
 }
 
@@ -259,7 +283,7 @@
   --mesh-scale: 1.03;
 }
 
-/* ── Store Themes (تحسين التباين) ── */
+/* ── Store Themes Dynamic Overrides ── */
 [data-store-theme="emerald"] {
   --accent-primary: #34d399;
   --accent-secondary: #059669;
@@ -279,7 +303,6 @@
   --radius-lg: 20px;
 }
 
-/* ✨ prefers-color-scheme fallback before JS */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     color-scheme: dark;
@@ -334,7 +357,6 @@
 
   h1, h2, h3, h4, h5, h6 {
     text-wrap: balance;
-    /* 🆕 2026 Typography: trim cap height for cleaner alignment */
     @supports (text-box-trim: both) {
       text-box-trim: trim-both;
       text-box-edge: cap alphabetic;
@@ -361,7 +383,7 @@
   }
 
   ::selection {
-    background-color: color-mix(in oklab, var(--accent-primary) 25%, transparent);
+    background-color: color-mix(in oklch, var(--accent-primary) 25%, transparent);
     color: inherit;
   }
 
@@ -369,7 +391,6 @@
     caret-color: var(--accent-primary);
   }
 
-  /* 🆕 Improved reduced motion (2026 Best Practices) */
   @media (prefers-reduced-motion: reduce) {
     html {
       scroll-behavior: auto;
@@ -385,7 +406,6 @@
     }
   }
 
-  /* 🆕 High Contrast Mode support */
   @media (prefers-contrast: more) {
     :root {
       --border-subtle: rgba(0, 0, 0, 0.3);
@@ -408,6 +428,7 @@
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--border-subtle);
+    contain: layout style;
   }
 
   .glass-elevated {
@@ -415,11 +436,13 @@
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--border-strong);
+    contain: layout style;
   }
 
   .glass-hover {
     transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1),
                 border-color 0.3s, box-shadow 0.3s, translate 0.3s;
+    will-change: translate, box-shadow;
     &:hover {
       background-color: var(--bg-glass-hover);
       border-color: var(--border-glow);
@@ -456,7 +479,6 @@
     font-feature-settings: "tnum";
   }
 
-  /* 🆕 Container query utilities */
   .container-cards {
     container-type: inline-size;
     container-name: cards;
@@ -464,7 +486,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   6) NATIVE 2026 MOTION — CSS-only enter/exit
+   6) NATIVE MOTION — CSS-only enter/exit
    ═══════════════════════════════════════════════════════════ */
 @layer components {
   [data-drawer] {
@@ -492,7 +514,6 @@
     [data-dialog][data-state="open"] { opacity: 0; scale: 0.96; }
   }
 
-  /* 🆕 Store Product Card responsive via Container Queries */
   @container cards (min-width: 600px) {
     .product-card {
       --card-padding: 1.5rem;

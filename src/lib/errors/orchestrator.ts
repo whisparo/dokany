@@ -1,5 +1,5 @@
 // lib/errors/orchestrator.ts
-// الإصدار: 1.5.3
+// الإصدار: 1.5.4
 // الدور: المنسق الرئيسي المباشر - موجه الاستثناءات اللحظية والمعالجة الخلفية
 
 import {
@@ -30,6 +30,7 @@ import {
 } from './guards';
 
 import { processErrorQueue as runProcessor } from './background/processor';
+import { processBatchFlush as runBatchFlush } from './background/batch-flush'; // 👈 إضافة الاستيراد
 import { alertService } from '@/lib/alerts';
 import type { SystemEnvironment } from '@/lib/env';
 
@@ -165,6 +166,21 @@ export class ErrorOrchestrator {
   }
 
   /**
+   * 🚀 تفريغ الطلبات الموقتة من الـ KV للـ D1 في الخلفية (Batch Flush Facade)
+   */
+  async processBatchFlush(
+    env?: SystemEnvironment,
+    options?: { batchSize?: number }
+  ) {
+    const activeEnv = env || this.env;
+    if (!activeEnv) {
+      throw new Error('[Orchestrator] Environment configuration is missing for batch flush.');
+    }
+
+    // استخراج القيمة العددية لضمان تطابق الأنواع
+    return await runBatchFlush(activeEnv, options?.batchSize);
+  }
+  /**
    * صياغة الـ API Response
    */
   formatApiError(
@@ -195,7 +211,6 @@ export class ErrorOrchestrator {
 
   /**
    * استدعاء موديول التخزين بأمان (Redis Queue فقط)
-   * الـ Cron Job + Background Processor هما المسئولين عن السحب والرفع لـ B2
    */
   private async dispatchStorageTasks(
     error: SystemError,
@@ -227,7 +242,6 @@ export class ErrorOrchestrator {
       const redis = getRedisClient(queueEnv);
       if (redis) {
         const queueManager = new QueueManager({ redis });
-        // دفع الـ Error Raw / Correlation ID في القائمة للمالجة في الخلفية
         tasks.push(queueManager.push(JSON.stringify(error)));
       }
     } catch (queueErr) {

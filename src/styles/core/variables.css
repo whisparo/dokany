@@ -1,0 +1,199 @@
+/* src/styles/core/variables.css */
+
+/* ============================================================
+   🧠  CORE VARIABLES — System Tokens
+   📌  الهدف: المتغيرات الجذرية الأساسية التي تحدد هوية النظام البصرية
+   🔒  المبدأ: لا تعتمد على أي شيء خارجي، مشتركة بين جميع البيئات
+   ============================================================ */
+
+/* ═══════════════════════════════════════════════════════════
+   1️⃣  ROOT VARIABLES — النظام الأساسي
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  /* ──────────────────────────────────────────────
+     📐  نظام المسافات (Spacing Scale)
+     ────────────────────────────────────────────── */
+  --spacing-unit: 4px;
+  --spacing-xs: calc(var(--spacing-unit) * 1);    /* 4px  */
+  --spacing-sm: calc(var(--spacing-unit) * 2);    /* 8px  */
+  --spacing-md: calc(var(--spacing-unit) * 4);    /* 16px */
+  --spacing-lg: calc(var(--spacing-unit) * 6);    /* 24px */
+  --spacing-xl: calc(var(--spacing-unit) * 8);    /* 32px */
+  --spacing-2xl: calc(var(--spacing-unit) * 12);  /* 48px */
+  --spacing-3xl: calc(var(--spacing-unit) * 16);  /* 64px */
+  --spacing-4xl: calc(var(--spacing-unit) * 24);  /* 96px */
+
+  /* ──────────────────────────────────────────────
+     🔤  نظام الطباعة (Typography System)
+     ────────────────────────────────────────────── */
+  /* خطوط النظام */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-family-arabic: 'Cairo', 'Tajawal', 'Almarai', system-ui, sans-serif;
+
+  /* أحجام الخطوط */
+  --font-size-xs: 0.75rem;    /* 12px */
+  --font-size-sm: 0.875rem;   /* 14px */
+  --font-size-md: 1rem;       /* 16px */
+  --font-size-lg: 1.125rem;  /* 18px */
+  --font-size-xl: 1.25rem;   /* 20px */
+  --font-size-2xl: 1.5rem;   /* 24px */
+  --font-size-3xl: 1.875rem; /* 30px */
+  --font-size-4xl: 2.25rem;  /* 36px */
+
+  /* أوزان الخطوط */
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ارتفاعات السطر */
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+
+  /* ──────────────────────────────────────────────
+     🎨  أنصاف الأقطار (Border Radii)
+     ────────────────────────────────────────────── */
+  --radius-none: 0;
+  --radius-sm: 0.25rem;   /* 4px */
+  --radius-md: 0.5rem;    /* 8px */
+  --radius-lg: 0.75rem;   /* 12px */
+  --radius-xl: 1rem;      /* 16px */
+  --radius-2xl: 1.5rem;   /* 24px */
+  --radius-full: 9999px;
+
+  /* ──────────────────────────────────────────────
+     🎨  ألوان النظام (System Colors - Placeholder)
+     📌  تُستخدم كقيم افتراضية وتطابق هيكل Theme Schema
+     ────────────────────────────────────────────── */
+  /* درجات الرمادي */
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+  --gray-950: #030712;
+
+  /* الألوان الأساسية */
+  --colors-primary-main: #6366f1;
+  --colors-primary-light: #818cf8;
+  --colors-primary-dark: #4f46e5;
+  --colors-primary-contrastText: #ffffff;
+
+  --colors-secondary-main: #8b5cf6;
+  --colors-secondary-light: #a78bfa;
+  --colors-secondary-dark: #7c3aed;
+  --colors-secondary-contrastText: #ffffff;
+
+  /* ألوان الحالة */
+  --colors-success-main: #10b981;
+  --colors-warning-main: #f59e0b;
+  --colors-danger-main: #ef4444;
+  --colors-info-main: #3b82f6;
+
+  /* ألوان الخلفية والنصوص */
+  --colors-background-default: #ffffff;
+  --colors-background-paper: #ffffff;
+  --colors-background-elevated: #f8fafc;
+  
+  --colors-text-primary: #111827;
+  --colors-text-secondary: #4b5563;
+  --colors-text-disabled: #9ca3af;
+  --colors-text-hint: #6b7280;
+
+  /* ألوان الحدود */
+  --colors-border-subtle: #e5e7eb;
+  --colors-border-strong: #d1d5db;
+  --colors-border-glow: rgba(99, 102, 241, 0.3);
+
+  /* ──────────────────────────────────────────────
+     📦  نظام الظلال (Shadow System)
+     ────────────────────────────────────────────── */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1), 0 10px 10px rgba(0, 0, 0, 0.04);
+  --shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.25);
+  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.15);
+
+  /* ──────────────────────────────────────────────
+     🎞️  نظام الحركة (Motion System)
+     ────────────────────────────────────────────── */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-extra-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* منحنيات التخفيف */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ──────────────────────────────────────────────
+     📱  نظام التخطيط (Layout System)
+     ────────────────────────────────────────────── */
+  --layout-max-width: 1280px;
+  --layout-container-padding: var(--spacing-md);
+  --layout-header-height: 64px;
+  --layout-footer-height: 80px;
+  --layout-sidebar-width: 280px;
+
+  /* ──────────────────────────────────────────────
+     🎯  نظام الطبقات (Z-Index System - Corrected)
+     ────────────────────────────────────────────── */
+  --z-index-dropdown: 100;
+  --z-index-sticky: 200;
+  --z-index-fixed: 300;
+  --z-index-overlay: 400;  /* الخلفية المعتمة تحت العناصر العائمة */
+  --z-index-modal: 500;    /* المودال يتفتح فوق الـ Overlay */
+  --z-index-popover: 600;
+  --z-index-toast: 700;
+  --z-index-tooltip: 800;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   2️⃣  RTL SUPPORT — دعم اللغات التي تُكتب من اليمين لليسار
+   ═══════════════════════════════════════════════════════════ */
+[dir="rtl"] {
+  /* انعكاس تلقائي للمسافات والهوامش إذا احتاج الأمر */
+}
+
+/* ═══════════════════════════════════════════════════════════
+   3️⃣  DARK MODE FALLBACK — الوضع الليلي الافتراضي
+   ═══════════════════════════════════════════════════════════ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --colors-background-default: #0a0a0a;
+    --colors-background-paper: #111827;
+    --colors-background-elevated: #1a1a1a;
+    
+    --colors-text-primary: #f9fafb;
+    --colors-text-secondary: #d1d5db;
+    --colors-text-disabled: #6b7280;
+    --colors-text-hint: #9ca3af;
+    
+    --colors-border-subtle: #374151;
+    --colors-border-strong: #4b5563;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   4️⃣  REDUCED MOTION — احترام تفضيلات المستخدم
+   ═══════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

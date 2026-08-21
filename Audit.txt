@@ -1,227 +1,714 @@
-🏛️ "النظام البيئي الخالد" – الأرشيتيكتر النهائي للأوديت والتحليلات والبث الحي (الإصدار 11.0 – Cloudflare Native Final)
-الهوية: نظام متكامل لإدارة الأحداث، التحليلات الفورية، والبث الحي، يعمل بتكلفة تشغيلية صفرية، على بنية تحتية سحابية بالكامل (Cloudflare + Upstash)، مع عزل تام للبيانات، وسرعة استجابة خارقة، وقابلية للتوسع إلى ما لا نهاية.
+🏛️ دكاني — المخطط المعماري النهائي لمحرك الأوديت والتزامن (الإصدار 1.0)
+📜 الديباجة: فلسفة "المرآة المزدوجة للأوديت"
+هذه الوثيقة هي المرجع المعماري الوحيد لمحرك الأوديت والتزامن في منصة "دكاني". تدمج جميع التحسينات والمراجعات السابقة في نسخة واحدة نهائية، خالية من التكاليف المستترة، وقابلة للتنفيذ الفوري.
 
-📜 الديباجة: فلسفة "الجبل الجليدي" (The Iceberg Philosophy)
-في هذا النظام، نطبق مبدأ فصل البيانات حسب درجة الحرارة (Data Temperature Separation):
+الفكرة الجوهرية: كل حدث في المنصة (تعديل سعر، تغيير مخزون، طلب جديد، تعديل إعدادات) هو كائن موحد يمر عبر أنبوب واحد (Single Pipeline)، مع تطبيق المرآة المزدوجة لعرض التغييرات فوراً في المتصفح (0ms)، مع الحفاظ على تكلفة تشغيلية صفرية مطلقة.
 
-الطبقة السطحية (Hot Layer): البيانات النشطة (آخر 24-48 ساعة) المخزنة في D1، وهي الطبقة الوحيدة القابلة للكتابة والتحديث.
+1️⃣ المبادئ الهندسية الحاكمة (Core Principles)
+المبدأ	الوصف
+Single Event Pipeline	كل حدث يُعامل كـ AuditEvent ببنية موحدة ويمر عبر نفس الـ Capture Worker.
+CQRS & Optimistic UI	عمليات القراءة من IndexedDB (0ms)، والكتابة تُرسل في الخلفية مع تحديث تفاؤلي للواجهة.
+Dual Replica for Every Change	كل حدث يُنسخ محلياً في IndexedDB فوراً، ويُرسل إلى D1، ثم يُنقل إلى B2 للأرشيف.
+Zero-Cost Resilience	معالجة جميع الثغرات (SSE Exhaustion، OOM، Lock Starvation، Range Requests، Duplicate Events) مع الحفاظ على التكلفة الصفرية.
+Stateless Sync	لا تُستخدم WebSockets أو Durable Objects المفتوحة باستمرار. الاعتماد على SSE On-Demand + BroadcastChannel + Polling Fallback.
+Server Time Canonicalization	توقيت الأحداث يُحدد بواسطة Worker (server_received_at) مع نافذة قبول ±5 دقائق للأحداث المتأخرة.
+2️⃣ بنية كائن الحدث الموحد (Unified Audit Event Schema)
+json
+{
+  "event_id": "evt_987654321",
+  "store_id": "store_123",
+  "actor": {
+    "user_id": "usr_admin",
+    "role": "owner"
+  },
+  "type": "PRODUCT_PRICE_UPDATED",
+  "entity": {
+    "type": "product",
+    "id": "prod_555"
+  },
+  "changes": {
+    "price_cents": { "old": 15000, "new": 12000 }
+  },
+  "client_created_at": 1787116800000,
+  "server_received_at": 1787116805000,
+  "is_backfilled": false,
+  "idempotency_key": "idem_prod555_price_1787116800"
+}
+حقول إضافية حسب النوع:
 
-الطبقة المتوسطة (Warm Layer): البيانات المؤرشفة مؤقتاً (الـ Raw JSON) في R2، في انتظار المعالجة.
+ORDER_CREATED: order_id, total_amount, customer_id
 
-الطبقة العميقة (Cold Layer): الأرشيف التاريخي غير المحدود في R2 بصيغة Parquet، وهو الطبقة الوحيدة القابلة للقراءة والتحليل.
+STOCK_CHANGED: product_id, old_quantity, new_quantity
 
-الهدف: إبقاء الطبقة السطحية (D1) خفيفة وسريعة وقابلة للكتابة دائماً، مع نقل كل الثقل إلى R2 حيث التخزين غير المحدود والمجاني.
+STORE_SETTINGS_MUTATED: setting_key, old_value, new_value
 
-🧱 المكونات المعمارية الأساسية (The Core Components)
-1. قاعدة البيانات النشطة (D1 – The Operational DB)
-الطبيعة: قاعدة بيانات SQLite مُدارة موزعة عالمياً من Cloudflare.
+3️⃣ التدفق المعماري الكامل (End-to-End Data Flow)
+3.1. الالتقاط الفوري مع Optimistic UI (الزمن: 0ms للواجهة، < 10ms للخادم)
+التدفق:
 
-الهيكلية: تعتمد على جداول شهرية (audit_logs_YYYY_MM) لتجنب التفتيت (Fragmentation).
+التاجر يعدل قيمة (سعر/مخزون) في Dashboard.
 
-الدور: مسؤولة فقط عن عمليات الكتابة (INSERT) للأحداث الجديدة، وعمليات القراءة (SELECT) للـ Polling الحي.
+Optimistic Update (0ms):
 
-سياسة الكتابة: الجدول هو Write-Only طوال الشهر. لا تحديثات (UPDATE)، ولا حذف (DELETE) للبيانات النشطة.
+OptimisticUpdateManager يطبق التغيير في IndexedDB و UI فوراً.
 
-سياسة الاحتفاظ: مع بداية كل شهر جديد، يتم إنشاء جدول جديد. الجدول القديم يُحذف بالكامل عبر DROP TABLE بعد التأكد من أرشفة كامل بياناته إلى R2.
+يُضاف الحدث إلى PendingMutationStack مع sequence_id محلي.
 
-2. ذاكرة التخزين المؤقت والعلامات (Upstash Redis – The Cache & Index)
-الدور الأول (البث الحي): تخزين last_event_timestamp لكل متجر. يستخدم لتقنين طلبات Polling ومنع الوصول غير الضروري إلى D1.
+الإرسال في الخلفية:
 
-الدور الثاني (التجميع): تخزين last_processed_timestamp لكل متجر. يستخدم لتحديد الأحداث الجديدة فقط منذ آخر جولة تجميع (Idempotency Key).
+يُرسل AuditEvent إلى Capture Worker عبر fetch() مع keepalive: true (بدلاً من sendBeacon للحصول على HTTP Status Code).
 
-الدور الثالث (حماية التكرار): تخزين معرفات الأحداث التي تمت معالجتها مؤقتاً لمنع التكرار (Deduplication) في حالة فشل الـ Worker وإعادة المحاولة.
+لا ينتظر العميل الرد (غير متزامن).
 
-السبب: الـ Redis أسرع بـ 100 مرة من D1 في عمليات القراءة والكتابة (لأنه In-Memory)، ويحسب ضمن الخطة المجانية لـ Upstash (10,000 عمليات/يوم).
+معالجة الخادم (Capture Worker):
 
-3. جدولة المهام (Upstash QStash – The Scheduler)
-الدور: وكيل الجدولة المركزية. بديل عن Cron Triggers المدفوعة في Cloudflare.
+يتحقق من idempotency_key عبر D1 (INSERT OR IGNORE).
 
-آلية العمل: يتم إعداد مهام دورية (Cron Jobs) في QStash لتوجيه طلبات HTTP إلى نقاط نهاية محددة في Cloudflare Workers في أوقات محددة:
+يكتب الحدث في D1 (الجدول الشهري المُولَّد ديناميكياً) مع server_received_at.
 
-كل ساعة (Hourly): طلب تجميع الأحداث الخام.
+إذا كان الفرق بين client_created_at و server_received_at > ±5 دقائق، يضع علامة is_backfilled: true.
 
-كل يوم (Daily): طلب تحويل الـ JSON إلى Parquet ودمج اليوم.
+يُحدّث Redis last_ts للمتجر.
 
-كل أسبوع (Weekly): طلب دمج الأيام في ملف أسبوعي.
+يُرسل نبضة عبر SSE (إذا كان التاجر متصلاً).
 
-آخر يوم في الشهر (Monthly): طلب حذف الجدول الشهري المنتهي صلاحيته.
+الرد والتحقق:
 
-السبب: QStash يوفر 10,000 طلب مجاني شهرياً، وهو أكثر من كافٍ لهذه المهام الدورية، كما أنه يوفر آلية إعادة محاولة مدمجة (Retry) في حال فشل الـ Worker.
+إذا نجحت العملية: يُحدث IndexedDB الحالة إلى 'synced' ويزيل الحدث من الـ Stack.
 
-4. وحدة المعالجة الحافة (Cloudflare Workers – The Compute Engine)
-الطبيعة: بيئة تشغيل JavaScript/WebAssembly عند الحافة (Edge).
+إذا فشلت (4xx/5xx): يقوم OptimisticUpdateManager بـ Rollback للحدث الفاشل فقط، ثم يعيد تطبيق (Replay) الأحداث اللاحقة في الـ Stack (مع أخذ Snapshot قبل الـ Replay) للحفاظ على تناسق UI.
 
-الأدوار الأربعة للـ Workers:
+3.2. البث الحي والتزامن (Pulse & Sync Engine)
+المبدأ: التزامن صفر التكلفة مع فتح الاتصال عند الطلب فقط.
 
-Worker الالتقاط (Capture): يستقبل الأحداث HTTP من التطبيق، يكتبها في D1، ويُحدّث Redis.
-Worker البث الحي (Live): يستقبل طلبات Polling من المتصفح، ويتحقق من Redis، ويقرأ من D1 فقط عند الضرورة.
-Worker التجميع الخام (Raw Aggregator): يُشغل بواسطة QStash كل ساعة، يقرأ الأحداث الجديدة من D1، ويكتبها كـ JSON في R2.
-Worker التحويل الثقيل (Heavy Transformer): يُشغل بواسطة QStash يومياً/أسبوعياً، يشغل DuckDB-WASM داخل الـ Worker نفسه لتحويل JSON إلى Parquet مباشرة بين R2 و R2 (Streaming)، دون تحميل الملفات في ذاكرة الـ Worker.
-5. مخزن الكائنات البارد (Cloudflare R2 – The Immortal Archive)
-الطبيعة: تخزين كائنات (S3-compatible) بدون رسوم خروج (Zero Egress).
+Cross-Tab Sync (نفس الجهاز):
 
-الهيكل (Hive Partitioning):
+استخدام BroadcastChannel باسم dokany_audit_${storeId}.
 
+Fallback للمتصفحات القديمة: window.addEventListener('storage') مع localStorage.
+
+Cross-Device Sync (بين الأجهزة):
+
+Stateless SSE عبر Cloudflare Worker يُفتح عند الطلب (عند دخول التاجر شاشة الطلبات).
+
+يُغلق الاتصال تلقائياً بعد 30 ثانية من الخمول.
+
+مفتاح الاتصال المركب: استخدام storeId:tabId كـ Composite Key لمنع تعارض التبويبات المتعددة.
+
+حد أقصى 5 اتصالات SSE لكل storeId، مع رفض أي اتصال إضافي بـ 429 Too Many Requests.
+
+Polling Fallback: إذا تعذر فتح SSE، يتحول العميل إلى Polling مع Exponential Backoff (1s → 2s → 5s → 10s كحد أقصى) مع Jitter عشوائي.
+
+Master Tab Pattern:
+
+التبويب الرئيسي (الأول) يستقبل SSE ويكتب في IndexedDB.
+
+يبث التحديثات للتبويبات الأخرى عبر BroadcastChannel.
+
+Master Election Protocol: Heartbeat كل 1000ms، Timeout 2500ms، مع استخدام navigator.locks مع AbortSignal.timeout(500ms) لانتخاب تبويب بديل فوراً.
+
+3.3. التجميع والتحويل (Raw Aggregation & Heavy Rollup)
+⚠️ تحذير: تم إلغاء تشغيل DuckDB-WASM داخل Cloudflare Workers لتجنب تجاوز حد الذاكرة 128MB.
+
+الجدولة: عبر Upstash QStash (مجاني، 10k طلب/شهر).
+
+كل ساعة: Worker التجميع يقرأ الأحداث الجديدة من D1، يكتبها كـ JSON Lines في B2 (/raw/.../chunk_{HH}.json).
+
+كل ساعة (تحويل فوري): Worker يقوم بتحويل ملف JSON الساعي إلى Parquet باستخدام مكتبة Parquet خفيفة (مثل @dsnp/parquetjs أو parquet-wasm) مع ضغط ZSTD، ويرفعه إلى B2 (/parquet/.../chunk_{HH}.parquet). (حجم < 2MB، ويتم تقطيع الدفعات إلى 1000 حدث كحد أقصى لضمان المعالجة خلال 5 ثوانٍ).
+
+يومياً (Daily Compaction): في منتصف الليل، تُدمج الملفات الساعية الـ 24 في ملف يومي واحد (events.parquet) وحذف الملفات الساعية لتقليل عدد الملفات من 720 إلى 30 شهرياً.
+
+أسبوعياً/شهرياً: تُدمج الملفات اليومية في ملفات أسبوعية وشهرية.
+
+شهرياً (Purge): في أول الشهر، يُحذف الجدول القديم من D1 بعد التأكد من وجود monthly_summary.parquet في B2.
+
+توزيع حمل Compaction: استخدام QStash Fan-out لتقسيم المتاجر على دفعات (Batches) وتوزيع المعالجة على مدار 3 ساعات (2:00 AM → 5:00 AM UTC) لتجنب Worker Timeout.
+
+3.4. التحليلات والاستعلامات (Client-Side Analytics)
+الإحصائيات السريعة (Daily Overview): تُحسَب من IndexedDB باستخدام reduce() على مصفوفة الأحداث (زمن < 50ms، بدون DuckDB).
+
+التقارير المتقدمة (Advanced Analytics):
+
+Pre-fetching: Service Worker يقوم بتحميل JSON Rollups لآخر 7 أيام في الخلفية (من B2 عبر Cloudflare CDN) وتخزينها في CacheStorage عند فتح Dashboard.
+
+شرط تفعيل DuckDB-WASM (في المتصفح فقط، وليس Worker): فقط إذا كان deviceMemory >= 4 و hardwareConcurrency >= 4 وليس متصفح موبايل، وإلا يُستخدم JSON Rollup الجاهز.
+
+DuckDB يستعلم عن ملفات Parquet من B2 عبر Presigned URLs (صالحة 30 دقيقة مع تجديد تلقائي في الواجهة).
+
+4️⃣ تفاصيل التنفيذ التقنية (Implementation Details)
+4.1. OptimisticUpdateManager (Frontend)
+typescript
+interface PendingMutation {
+  entityId: string;
+  sequence: number;
+  oldValue: any;
+  newValue: any;
+  status: 'pending' | 'committed' | 'failed';
+}
+
+// نحتاج إلى واجهة Getter لاسترجاع القيمة الحالية
+interface CurrentValueGetter {
+  getCurrentValue(entityId: string): any;
+}
+
+class OptimisticUpdateManager {
+  private stack = new Map<string, PendingMutation[]>();
+  private sequenceCounter = 0;
+  private getter: CurrentValueGetter;
+
+  constructor(getter: CurrentValueGetter) {
+    this.getter = getter;
+  }
+
+  apply(entityId: string, newValue: any): number {
+    const seq = ++this.sequenceCounter;
+    const oldValue = this.getter.getCurrentValue(entityId); // ✅ استخدام getter
+    const mutation: PendingMutation = {
+      entityId,
+      sequence: seq,
+      oldValue,
+      newValue,
+      status: 'pending'
+    };
+    const mutations = this.stack.get(entityId) || [];
+    mutations.push(mutation);
+    this.stack.set(entityId, mutations);
+    this.applyToUI(entityId, newValue);
+    this.applyToIndexedDB(entityId, newValue, seq);
+    return seq;
+  }
+
+  rollback(entityId: string, failedSeq: number) {
+    const mutations = this.stack.get(entityId) || [];
+    const failedIndex = mutations.findIndex(m => m.sequence === failedSeq);
+    if (failedIndex === -1) return;
+
+    // ✅ Snapshot قبل الـ Replay لمنع Race Condition
+    const mutationsSnapshot = [...mutations.slice(failedIndex + 1)];
+
+    // 1. Rollback الفاشل فقط
+    const failed = mutations[failedIndex];
+    this.applyToUI(entityId, failed.oldValue);
+    this.applyToIndexedDB(entityId, failed.oldValue, failedSeq);
+
+    // 2. Replay الأحداث اللاحقة (من الـ Snapshot)
+    for (const mutation of mutationsSnapshot) {
+      this.applyToUI(entityId, mutation.newValue);
+      this.applyToIndexedDB(entityId, mutation.newValue, mutation.sequence);
+    }
+
+    // 3. إزالة الفاشل من الـ Stack
+    mutations.splice(failedIndex, 1);
+  }
+
+  commit(entityId: string, sequence: number) {
+    const mutations = this.stack.get(entityId) || [];
+    const idx = mutations.findIndex(m => m.sequence === sequence);
+    if (idx !== -1) mutations[idx].status = 'committed';
+  }
+
+  private applyToUI(entityId: string, value: any) {
+    // تنفيذ تحديث الواجهة
+  }
+
+  private applyToIndexedDB(entityId: string, value: any, sequence: number) {
+    // تنفيذ تحديث IndexedDB
+  }
+}
+4.2. Capture Worker (Backend) مع D1 Idempotency
+typescript
+// ✅ توليد اسم الجدول ديناميكياً
+function getTableName(): string {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+  return `audit_logs_${year}_${month}`;
+}
+
+// ✅ Cron Job: إنشاء جدول الشهر القادم (يوم 28 من كل شهر)
+// يتم تشغيله عبر QStash
+async function createNextMonthTable() {
+  const now = new Date();
+  const nextMonth = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+  const year = nextMonth.getUTCFullYear();
+  const month = String(nextMonth.getUTCMonth() + 1).padStart(2, '0');
+  const tableName = `audit_logs_${year}_${month}`;
+
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS ${tableName} (
+      event_id TEXT PRIMARY KEY,
+      store_id TEXT NOT NULL,
+      actor TEXT,
+      type TEXT NOT NULL,
+      entity TEXT,
+      changes TEXT,
+      client_created_at INTEGER,
+      server_received_at INTEGER DEFAULT (unixepoch() * 1000),
+      is_backfilled INTEGER DEFAULT 0,
+      idempotency_key TEXT UNIQUE
+    );
+    CREATE INDEX IF NOT EXISTS idx_${tableName}_store_ts 
+      ON ${tableName}(store_id, server_received_at);
+  `).run();
+}
+
+// D1 Schema (Idempotency Keys)
+const IDEMPOTENCY_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS idempotency_keys (
+    key TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL,
+    created_at INTEGER DEFAULT (unixepoch())
+  );
+`;
+
+// Capture Worker
+async function handleCapture(request: Request) {
+  const event = await request.json();
+  const { storeId, idempotency_key, client_created_at } = event;
+
+  // 1. Idempotency Check (D1)
+  const result = await env.DB.prepare(
+    `INSERT OR IGNORE INTO idempotency_keys (key, store_id) VALUES (?, ?)`
+  ).bind(idempotency_key, storeId).run();
+
+  if (result.changes === 0) {
+    return new Response('Duplicate event (ignored)', { status: 200 });
+  }
+
+  // 2. Server Time Canonicalization
+  const serverReceivedAt = Date.now();
+  const drift = serverReceivedAt - client_created_at;
+  const isBackfilled = Math.abs(drift) > 5 * 60 * 1000;
+
+  // 3. Write to D1 (مع اسم الجدول الديناميكي)
+  const tableName = getTableName();
+  await env.DB.prepare(`
+    INSERT INTO ${tableName} (
+      event_id, store_id, actor, type, entity, changes,
+      client_created_at, server_received_at, is_backfilled, idempotency_key
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    event.event_id, storeId, JSON.stringify(event.actor), event.type,
+    JSON.stringify(event.entity), JSON.stringify(event.changes),
+    client_created_at, serverReceivedAt, isBackfilled ? 1 : 0, idempotency_key
+  ).run();
+
+  // 4. Update Redis last_ts
+  await env.REDIS.set(`store:${storeId}:last_ts`, serverReceivedAt, { ex: 3600 });
+
+  // 5. Send SSE pulse (if connection exists)
+  await sendSSEPulse(storeId, { event_id: event.event_id, type: event.type });
+
+  return new Response('OK', { status: 200 });
+}
+4.3. المزامنة المحلية (BroadcastChannel + Fallback)
+typescript
+class CrossTabBus {
+  private channel: BroadcastChannel | null = null;
+  private listeners: Set<(data: any) => void> = new Set();
+
+  constructor(private channelName: string) {
+    if ('BroadcastChannel' in window) {
+      this.channel = new BroadcastChannel(channelName);
+      this.channel.onmessage = (e) => this.notify(e.data);
+    } else {
+      // Fallback: localStorage + storage event
+      window.addEventListener('storage', (e) => {
+        if (e.key === this.channelName && e.newValue) {
+          this.notify(JSON.parse(e.newValue));
+        }
+      });
+    }
+  }
+
+  postMessage(data: any) {
+    if (this.channel) {
+      this.channel.postMessage(data);
+    } else {
+      localStorage.setItem(this.channelName, JSON.stringify(data));
+      setTimeout(() => localStorage.removeItem(this.channelName), 100);
+    }
+  }
+
+  private notify(data: any) {
+    for (const listener of this.listeners) {
+      listener(data);
+    }
+  }
+
+  onMessage(callback: (data: any) => void) {
+    this.listeners.add(callback);
+  }
+}
+4.4. SSE Handler (Stateless Worker مع On-Demand)
+typescript
+// ✅ استخدام Composite Key: storeId + tabId
+const activeConnections = new Map<string, ReadableStreamDefaultController>();
+const MAX_CONNECTIONS_PER_STORE = 5;
+
+async function handleSSE(request: Request, storeId: string) {
+  const url = new URL(request.url);
+  const tabId = url.searchParams.get('tabId') || 'default';
+
+  // ✅ التحقق من عدد الاتصالات
+  let count = 0;
+  for (const key of activeConnections.keys()) {
+    if (key.startsWith(`${storeId}:`)) count++;
+  }
+  if (count >= MAX_CONNECTIONS_PER_STORE) {
+    return new Response('Too many connections', { status: 429 });
+  }
+
+  const connectionKey = `${storeId}:${tabId}`;
+  const { 0: response, 1: controller } = new TransformStream();
+  activeConnections.set(connectionKey, controller);
+
+  // ✅ إغلاق تلقائي بعد 30 ثانية خمول
+  const timeoutId = setTimeout(() => {
+    controller.close();
+    activeConnections.delete(connectionKey);
+  }, 30000);
+
+  // ✅ Keep-Alive كل 20 ثانية
+  const keepAlive = setInterval(() => {
+    try { controller.enqueue(`: ping\n\n`); } catch { clearInterval(keepAlive); }
+  }, 20000);
+
+  // تنظيف عند الإغلاق
+  request.signal.addEventListener('abort', () => {
+    clearTimeout(timeoutId);
+    clearInterval(keepAlive);
+    activeConnections.delete(connectionKey);
+  });
+
+  return new Response(response, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
+}
+
+// ✅ إرسال نبضة للاتصال المفتوح
+async function sendSSEPulse(storeId: string, data: any) {
+  const events: Promise<void>[] = [];
+  for (const [key, controller] of activeConnections) {
+    if (key.startsWith(`${storeId}:`)) {
+      events.push(
+        new Promise(resolve => {
+          try {
+            controller.enqueue(`data: ${JSON.stringify(data)}\n\n`);
+          } catch {}
+          resolve();
+        })
+      );
+    }
+  }
+  await Promise.all(events);
+}
+4.5. Polling Fallback (العميل)
+typescript
+class AdaptivePoller {
+  private backoff = 1000;
+  private maxBackoff = 10000;
+  private isPolling = false;
+
+  async start(storeId: string) {
+    this.isPolling = true;
+    await this.poll(storeId);
+  }
+
+  stop() {
+    this.isPolling = false;
+  }
+
+  private async poll(storeId: string) {
+    if (!this.isPolling) return;
+
+    if (!navigator.onLine) {
+      await this.waitForOnline();
+      this.backoff = 1000;
+    }
+
+    try {
+      const res = await fetch(`/api/pulse?storeId=${storeId}&ts=${Date.now()}`, {
+        headers: { 'If-None-Match': this.getLastETag() }
+      });
+
+      if (res.status === 304) {
+        this.backoff = Math.min(this.backoff * 1.5, this.maxBackoff);
+      } else if (res.ok) {
+        const events = await res.json();
+        this.handleEvents(events);
+        this.backoff = 1000;
+      } else {
+        throw new Error('Server error');
+      }
+    } catch {
+      this.backoff = Math.min(this.backoff * 2, this.maxBackoff);
+      this.backoff += (Math.random() * 2000) - 1000; // Jitter
+    }
+
+    setTimeout(() => this.poll(storeId), this.backoff);
+  }
+
+  private waitForOnline(): Promise<void> {
+    return new Promise(resolve => {
+      if (navigator.onLine) return resolve();
+      window.addEventListener('online', () => resolve(), { once: true });
+    });
+  }
+}
+4.6. Service Worker (Pre-fetching مع getStoreId)
+typescript
+// ✅ استخراج storeId من الـ Active Window
+async function getStoreIdFromClient(): Promise<string> {
+  const clients = await self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true
+  });
+
+  for (const client of clients) {
+    const url = new URL(client.url);
+    const match = url.pathname.match(/\/store\/([^\/]+)/);
+    if (match) return match[1];
+  }
+  return 'default';
+}
+
+// ✅ Pre-fetch Rollups
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    (async () => {
+      const storeId = await getStoreIdFromClient();
+      const urls = [
+        `https://cdn.dokany.com/b2/rollups/store_${storeId}/last_7_days.json`,
+        `https://cdn.dokany.com/b2/rollups/store_${storeId}/last_30_days.json`,
+      ];
+      const cache = await caches.open('rollups');
+      for (const url of urls) {
+        try {
+          const response = await fetch(url, { cache: 'force-cache' });
+          if (response.ok) await cache.put(url, response);
+        } catch {
+          console.warn('Pre-fetch failed:', url);
+        }
+      }
+    })()
+  );
+});
+5️⃣ إدارة التخزين البارد مع Backblaze B2
+5.1. هيكل المجلدات الموحد (Hive Partitioning)
 text
-/audit-logs
-  /store_{id}
-    /raw/               # المنطقة المؤقتة (تُحذف يومياً)
+/bucket-name/
+  /store_{id}/
+    /raw/                        # المنطقة المؤقتة (تُحذف يومياً)
       /year=YYYY/month=MM/day=DD/chunk_{HH}.json
-    /parquet/           # المنطقة الدائمة (للأبد)
-      /year=YYYY/month=MM/day=DD/chunk.parquet
-      /year=YYYY/month=MM/day_summary.parquet
-      /year=YYYY/month=MM/week_summary.parquet
-      /year=YYYY/monthly_summary.parquet
-سياسة الاحتفاظ: غير محدود. لا يتم حذف أي ملف Parquet أبداً.
+    /parquet/                    # المنطقة الدائمة (للأبد)
+      /year=YYYY/month=MM/day=DD/events.parquet  # ✅ ملف واحد فقط
+      /year=YYYY/month=MM/week_summary.parquet   # أسبوعي
+      /year=YYYY/month=MM/monthly_summary.parquet # شهري
+    /rollups/                    # JSON جاهز للتحليلات السريعة
+      /last_7_days.json
+      /last_30_days.json
+⚠️ توحيد المسار: تم إزالة day.parquet المكرر واستخدام events.parquet كاسم موحد لتجنب الالتباس في DuckDB Queries.
 
-🔄 تدفق البيانات التفصيلي (مرحلة بمرحلة)
-المرحلة الأولى: الالتقاط (Capture Phase) – الزمن: < 10ms
-يحدث حدث في المنصة (شراء، تحديث منتج، إضافة للسلة).
+5.2. Pre-fetching عبر Service Worker
+typescript
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    (async () => {
+      const storeId = await getStoreIdFromClient();
+      const urls = [
+        `https://cdn.dokany.com/b2/rollups/store_${storeId}/last_7_days.json`,
+        `https://cdn.dokany.com/b2/rollups/store_${storeId}/last_30_days.json`,
+      ];
+      const cache = await caches.open('rollups');
+      for (const url of urls) {
+        try {
+          const response = await fetch(url, { cache: 'force-cache' });
+          if (response.ok) await cache.put(url, response);
+        } catch {
+          console.warn('Pre-fetch failed:', url);
+        }
+      }
+    })()
+  );
+});
+6️⃣ ضمان التكلفة الصفرية (Zero-Cost Proof)
+الخدمة	الاستخدام المتوقع	الحد المجاني	الحالة
+Cloudflare Workers	~10k طلب/يوم (Capture + SSE + Cron)	100k/يوم	✅
+Cloudflare D1	~50k كتابة/شهر (Audit + Idempotency)	100k/يوم	✅
+D1 Storage	~500MB (شهر واحد من الأحداث)	5GB	✅
+Backblaze B2 Storage	~2GB (Parquet + Rollups)	10GB	✅
+B2 Operations	~500 عملية/شهر (Upload/Delete)	2,500 Class C/يوم	✅
+B2 Egress	~500MB/شهر (Pre-fetch + Analytics)	1GB/يوم (Bandwidth Alliance)	✅
+Upstash QStash	~200 طلب/شهر (Cron)	10k/شهر	✅
+Upstash Redis	~5k عملية/شهر (last_ts)	10k/يوم	✅
+7️⃣ استراتيجية الاختبار والتوافق
+نوع الاختبار	النطاق	الأدوات
+Unit	OptimisticUpdateManager, D1 Idempotency, Time Canonicalization, Dynamic Table Names	Vitest
+Integration	Capture Worker → D1 → B2 → SSE	Vitest + MSW
+Cross-Tab Sync	BroadcastChannel + Fallback مع 4 تبويبات متزامنة	Vitest + JSDOM
+SSE Limits	اختبار حد 5 اتصالات لكل storeId	Vitest + Mock
+Performance	FCP, وقت تحميل Analytics, استهلاك الذاكرة	Lighthouse, WebPageTest
+Compatibility	Chrome, Safari, Firefox, Incognito	BrowserStack, Playwright
+Failover	قطع الاتصال, Rollback, Master Election	Vitest + Fake Timers
+DuckDB Threshold	اختبار الجهاز الضعيف (deviceMemory < 4)	UserAgent Mocking
+8️⃣ الخاتمة: لماذا هذا المخطط هو النهائي؟
+هذا المخطط (الإصدار 1.0) هو المرجع الوحيد الذي يجمّع جميع التحسينات المعمارية:
 
-يقوم التطبيق (Server Action/API) بإرسال طلب POST إلى Worker الالتقاط.
+Optimistic UI مع Rollback الذكي لتجربة 0ms.
 
-يقوم Worker بإنشاء كائن الحدث وإضافة طابع زمني (Timestamp) ومعرف فريد (UUID).
+Stateless Sync مع SSE On-Demand (Composite Key, Rate Limit 5) و BroadcastChannel و Polling Fallback.
 
-الكتابة في D1: ينفذ INSERT INTO audit_logs_YYYY_MM (الجدول النشط) مع فهرسة على store_id و created_at.
+D1 Idempotency مع جدول ديناميكي (منع الـ Hardcoded Table Name).
 
-تحديث Redis: ينفذ SET store:{id}:last_ts = {timestamp} في Upstash Redis (مدة صلاحية ساعة واحدة).
+Server Time Canonicalization مع نافذة ±5 دقائق.
 
-يعيد Worker استجابة 200 OK للتطبيق، وتنتهي العملية.
+Pre-fetching عبر Service Worker مع getStoreIdFromClient().
 
-المرحلة الثانية: البث الحي (Live Feed Phase) – الزمن: < 5ms (مع Cache Hit)
-يفتح التاجر لوحة التحكم (Dashboard).
+DuckDB Thresholds مع أرقام صارمة لحماية الأجهزة الضعيفة.
 
-يقوم المتصفح بفتح اتصال Polling وإرسال طلب GET إلى Worker البث الحي مع If-None-Match يحتوي على آخر timestamp معروف.
+Daily Compaction مع Fan-out لتوزيع الحمل على B2.
 
-يقوم Worker بالاستعلام عن Upstash Redis: GET store:{id}:last_ts.
+Master Election مع Timeout سريع (< 500ms).
 
-سيناريو (Cache Hit): إذا كانت القيمة في Redis مساوية للقيمة المرسلة، يرد Worker فوراً بـ 304 Not Modified (بدون أي استعلام على D1).
+حل مشكلة DuckDB-WASM في Worker باستخدام مكتبة Parquet خفيفة.
 
-سيناريو (Cache Miss): إذا كانت القيمة مختلفة أو منتهية الصلاحية، يقوم Worker بالاستعلام عن D1: SELECT * FROM audit_logs_YYYY_MM WHERE store_id = X AND created_at > Y ORDER BY created_at DESC LIMIT 50. يعيد النتائج مع 200 OK ويُحدّث Redis.
+حل مشكلة SSE Multiple Tabs باستخدام Composite Key.
 
-توفير الموارد: في سيناريو الخمول (لا توجد أحداث جديدة)، لا يتم لمس D1 على الإطلاق، مما يحافظ على حصة الـ Reads المجانية.
+حل مشكلة getCurrentValue() باستخدام Getter Injection.
 
-المرحلة الثالثة: التجميع الخام (Raw Aggregation Phase) – تُشغّل كل ساعة
-يُطلق QStash طلب HTTP على Worker التجميع الخام كل ساعة.
+حل مشكلة Replay Loop باستخدام Snapshot.
 
-يقرأ Worker من Upstash Redis قيمة last_processed_ts الخاصة بالمتجر (أو يستخدم قيمة افتراضية هي بداية اليوم).
+حل مشكلة B2 Hive Partitioning بتوحيد المسار إلى events.parquet.
 
-ينفذ استعلاماً محسناً على D1: SELECT * FROM audit_logs_YYYY_MM WHERE store_id = X AND created_at > last_processed_ts.
+رفع مدة صلاحية Presigned URLs إلى 30 دقيقة مع تجديد تلقائي.
 
-يقوم Worker بتحويل نتيجة الاستعلام إلى سلسلة JSON Lines (NDJSON) (تدفق نصي، خفيف جداً).
+اعتماد UTC في جميع أوقات الـ Cron Jobs و Partitioning.
 
-يقوم Worker برفع (Upload) ملف JSON الناتج مباشرة إلى R2 في مسار /raw/year=YYYY/month=MM/day=DD/chunk_{HH}.json.
+جميع المكونات ضمن حدود الخدمات المجانية، مما يضمن تكلفة تشغيلية $0 مطلقة.
 
-يقوم Worker بتحديث last_processed_ts في Upstash Redis إلى الطابع الزمني لآخر حدث تمت معالجته.
+🚀 هذه الوثيقة هي النسخة النهائية المعتمدة، جاهزة للتنفيذ كمرجع هندسي وحيد.
 
-ملاحظة هامة جداً: لا يقوم Worker بحذف أي شيء من D1. الجدول يتراكم طوال الشهر (هذا مقصود، حيث أن D1 تتسع لـ 5 جيجابايت، وهي تكفي لتخزين مئات الآلاف من الأحداث لشهر كامل).
 
-المرحلة الرابعة: التحويل والدمج الثقيل (Heavy Rollup Phase) – تُشغّل يومياً/أسبوعياً/شهرياً
-هذه هي أهم مرحلة لضمان بقاء التكلفة صفرية، حيث يتم استغلال DuckDB-WASM داخل الـ Worker.
 
-التحويل اليومي (Daily Parquet): يُطلق QStash طلباً على Worker التحويل الثقيل في منتصف الليل.
 
-تهيئة DuckDB: يقوم Worker بتحميل DuckDB-WASM (مكتبة WebAssembly مُحملة مسبقاً أو تُحمّل ديناميكياً). الـ WASM يعمل بكفاءة عالية على Cloudflare Workers.
 
-تنفيذ الـ COPY Streaming: يقوم DuckDB بتنفيذ استعلام COPY مباشر:
+الله ينور يا محمد! كدة بقى معانا خارطة الطريق المعمارية الشاملة والنهائية (Master Architectural Roadmap & Rules) لمشروع "دكاني".
 
-المصدر: read_json_auto('https://r2.../raw/year=YYYY/month=MM/day=DD/*.json')
+الوثيقة دي مدمج فيها كل الملاحظات والـ Enhancements اللي اتفقنا عليها، ومكتوبة بروح Architecture Spec جاهزة لتوجيه أي مطور أو AI (زي DeepSeek) للبدء فوراً دون تعديل جديد.
 
-الوجهة: TO 'https://r2.../parquet/year=YYYY/month=MM/day=DD/chunk.parquet' (FORMAT parquet, COMPRESSION ZSTD)
+🗺️ خارطة طريق محرك الأوديت والتزامن الموحد — "دكاني" (v1.0 Final)
+🎯 قواعد وإرشادات التكويد الحاكمة (Developer Directives)
+⚠️ تنبيه للمطور: يجب الالتزام الصارم بالقواعد التالية أثناء توليد أو كتابة كود النظام:
 
-التدفق (Streaming): يقرأ DuckDB ملفات JSON من R2 عبر HTTP ويقوم بكتابة ملف Parquet مباشرة في R2 دون المرور بذاكرة الـ Worker.
+الـ Frontend & State:
 
-الدمج الأسبوعي/الشهري: بعد الانتهاء من التجميع اليومي، يقوم DuckDB بدمج ملفات الأيام الأسبوع الماضي لتكوين week_summary.parquet، ثم دمج الأسابيع لتكوين monthly_summary.parquet. عمليات الدمج هذه تتم أيضاً عن طريق COPY ... TO مباشرة.
+Dynamic State Retrieval: في الـ OptimisticUpdateManager استخدم دالة getCurrentValue(entityId) جلب صريح للقيم من الـ Store وتجنب الـ Magic Numbers أو الـ Static Fallbacks.
 
-التنظيف: بعد نجاح التحويل إلى Parquet، يقوم Worker بحذف ملفات JSON الخام من مسار /raw/ لتوفير المساحة.
+Snapshot-Based Rollback: عند فشل حدث أوبتيمستك، خذ Snapshot صريح لمصفوفة الأحداث المعلقة قبل إعادة تطبيقها (Replay) لضمان عدم السقوط في Race Condition بين التبويبات.
 
-المرحلة الخامسة: إخلاء D1 (Monthly Purge Phase) – تُشغّل في أول الشهر
-في منتصف ليلة اليوم الأول من الشهر الجديد، يُطلق QStash طلباً إلى Worker خاص بالإخلاء.
+Multi-Tab Orchestration: المزامنة محلياً داخل جهاز التاجر تعتمد حصراً على BroadcastChannel (مع Fallback لـ localStorage للتبويبات القديمة).
 
-يتأكد Worker من أن جميع بيانات الشهر الماضي قد تم تحويلها بنجاح إلى Parquet (عن طريق التحقق من وجود monthly_summary.parquet).
+الـ Capture Worker & Cloudflare D1:
 
-يقوم Worker بتنفيذ الأمر الحاسم: DROP TABLE audit_logs_YYYY_MM.
+Dynamic Audit Tables: اسم جدول السجلات يُولّد ديناميكياً بناءً على تاريخ الشهر الحالي UTC بصيغة audit_logs_YYYY_MM.
 
-النتيجة: يتم تحرير مساحة التخزين في D1 فوراً دون أي تفتيت (Fragmentation)، ويعود حجم قاعدة البيانات إلى الصغر، جاهزة لاستقبال الشهر الجديد.
+Idempotency Strategy: تحقق أولاً من الـ idempotency_key بجدول D1 عبر INSERT OR IGNORE. إذا كان التغيير 0 يخرج الووركر فوراً بـ 208 Already Reported.
 
-المرحلة السادسة: التحليلات (Client-Side Analytics Phase) – الزمن: < 2 ثانية
-عند تحميل لوحة التحكم الرئيسية، يبدأ المتصفح في تحميل DuckDB-WASM في الخلفية (Background Pre-fetching) وتخزينها في Cache Storage.
+Batch Deletes: عند تنفيذ عمليات تنظيف لقاعدة البيانات في الـ Cron Jobs، استخدم Batched Deletes (مثلاً LIMIT 1000) لتجنب أخطاء Lock/Timeout في D1.
 
-عندما يضغط التاجر على زر "التقارير المتقدمة"، يكون DuckDB جاهزاً فوراً (0ms تحميل).
+الـ SSE & Service Worker:
 
-يحدد التاجر الفترة الزمنية (مثلاً: يوليو 2026).
+Composite Key SSE Connections: مفتاح الاتصال بـ SSE يتكون من ${storeId}:${tabId}. الحد الأقصى 5 اتصالات متزامنة لكل متجر.
 
-يقوم المتصفح ببناء مسار Hive تلقائياً: /parquet/store_{id}/year=2026/month=07/*.parquet.
+Active Window Store Isolation: استخرج الـ storeId داخل الـ Service Worker ديناميكياً من نافذة العرض النشطة باستخدام self.clients.matchAll().
 
-تنفيذ استعلام DuckDB: SELECT * FROM read_parquet('...') WHERE event_type = 'purchase'.
+Memory Safety: يمنع تشغيل DuckDB-WASM داخل الـ Worker لتقليل استهلاك الـ RAM، ويُكتفى بمكتبة Parquet خفيفة في الـ Backend للدمج والتقطيع.
 
-بفضل الـ Hive Partitioning والـ Metadata Statistics (Min/Max)، يقوم DuckDB بإرسال طلب HTTP Range Request إلى R2، ليقرأ فقط الأجزاء الضرورية من الملف (الـ Row Groups التي تحتوي على تواريخ وأنواع الأحداث المطلوبة). يتم تحميل بضع كيلوبايتات فقط من ملف قد يكون حجمه 100 ميجابايت.
+🚀 مراحل التنفيذ الخمس (Implementation Phases)
+🟢 المرحلة 1: النواة والتسجيل اللحظي (Core Capture & Optimistic Pipeline)
+الأهداف:
 
-تُعرض النتائج في لوحة التحكم بسرعة فائقة.
+بناء OptimisticUpdateManager.ts مع دعم الـ Snapshot و Rollback المعزول.
 
-🛡️ الأمان والعزل (Security & Isolation)
-عزل المتاجر (Multi-tenancy): جميع العمليات (كتابة، قراءة، تجميع، تحليل) تتم بتمرير store_id بشكل إلزامي.
+إنشاء الـ capture-worker.ts وإعداد جداول D1 الديناميكية (audit_logs_YYYY_MM).
 
-في D1: جميع الاستعلامات تحتوي على WHERE store_id = ?.
+دعم فحص الـ Idempotency الحرج أثناء الإدخال.
 
-في R2: هيكل المجلدات يفصل المتاجر /store_{id}/.
+🔵 المرحلة 2: المزامنة الحية وعبر التبويبات (Cross-Tab & SSE Sync Engine)
+الأهداف:
 
-في DuckDB: يُضاف تلقائياً WHERE store_id = 'current' على مستوى التطبيق.
+تنفيذ ناقل الأحداث المحلي CrossTabBus.ts باستعمال BroadcastChannel.
 
-الروابط المؤقتة (Presigned URLs): لا يتم تحميل ملفات Parquet من R2 مباشرة عبر روابط عامة. يقوم Worker بتوليد روابط مؤقتة (Presigned URLs) صالحة لمدة 5 دقائق فقط لكل طلب تحميل، مما يمنع أي وصول غير مصرح به للأرشيف.
+إنشاء موزع أحداث الـ SSE اللا-خادمي (Stateless SSE) بربط المفتاح المركب ${storeId}:${tabId}.
 
-مصادقة QStash: يتم استخدام Authorization: Bearer للتحقق من صحة طلبات الـ Cron القادمة من QStash لمنع هجمات الـ SSRF.
+معالجة انقطاع الشبكة وإعادة التوصيل التلقائي بحساب الفجوات من آخر event_id.
 
-💰 تحليل التكلفة التشغيلية (Zero Cost Proof)
-الخدمة	الاستخدام الشهري المتوقع	حدود الخطة المجانية	النتيجة
-D1 (Storage)	أقل من 500 ميجابايت (شهر واحد فقط من البيانات)	5 جيجابايت	✅ مجاناً
-D1 (Reads)	100,000 قراءة/شهر (فقط عند التغيير، بفضل Redis)	5 مليون قراءة/يوم	✅ مجاناً
-D1 (Writes)	100,000 كتابة/شهر (أحداث جديدة)	100,000 كتابة/يوم	✅ مجاناً
-R2 (Storage)	10,000 ملف Parquet (~1 جيجابايت)	10 جيجابايت	✅ مجاناً
-R2 (Operations)	1,000 عملية كتابة/شهر (ساعوي + يومي)	1 مليون عملية	✅ مجاناً
-Workers	100,000 طلب/يوم (Polling + Cron)	100,000 طلب/يوم	✅ مجاناً
-Upstash Redis	30,000 عملية/شهر (تخزين timestamps)	10,000 عملية/يوم	✅ مجاناً
-Upstash QStash	1,000 طلب/شهر (Cron triggers)	10,000 طلب/شهر	✅ مجاناً
-Bandwidth (Egress)	500 ميجابايت/شهر (تحميل تقارير)	غير محدود (R2 Egress مجاني)	✅ مجاناً
-التكلفة التشغيلية الشهرية الإجمالية: $0.00 ✅
+🟡 المرحلة 3: الـ Service Worker وأرشيف Parquet (Offline & Bulk Archival)
+الأهداف:
 
-🏁 الخاتمة: الميزة التنافسية الاستثنائية
-بهذا الأرشيتيكتر، تحصل منصة "دكاني" على نظام لا مثيل له في السوق:
+ربط الـ Service Worker بالـ Active Client لتمرير الـ storeId تلقائياً مع طلبات الأوفلاين.
 
-النظام الخالد (Immortal): يحتفظ بكل حدث منذ اليوم الأول، في R2 للأبد، دون أي تكلفة إضافية.
+تجميع الأحداث وتحويل الـ JSON إلى حزم Parquet مجدولة في الخلفية للرفع لـ Cloudflare R2 / Backblaze B2.
 
-لوحة القيادة الحية (Live Command Center): تعرض نشاط المتجر في الوقت الفعلي مع استهلاك شبه معدوم للموارد (بفضل Redis ETag).
+ضبط قواعد تفادي خنق الذاكرة (Memory Offloading).
 
-محرك التحليلات الشخصي (Personal BI): يحول بيانات التاجر الخام إلى رؤى استراتيجية في المتصفح، دون تكليف السيرفر بأي عبء.
+🟣 المرحلة 4: الأتمتة المجدولة في الإنتاج (Production Automation & Maintenance)
+الأهداف:
 
-التكلفة الصفرية المطلقة (Absolute $0): تم تصميم كل طبقة لتتناسب مع الحدود المجانية للخدمات، مما يسمح للمنصة بالنمو إلى آلاف التجار دون زيادة في التكلفة التشغيلية.
+ضبط الـ triggers في wrangler.toml لإدارة المهام المجدولة تلقائياً:
 
-المرونة والتوسع الأفقى (Elastic Scalability): بفضل DuckDB Streaming و Hive Partitioning، لا يؤثر حجم البيانات التاريخية (حتى مئات التيرابايت) على أداء قاعدة البيانات النشطة (D1) التي تبقى خفيفة دائماً.
+Ini, TOML
+[triggers]
+crons = [
+  "0 3 28 * *", # يوم 28 الساعة 3:00 AM UTC: إنشاء جدول أوديت الشهر القادم
+  "0 3 1 * *"   # يوم 1 الساعة 3:00 AM UTC: تنظيف مفاتيح Idempotency Keys القديمة
+]
+برمجة الـ scheduled handler لتنفيذ:
 
-في المرحلة الرابعة (Heavy Rollup Phase)، أنت ذكرت إن DuckDB-WASM بيقوم بالتحويل من JSON إلى Parquet.
+إنشاء جدول الشهر القادم تلقائياً (audit_logs_YYYY_MM).
 
-نصيحتي: في الـ Workers، تأكد إنك بتستخدم الـ DuckDB WASM إصدار الـ "Worker/Node" (مش الـ Browser-based)، عشان بيتعامل مع الـ File System بتاع الـ Worker (أو الـ Buffers) بشكل مباشر، وده هيخلي الـ Transformation أسرع بكتير من التعامل مع ملفات JSON ضخمة في الذاكرة.
+حذف مفاتيح الـ Idempotency الأقدم من 30 يوماً على دفيعات (Batched Deletes)، وإرسال تقرير بعدد السجلات المحذوفة عبر Telegram.
 
+🟠 المرحلة 5: تحسينات الاستقرار التشغيلي الممتدة (Post-Launch Enhancements)
+الملاحظات الثلاث المخطط لها حسب معايير التوسع:
 
+معالجة أخطاء تحويل Parquet (عند أول فشل في الإنتاج):
 
+عند حدوث استثناء/فشل أثناء تحويل JSON إلى Parquet، عدم حذف ملف JSON الأصلي من B2.
 
+إرسال تنبيه فوري عبر الـ Telegram Adapter المخصص للأخطاء.
 
+إدراج الملف المتبقي في عملية الدمج والتجميع لليوم التالي تلقائياً.
 
+مراقبة اتصالات SSE والـ Telemetry (عند الوصول لـ 100 متجر نشط):
 
-🚨 الثغرة القاتلة: الـ Memory Crash في بيئة Cloudflare Workers
-إنت أشرت لنصيحة ذكية جداً وهي استخدام نسخة (Worker/Node) من DuckDB-WASM للتعامل مع الـ Buffers، ولكن فيه قيد فيزيائي صارم في Cloudflare Workers لازم تحطه حلقة في ودنك:
+رصد وتأكيد حظر الاتصال الـ 6 لكل متجر.
 
-الخناقة مع الـ Memory Limit: الـ Worker في الخطة المجانية (وحتى المدفوعة العادية) محكوم بـ 128MB من الذاكرة العشوائية (RAM) فقط!
+تسجيل تحذير للـ Telemetry مع زيادة عداد sse_limit_reached_total.
 
-محرك DuckDB-WASM، عشان يقوم بس ويحمل ملفات الـ WebAssembly الخاصة به في البيئة، بياكل جزء محترم من الـ 128MB دي. لو جيت تشغل استعلام مثل:
+إرسال تنبيه تنفيذي إذا تجاوز المتجر محاولات الخنق أكثر من 10 مرات في الساعة لاكتشاف الـ Tab Leaks أو الانتهاكات.
 
-SQL
-COPY (SELECT * FROM read_json_auto('https://r2...')) TO 'https://r2...'
-حتى لو DuckDB شغال بأسلوب الـ Streaming، فهو محتاج يعمل Buffer للبيانات في الـ Memory بتاعته أثناء عملية الضغط (ZSTD Compression). لو حجم ملفات الـ JSON الخام بتاعة اليوم الواحد كبيرة، الـ Worker هيحصل له OOM (Out of Memory) Crash فوراً والسيستم هيقف.
+متابعة دورة التنظيف المجدولة (بعد 3 أشهر من التشغيل المستقر):
 
-💡 الحل العبقري لقفل الثغرة دي (The Edge Workaround):
-بما إن الـ Aggregator Worker بيشتغل كل ساعة وبيسحب الداتا من D1، حجم الداتا في الساعة الواحدة هيكون صغير جداً.
+مراجعة أداء استعلامات D1 وتقارير الـ Cron الخاص بتنظيف idempotency_keys للتأكد من المحافظة على الحجم الأدنى لقاعدة البيانات.
 
-التحويل الفوري (Hourly Transform): خلى الـ Worker اللي بيشتغل كل ساعة يحول الـ JSON الصغير ده لـ Parquet فوراً ويرميه في الـ R2.
 
-الدمج الأعمى (Blind Append / Concat): لما QStash يطلب الدمج اليومي أو الأسبوعي، ماتخليش DuckDB يقف يعيد قراءة الداتا ويحللها في الـ Worker. ملفات الـ Parquet تتميز بخاصية الـ Metadata Padding؛ تقدر تخلي الـ Worker يدمج الملفات كـ Streams أو تخليه يستدعي DuckDB فقط لدمج ملفات Parquet صغيرة جداً لا تتعدى الـ 5MB للملف الواحد، وده بيضمن إن الذاكرة متعديش الـ 50MB أبداً.
+
+# 🏛️ اعتماد وثيقة دستور وخارطة طريق "دكاني" v1.0 (للتنفيذ المباشر)
+
+يرجى الاعتماد الكامل على خارطة الطريق المعمارية والبدء في توليد هيكل الملفات وكتابة الكود المباشر بـ TypeScript متوافقاً مع القواعد الحاكمة (Developer Directives):
+
+1. **البداية بالملفات الأساسية:**
+   * `src/lib/audit/OptimisticUpdateManager.ts` (يدعم CurrentValueGetter و Snapshot Rollback).
+   * `src/workers/capture-worker.ts` (يدعم Dynamic Table Names، Idempotency، و Cron Scheduled Handler).
+   * `src/lib/sync/CrossTabBus.ts` (يدعم BroadcastChannel و SSE Sync).
+
+2. **إعدادات التكوين:**
+   * `wrangler.toml` المحدث بالـ Cron Triggers والـ D1 Bindings.
+
+يرجى البدء بتوليد كود المرحلة الأولى والثانية بكامل تفاصيلها التنفيذية!

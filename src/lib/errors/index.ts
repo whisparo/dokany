@@ -55,6 +55,16 @@ export async function processErrorQueue(
 }
 
 /**
+ * تفريغ الدفعات المعلقة من الـ KV إلى D1 في الخلفية عبر الأوركستريتور
+ */
+export async function processBatchFlush(
+  env?: SystemEnvironment,
+  options?: { batchSize?: number }
+) {
+  return await errorOrchestrator.processBatchFlush(env, options);
+}
+
+/**
  * صياغة استجابة API موحدة
  */
 export function toApiError(error: unknown, includeDetails: boolean = false) {

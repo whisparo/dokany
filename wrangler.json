@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "www",
-  "main": "src/workers/index.ts",
+  "main": "workers/index.ts",
   "compatibility_date": "2026-07-08",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
@@ -15,6 +15,15 @@
       "database_id": "64114e17-bff6-4c40-9340-095165e06421"
     }
   ],
+  "kv_namespaces": [
+    {
+      "binding": "ORDERS_KV",
+      "id": "1e5dc994a827444db59c4b10b527f8c9"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
   "vars": {
     "NEXT_PUBLIC_APP_URL": "https://www.dokany.workers.dev",
     "RATE_LIMITER_URL": "https://dokany-rate-limiter.dokany.workers.dev"

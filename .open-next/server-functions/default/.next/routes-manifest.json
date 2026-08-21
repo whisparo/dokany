@@ -41,6 +41,22 @@
   },
   "dynamicRoutes": [
     {
+      "page": "/api/[[...route]]",
+      "regex": "^/api(?:/(.+?))?(?:/)?$",
+      "routeKeys": {
+        "nxtProute": "nxtProute"
+      },
+      "namedRegex": "^/api(?:/(?<nxtProute>.+?))?(?:/)?$"
+    },
+    {
+      "page": "/[locale]/dashboard/products",
+      "regex": "^/([^/]+?)/dashboard/products(?:/)?$",
+      "routeKeys": {
+        "nxtPlocale": "nxtPlocale"
+      },
+      "namedRegex": "^/(?<nxtPlocale>[^/]+?)/dashboard/products(?:/)?$"
+    },
+    {
       "page": "/[locale]/[storeSlug]",
       "regex": "^/([^/]+?)/([^/]+?)(?:/)?$",
       "routeKeys": {

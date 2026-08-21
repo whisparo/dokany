@@ -30,15 +30,17 @@ const FINAL_STATUSES: readonly HaggleStatus[] = ['accepted', 'rejected', 'expire
 // 📌 الثوابت
 const MESSAGE_MAX = 500;
 const EXPIRY_TOLERANCE_MS = 5000; // هامش تسامح زمني (5 ثوانٍ)
+const MAX_SAFE_AMOUNT = BigInt(2_147_483_647); // الحد الأقصى الآمن للقروش
 
 // ============================================================
 // 🛠️ دوال مساعدة للتحقق
 // ============================================================
 
-/** التحقق من أن السعر أكبر من صفر */
+/** التحقق من أن السعر أكبر من صفر ولا يتجاوز الحد الأقصى */
 function validatePositivePrice(value: string): boolean {
   try {
-    return BigInt(value) > 0;
+    const val = BigInt(value);
+    return val > 0 && val <= MAX_SAFE_AMOUNT;
   } catch {
     return false;
   }
@@ -75,23 +77,23 @@ function validateExpiryDate(expiresAt: Date): boolean {
 // ============================================================
 export const createHaggleSchema = z
   .object({
-    storeId: z.uuid('معرف المتجر غير صالح'),
-    productId: z.uuid('معرف المنتج غير صالح'),
+    storeId: z.uuid({ message: 'معرف المتجر غير صالح' }),
+    productId: z.uuid({ message: 'معرف المنتج غير صالح' }),
     originalPrice: z
       .string()
       .trim()
       .regex(/^\d+$/, 'السعر الأصلي يجب أن يكون رقماً صحيحاً (بالقروش)')
-      .refine((v) => validatePositivePrice(v), 'السعر الأصلي يجب أن يكون أكبر من صفر'),
+      .refine((v) => validatePositivePrice(v), 'السعر الأصلي يجب أن يكون أكبر من صفر ولا يتجاوز الحد المسموح'),
     minAllowedPrice: z
       .string()
       .trim()
       .regex(/^\d+$/, 'الحد الأدنى يجب أن يكون رقماً صحيحاً (بالقروش)')
-      .refine((v) => validatePositivePrice(v), 'الحد الأدنى يجب أن يكون أكبر من صفر'),
+      .refine((v) => validatePositivePrice(v), 'الحد الأدنى يجب أن يكون أكبر من صفر ولا يتجاوز الحد المسموح'),
     currentOffer: z
       .string()
       .trim()
       .regex(/^\d+$/, 'العرض الحالي يجب أن يكون رقماً صحيحاً (بالقروش)')
-      .refine((v) => validatePositivePrice(v), 'العرض الحالي يجب أن يكون أكبر من صفر'),
+      .refine((v) => validatePositivePrice(v), 'العرض الحالي يجب أن يكون أكبر من صفر ولا يتجاوز الحد المسموح'),
     maxRounds: z
       .number()
       .int()
@@ -127,25 +129,32 @@ export const updateHaggleSchema = z
       .string()
       .trim()
       .regex(/^\d+$/, 'العرض الحالي يجب أن يكون رقماً صحيحاً (بالقروش)')
-      .refine((v) => validatePositivePrice(v), 'العرض الحالي يجب أن يكون أكبر من صفر')
+      .refine((v) => validatePositivePrice(v), 'العرض الحالي يجب أن يكون أكبر من صفر ولا يتجاوز الحد المسموح')
       .optional(),
     minAllowedPrice: z
       .string()
       .trim()
       .regex(/^\d+$/, 'الحد الأدنى يجب أن يكون رقماً صحيحاً (بالقروش)')
-      .refine((v) => validatePositivePrice(v), 'الحد الأدنى يجب أن يكون أكبر من صفر')
+      .refine((v) => validatePositivePrice(v), 'الحد الأدنى يجب أن يكون أكبر من صفر ولا يتجاوز الحد المسموح')
       .optional(),
     finalPrice: z
       .string()
       .trim()
       .regex(/^\d+$/, 'السعر النهائي يجب أن يكون رقماً صحيحاً (بالقروش)')
-      .refine((v) => validatePositivePrice(v), 'السعر النهائي يجب أن يكون أكبر من صفر')
+      .refine((v) => validatePositivePrice(v), 'السعر النهائي يجب أن يكون أكبر من صفر ولا يتجاوز الحد المسموح')
       .optional(),
     discountAmount: z
       .string()
       .trim()
       .regex(/^\d+$/, 'مبلغ الخصم يجب أن يكون رقماً صحيحاً (بالقروش)')
-      .refine((v) => BigInt(v) >= BigInt(0), 'مبلغ الخصم لا يمكن أن يكون سالباً')
+      .refine((v) => {
+        try {
+          const val = BigInt(v);
+          return val >= BigInt(0) && val <= MAX_SAFE_AMOUNT;
+        } catch {
+          return false;
+        }
+      }, 'مبلغ الخصم لا يمكن أن يكون سالباً أو يتجاوز الحد المسموح')
       .optional(),
     strategyUsed: z.enum(HAGGLE_STRATEGIES).optional(),
     message: z.string().trim().max(MESSAGE_MAX).optional(),

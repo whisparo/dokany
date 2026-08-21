@@ -1,6 +1,6 @@
 // lib/errors/background/index.ts
-// الإصدار: 1.0.0
-// الدور: البوابة الرئيسية للمعالجات الخلفية والتنفيذيّات الدورية (QStash Cron Jobs)
+// الإصدار: 1.1.0
+// الدور: البوابة الرئيسية للمعالجات الخلفية والتنفيذيّات الدورية (QStash Cron Jobs & Batch Flush)
 
 // ═══════════════════════════════════════════════════════════════
 // 1️⃣ معالج قائمة انتظار الأخطاء (Main Batch Processor)
@@ -32,3 +32,15 @@ export type {
   SilentCodeBreakdown,
   SilentDigestOptions,
 } from './silent-digest';
+
+// ═══════════════════════════════════════════════════════════════
+// 3️⃣ تفريغ الطلبات المعلقة من KV إلى D1 (Order Batch Flush)
+// ═══════════════════════════════════════════════════════════════
+export {
+  processBatchFlush,
+} from './batch-flush';
+
+export type {
+  ProcessedOrderPayload,
+  BatchFlushResult,
+} from './batch-flush';

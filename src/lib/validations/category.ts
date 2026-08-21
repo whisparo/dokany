@@ -14,7 +14,7 @@ const CATEGORY_DESC_MAX = 5000;
 const CATEGORY_ORDER_MAX = 9999;
 
 // ╔════════════════════════════════════════════════════════════╗
-// ║  📝 اسم التصنيف (يدعم العربية والإنجليزية والأرقام)       ║
+// ║  📝 اسم التصنيف (يدعم العربية والإنجليزية والأرقام)        ║
 // ╚════════════════════════════════════════════════════════════╝
 const categoryNameSchema = nonEmptyTrimmedString(
   z.string()
@@ -26,10 +26,11 @@ const categoryNameSchema = nonEmptyTrimmedString(
 );
 
 // ╔════════════════════════════════════════════════════════════╗
-// ║  🆕 CREATE CATEGORY – إنشاء تصنيف جديد                     ║
+// ║  🆕 CREATE CATEGORY – إنشاء تصنيف جديد                    ║
 // ╚════════════════════════════════════════════════════════════╝
+// ✅ تم إزالة storeId من المدخلات لعدم إمكانية التلاعب به أمنياً
+// ✅ تم إزالة الـ refine الخاطئ للتحقق من parentId جوه السيرفر
 export const createCategorySchema = z.object({
-  storeId: uuidSchema,
   name: categoryNameSchema,
   slug: slugSchema,
   description: z
@@ -41,23 +42,12 @@ export const createCategorySchema = z.object({
   parentId: uuidSchema.optional().nullable(),
   order: z.number().int('الترتيب يجب أن يكون رقماً صحيحاً').min(0).max(CATEGORY_ORDER_MAX).default(0),
   isActive: z.boolean().default(true),
-}).strict().refine(
-  (data) => {
-    if (data.parentId && data.parentId === data.storeId) {
-      return false;
-    }
-    return true;
-  },
-  {
-    message: 'معرف التصنيف الأب لا يمكن أن يكون نفس معرف المتجر',
-    path: ['parentId'],
-  }
-);
+}).strict();
 
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 
 // ╔════════════════════════════════════════════════════════════╗
-// ║  ✏️ UPDATE CATEGORY – تحديث تصنيف                          ║
+// ║  ✏️ UPDATE CATEGORY – تحديث تصنيف                           ║
 // ╚════════════════════════════════════════════════════════════╝
 export const updateCategorySchema = z.object({
   name: categoryNameSchema.optional(),

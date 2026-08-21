@@ -39,7 +39,7 @@ function validateMaxDiscount(percentage: boolean, maxDiscount?: string): boolean
 
 // --- حقول مشتركة (لا تتضمن type) ---
 const baseFields = {
-  storeId: z.uuid('معرف المتجر غير صالح'),
+  storeId: z.uuid({ message: 'معرف المتجر غير صالح' }),
   code: z
     .string()
     .trim()
@@ -60,12 +60,12 @@ const baseFields = {
     .nullable()
     .optional(),
   applicableCategories: z
-    .array(z.uuid('معرف التصنيف غير صالح'))
+    .array(z.uuid({ message: 'معرف التصنيف غير صالح' }))
     .refine((arr) => new Set(arr).size === arr.length, 'لا يمكن تكرار نفس التصنيف')
     .nullable()
     .default([]),
   applicableProducts: z
-    .array(z.uuid('معرف المنتج غير صالح'))
+    .array(z.uuid({ message: 'معرف المنتج غير صالح' }))
     .refine((arr) => new Set(arr).size === arr.length, 'لا يمكن تكرار نفس المنتج')
     .nullable()
     .default([]),
@@ -89,12 +89,12 @@ const updateFields = {
   minOrderAmount: z.string().trim().regex(/^\d+$/).nullable().optional(),
   maxDiscountAmount: z.string().trim().regex(/^\d+$/).nullable().optional(),
   applicableCategories: z
-    .array(z.uuid('معرف التصنيف غير صالح'))
+    .array(z.uuid({ message: 'معرف التصنيف غير صالح' }))
     .refine((arr) => new Set(arr).size === arr.length, 'لا يمكن تكرار نفس التصنيف')
     .nullable()
     .optional(),
   applicableProducts: z
-    .array(z.uuid('معرف المنتج غير صالح'))
+    .array(z.uuid({ message: 'معرف المنتج غير صالح' }))
     .refine((arr) => new Set(arr).size === arr.length, 'لا يمكن تكرار نفس المنتج')
     .nullable()
     .optional(),
@@ -236,15 +236,15 @@ export type UpdateCouponInput = z.infer<typeof updateCouponSchema>;
 export const validateCouponSchema = z
   .object({
     code: z.string().trim().min(1, 'كود الكوبون مطلوب'),
-    storeId: z.uuid('معرف المتجر غير صالح'),
+    storeId: z.uuid({ message: 'معرف المتجر غير صالح' }),
     orderAmount: z
       .string()
       .trim()
       .regex(/^\d+$/, 'قيمة الطلب يجب أن تكون رقماً صحيحاً (بالقروش)')
       .refine((v) => BigInt(v) > BigInt(0), 'قيمة الطلب يجب أن تكون أكبر من صفر'),
-    productIds: z.array(z.uuid('معرف المنتج غير صالح')).nullable().optional(),
-    categoryIds: z.array(z.uuid('معرف التصنيف غير صالح')).nullable().optional(),
-    customerId: z.uuid('معرف العميل غير صالح').nullable().optional(),
+    productIds: z.array(z.uuid({ message: 'معرف المنتج غير صالح' })).nullable().optional(),
+    categoryIds: z.array(z.uuid({ message: 'معرف التصنيف غير صالح' })).nullable().optional(),
+    customerId: z.uuid({ message: 'معرف العميل غير صالح' }).nullable().optional(),
   })
   .strict();
 

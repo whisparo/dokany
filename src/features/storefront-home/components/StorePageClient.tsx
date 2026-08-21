@@ -4,7 +4,7 @@
 
 import { useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { useStoreSnapshot } from '@/hooks/useStoreSnapshot';
+import { useStoreSnapshot } from '@/lib/cache/useStoreSnapshot';
 import { Hero } from './Hero';
 import { adaptHero } from './Hero/Hero.adapter';
 import { adaptProductGrid } from '@/components/shared/ProductGrid/ProductGrid.adapter';
@@ -26,14 +26,14 @@ interface StorePageClientProps {
 }
 
 export function StorePageClient({ storeSlug, initialData, page }: StorePageClientProps) {
-  // 🎯 2. تشغيل الـ Snapshot فقط عند غياب البيانات المجهزة (يمنع الـ Double Render المستهلك للـ CPU)
-  const shouldFetchLive = !initialData;
-  const { snapshot, loading, error } = useStoreSnapshot(shouldFetchLive ? storeSlug : '');
+  // 🎯 1. تشغيل الـ Snapshot دائماً لربط الـ Cache / IndexedDB وتلقي التحديثات في الخلفية
+  const { snapshot, loading, error } = useStoreSnapshot(storeSlug);
 
-  // 3️⃣ دمج البيانات الحية أو الابتدائية
+  // 🎯 2. دمج البيانات: نفضل الـ Snapshot الحديث أولاً، ثم الـ initialData المباشرة من الـ SSR
   const rawSnapshotData = snapshot?.data as RawStorePageData | undefined;
-  const data: RawStorePageData | null = initialData ?? rawSnapshotData ?? null;
-  // 4️⃣ حساب التكيفات (Adapters) محاطة بـ useMemo
+  const data: RawStorePageData | null = rawSnapshotData ?? initialData ?? null;
+
+  // 🎯 3. حساب التكيفات (Adapters)
   const heroPayload = useMemo(() => {
     if (!data?.store || !data.store.name || !data.store.slug) return null;
     return adaptHero(data.store);
@@ -54,10 +54,12 @@ export function StorePageClient({ storeSlug, initialData, page }: StorePageClien
     );
   }, [data, page]);
 
-  // 5️⃣ حالات التحميل والخطأ وعدم وجود المتجر
+  // 🎯 4. حالة التحميل تظهر فقط لو مفيش initialData ومفيش Snapshot لسه
   if (loading && !data) {
     return <StorePageSkeleton />;
   }
+
+  // باقي الكود زي ما هو تماماً...
 
   if (error && !data) {
     return (

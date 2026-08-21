@@ -3,7 +3,9 @@
 import type { ButtonItem, OnboardingSession } from './types';
 import { getSession, saveSession } from './memory';
 import { handleOnboarding, type SecureHandlerContext } from './handlers/onboarding-flow';
-import { getDb } from '@/lib/db';
+import { getDb, DbInstance } from '@/lib/db';
+import { safeExecute, SystemError } from '@/lib/errors';
+import type { Env } from '@/lib/env';
 
 export type ButtonRows = ButtonItem[] | ButtonItem[][];
 
@@ -47,7 +49,7 @@ export function telegramToContext(update: TelegramUpdate): TelegramContext | nul
   const chat = msg.chat;
   const contact = update.message?.contact;
   const text = update.callback_query?.data || update.message?.text || '';
-  
+
   const fromUser = update.message?.from || update.callback_query?.from;
 
   return {
@@ -63,85 +65,106 @@ export function telegramToContext(update: TelegramUpdate): TelegramContext | nul
  * معالجة الـ Update القادم من تليجرام
  */
 export async function handleTelegramUpdate(
-  env: { DB: any },
+  env: Env,
   update: TelegramUpdate,
   botToken: string
 ): Promise<void> {
   const ctx = telegramToContext(update);
   if (!ctx) return;
 
-  const db = getDb(env);
+  await safeExecute(async () => {
+    try {
+      const db: DbInstance = getDb(env);
 
-  // 1️⃣ جلب الجلسة الحالية من قاعدة البيانات أو استخدام افتراضية
-  const existingSession = await getSession(db, ctx.platform, ctx.externalId);
-  const currentSession: OnboardingSession = existingSession || { step: 'phone' };
+      // 1️⃣ جلب الجلسة الحالية من قاعدة البيانات أو استخدام افتراضية
+      const existingSession = await getSession(db, ctx.platform, ctx.externalId);
+      const currentSession: OnboardingSession = existingSession || { step: 'phone' };
 
-  // 2️⃣ بناء الـ SecureHandlerContext بدون أي تعارض في الأنواع
-  const secureCtx: SecureHandlerContext = {
-    ...ctx,
-    session: currentSession,
-    env,
-  };
-
-  console.log(
-    `🤖 [Telegram Router] Processing update for Chat ID: ${ctx.externalId}, Step: ${secureCtx.session.step}`
-  );
-
-  try {
-    // 3️⃣ استدعاء المحرك الرئيسي
-    const result = await handleOnboarding(secureCtx);
-
-    // 4️⃣ دمج التحديث الجزئي مع الجلسة الحالية لضمان إرسال OnboardingSession مكتمل لـ saveSession
-    if (result.session) {
-      const updatedSession: OnboardingSession = {
-        ...secureCtx.session,
-        ...result.session,
+      // 2️⃣ بناء الـ SecureHandlerContext بدون أي تعارض في الأنواع
+      const secureCtx: SecureHandlerContext = {
+        ...ctx,
+        session: currentSession,
+        env,
       };
-      await saveSession(db, ctx.platform, ctx.externalId, updatedSession);
-    }
 
-    // 🎯 5️⃣ معالجة أمر إخفاء الكيبورد فوراً لمنع تعارضه مع أزرار الـ Inline التالية
-    if (result.removeKeyboard) {
-      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: ctx.externalId,
-          text: '🔄 جاري التحديث...',
-          reply_markup: { remove_keyboard: true },
-        }),
-      }).then(res => res.json()).then(async (data) => {
-        if (data.ok && data.result?.message_id) {
-          await fetch(`https://api.telegram.org/bot${botToken}/deleteMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: ctx.externalId,
-              message_id: data.result.message_id,
-            }),
-          });
-        }
-      }).catch(() => {});
-    }
+      console.log(
+        `🤖 [Telegram Router] Processing update for Chat ID: ${ctx.externalId}, Step: ${secureCtx.session.step}`
+      );
 
-    // 6️⃣ إرسال الرسالة والأزرار للمستخدم
-    if (result.reply) {
+      // 3️⃣ استدعاء المحرك الرئيسي
+      const result = await handleOnboarding(secureCtx);
+
+      // 4️⃣ دمج التحديث الجزئي مع الجلسة الحالية لضمان إرسال OnboardingSession مكتمل لـ saveSession
+      if (result.session) {
+        const updatedSession: OnboardingSession = {
+          ...secureCtx.session,
+          ...result.session,
+        };
+        await saveSession(db, ctx.platform, ctx.externalId, updatedSession);
+      }
+
+      // 🎯 5️⃣ معالجة أمر إخفاء الكيبورد فوراً لمنع تعارضه مع أزرار الـ Inline التالية
+      if (result.removeKeyboard) {
+        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: ctx.externalId,
+            text: '🔄 جاري التحديث...',
+            reply_markup: { remove_keyboard: true },
+          }),
+        })
+          .then((res) => res.json())
+          .then(async (data) => {
+            if (data.ok && data.result?.message_id) {
+              await fetch(`https://api.telegram.org/bot${botToken}/deleteMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chat_id: ctx.externalId,
+                  message_id: data.result.message_id,
+                }),
+              });
+            }
+          })
+          .catch(() => {});
+      }
+
+      // 6️⃣ إرسال الرسالة والأزرار للمستخدم
+      if (result.reply) {
+        await sendTelegramMessage(
+          botToken,
+          ctx.externalId,
+          result.reply,
+          result.buttons as ButtonRows,
+          result.persistentButtons as ButtonRows
+        );
+      }
+    } catch (error: unknown) {
+      console.error('❌ [Telegram Router Error]:', error);
+
       await sendTelegramMessage(
         botToken,
         ctx.externalId,
-        result.reply,
-        result.buttons as ButtonRows,
-        result.persistentButtons as ButtonRows
+        '❌ حدث خطأ أثناء معالجة طلبك. أرسل /start للبدء من جديد.'
       );
+
+      throw new SystemError({
+        code: 'TELEGRAM_ROUTER_ERROR',
+        userMessage: 'حدث خطأ أثناء معالجة طلب تليجرام',
+        technicalMessage: error instanceof Error ? error.message : 'Unknown Telegram Router Exception',
+        category: 'system',
+        severity: 'warning',
+        retryable: true,
+        shouldAlert: true,
+        metadata: {
+          chatId: ctx.externalId,
+          telegramUserId: ctx.telegramUserId,
+          platform: ctx.platform,
+        },
+      });
     }
-  } catch (error) {
-    console.error('❌ [Telegram Router Error]:', error);
-    await sendTelegramMessage(
-      botToken,
-      ctx.externalId,
-      '❌ حدث خطأ أثناء معالجة طلبك. أرسل /start للبدء من جديد.'
-    );
-  }
+  });
 }
 
 /**
@@ -154,33 +177,45 @@ export async function sendTelegramMessage(
   buttons?: ButtonRows,
   persistentButtons?: ButtonRows
 ): Promise<boolean> {
-  try {
-    const telegramApi = `https://api.telegram.org/bot${botToken}`;
-    const replyMarkup = buildReplyMarkup(buttons, persistentButtons);
+  const result = await safeExecute(async () => {
+    try {
+      const telegramApi = `https://api.telegram.org/bot${botToken}`;
+      const replyMarkup = buildReplyMarkup(buttons, persistentButtons);
 
-    const response = await fetch(`${telegramApi}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        reply_markup: replyMarkup,
-        parse_mode: 'HTML',
-      }),
-    });
+      const response = await fetch(`${telegramApi}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text,
+          reply_markup: replyMarkup,
+          parse_mode: 'HTML',
+        }),
+      });
 
-    if (!response.ok) {
-      const responseText = await response.text();
-      console.error('❌ Telegram API Error:', response.status, responseText);
+      if (!response.ok) {
+        const responseText = await response.text();
+        throw new SystemError({
+          code: 'TELEGRAM_API_HTTP_ERROR',
+          userMessage: 'تعذر الاتصال ببطاقة تليجرام',
+          technicalMessage: `Telegram API responded with HTTP ${response.status}: ${responseText}`,
+          category: 'system',
+          severity: 'warning',
+          retryable: true,
+          shouldAlert: false,
+          metadata: { chatId, status: response.status },
+        });
+      }
+
+      console.log('✅ Message sent successfully to:', chatId);
+      return true;
+    } catch (error: unknown) {
+      console.error('❌ Network/Parse Error in sendTelegramMessage:', error);
       return false;
     }
+  });
 
-    console.log('✅ Message sent successfully to:', chatId);
-    return true;
-  } catch (error) {
-    console.error('❌ Network/Parse Error in sendTelegramMessage:', error);
-    return false;
-  }
+  return result ?? false;
 }
 
 /**

@@ -4,7 +4,7 @@
 // المبدأ: منع تسرب السياق بين الطلبات (Cross-request Context Leaks)
 // البيئة: Cloudflare Workers مع nodejs_compat
 
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { AsyncLocalStorage } from 'async_hooks';
 import type { ErrorContext } from './types';
 
 export type { ErrorContext };

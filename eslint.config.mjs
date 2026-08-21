@@ -16,19 +16,20 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      "bun-env.d.ts",
     ],
   },
   
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 
-  // 🎯 الحفر السحري لإيقاف الـ Strict Errors اللي معطلة الـ Build
+  // 🎯 إيقاف قواعد الـ Strict لتجنب تعطيل الـ Build أثناء بناء المعمارية
   {
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/ban-ts-comment": "off",
-      "@typescript-eslint/no-unused-vars": "off", // 👈 غير دي من "warn" إلى "off"
-    }
-  }
+      "@typescript-eslint/no-unused-vars": "off",
+    },
+  },
 ];
 
 export default eslintConfig;

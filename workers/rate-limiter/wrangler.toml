@@ -1,0 +1,15 @@
+name = "dokany-rate-limiter"
+main = "workers/index.ts"
+compatibility_date = "2026-08-08"
+
+[observability]
+enabled = true
+
+# 🌍 متغيرات البيئة العامة (تستبدلها بروابط حسابك أو تضع القيم الافتراضية)
+[vars]
+ENVIRONMENT = "production"
+
+# 💡 ملاحظة: لا تضع المفاتيح الحساسة (Tokens) هنا بشكل صريح.
+# استخدم الأمر التالي في الـ Terminal لرفع المفاتيح بأمان لـ Cloudflare:
+# npx wrangler secret put UPSTASH_REDIS_REST_URL
+# npx wrangler secret put UPSTASH_REDIS_REST_TOKEN

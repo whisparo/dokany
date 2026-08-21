@@ -1,0 +1,258 @@
+/* src/styles/core/reset.css */
+/* ============================================================
+   📄  المسار: src/styles/core/reset.css
+   🧠  الوظيفة: إعادة ضبط خفيفة للمتصفحات (Light Reset)
+   🔒  المبدأ: توحيد التصيير عبر جميع المتصفحات مع دعم RTL
+   ============================================================ */
+
+/* ═══════════════════════════════════════════════════════════
+   1️⃣  BOX SIZING — نموذج الصندوق الموحد
+   ═══════════════════════════════════════════════════════════ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   2️⃣  ROOT & HTML — إعدادات الصفحة الأساسية
+   ═══════════════════════════════════════════════════════════ */
+html {
+  /* التمرير السلس (مع احترام تفضيلات المستخدم) */
+  scroll-behavior: smooth;
+  /* منع التكبير التلقائي في iOS */
+  -webkit-text-size-adjust: 100%;
+  /* تحسين عرض الخطوط */
+  font-family: var(--font-family-arabic, var(--font-family, system-ui, sans-serif));
+  line-height: var(--line-height-normal, 1.5);
+  /* منع تجاوز المحتوى */
+  overflow-x: clip;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   3️⃣  BODY — الإعدادات الأساسية
+   ═══════════════════════════════════════════════════════════ */
+body {
+  min-height: 100vh;
+  min-height: 100dvh; /* دعم الـ Dynamic Viewport في المتصفحات الحديثة */
+  background-color: var(--colors-background-default, #ffffff);
+  color: var(--colors-text-primary, #111827);
+  font-family: inherit;
+  line-height: inherit;
+  /* منع التمرير الأفقي غير المرغوب */
+  overflow-x: clip;
+  /* تحسين القراءة */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   4️⃣  TYPOGRAPHY — توحيد عناصر النصوص
+   ═══════════════════════════════════════════════════════════ */
+h1, h2, h3, h4, h5, h6 {
+  font-size: inherit;
+  font-weight: var(--font-weight-bold, 700);
+  line-height: var(--line-height-tight, 1.2);
+  /* منع السطر اليتيم */
+  text-wrap: balance;
+}
+
+p, ul, ol, dl, blockquote, pre {
+  margin: 0;
+}
+
+a {
+  color: var(--colors-primary-main, #6366f1);
+  text-decoration: none;
+  /* تحسين التفاعل */
+  transition: color var(--transition-fast, 150ms) var(--ease-out, ease);
+}
+
+a:hover,
+a:focus-visible {
+  color: var(--colors-primary-dark, #4f46e5);
+  text-decoration: underline;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   5️⃣  LISTS — توحيد القوائم
+   ═══════════════════════════════════════════════════════════ */
+ul, ol {
+  padding-left: var(--spacing-lg, 1.5rem);
+}
+
+[dir="rtl"] ul,
+[dir="rtl"] ol {
+  padding-left: 0;
+  padding-right: var(--spacing-lg, 1.5rem);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   6️⃣  MEDIA — عناصر الوسائط
+   ═══════════════════════════════════════════════════════════ */
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   7️⃣  TABLES — توحيد الجداول
+   ═══════════════════════════════════════════════════════════ */
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  width: 100%;
+  caption-side: bottom;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   8️⃣  FORMS — توحيد عناصر النماذج
+   ═══════════════════════════════════════════════════════════ */
+button,
+input,
+optgroup,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  margin: 0;
+  border: none;
+  outline: none;
+  background: none;
+}
+
+button,
+[type="button"],
+[type="reset"],
+[type="submit"] {
+  cursor: pointer;
+  -webkit-appearance: button;
+  appearance: button;
+}
+
+/* منع ظهور السهم في Inputs من نوع Number */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* إزالة الـ Clear Button في Inputs من نوع Search */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   9️⃣  FOCUS — تحسين إمكانية الوصول
+   ═══════════════════════════════════════════════════════════ */
+:focus-visible {
+  outline: 2px solid var(--colors-primary-main, #6366f1);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   🔟  SCROLLBAR — تخصيص شريط التمرير
+   ═══════════════════════════════════════════════════════════ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--colors-border-subtle, #e5e7eb) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--colors-border-strong, #d1d5db);
+  border-radius: var(--radius-full, 9999px);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--colors-text-disabled, #9ca3af);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   11️⃣ SELECTION — تخصيص تحديد النص
+   ═══════════════════════════════════════════════════════════ */
+::selection {
+  background-color: var(--colors-primary-main, #6366f1);
+  color: var(--colors-primary-contrastText, #ffffff);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   12️⃣ REDUCED MOTION — احترام تفضيلات المستخدم
+   ═══════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  html {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   13️⃣ PRINT — تحسين الطباعة
+   ═══════════════════════════════════════════════════════════ */
+@media print {
+  *,
+  *::before,
+  *::after {
+    background: transparent !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  a[href]::after {
+    content: " (" attr(href) ")";
+  }
+
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+
+  pre,
+  blockquote {
+    page-break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr,
+  img {
+    page-break-inside: avoid;
+  }
+}

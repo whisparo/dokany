@@ -13,11 +13,15 @@
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
-    "moduleResolution": "bundler", // ✅ ممتاز ومتوافق مع Next.js و Bun
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
+    "types": [
+      "node",
+      "next"
+    ],
     "plugins": [
       {
         "name": "next"
@@ -31,15 +35,14 @@
   },
   "include": [
     "next-env.d.ts",
-    "bun-env.d.ts", // ✅ ضفنا دي عشان Bun يتعرف على الـ Globals بتاعته
-    "**/*.ts",
-    "**/*.tsx",
-    "src/**/*", // ✅ للتأكيد على قراءة كل ملفات الـ src بما فيها الـ CSS
+    "bun-env.d.ts",
+    "src/**/*",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
-, "vitest.config.mts"  ],
+    ".next/dev/types/**/*.ts",
+    "vitest.config.mts"
+  ],
   "exclude": [
     "node_modules",
-    "src/workers"
+    "workers"
   ]
 }

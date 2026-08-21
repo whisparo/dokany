@@ -75,8 +75,8 @@ function requiresFailureReason(status?: ShipmentStatus): boolean {
 // ============================================================
 export const createShipmentSchema = z
   .object({
-    orderId: z.string().uuid('معرف الطلب غير صالح'),
-    storeId: z.string().uuid('معرف المتجر غير صالح'),
+    orderId: z.uuid({ message: 'معرف الطلب غير صالح' }),
+    storeId: z.uuid({ message: 'معرف المتجر غير صالح' }),
     provider: z
       .string()
       .trim()

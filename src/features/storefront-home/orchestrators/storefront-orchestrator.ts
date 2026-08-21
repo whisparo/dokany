@@ -48,10 +48,24 @@ export const StorefrontOrchestrator = {
 
       if (!rawData || !rawData.store) notFound();
 
+      // 🔍 طباعة بيانات المتجر بالكامل لفحص حقل الثيم وأصله
+      console.log('[Orchestrator Debug] rawData.store:', JSON.stringify(rawData.store));
+
       const adaptedPage = adaptProductPage(rawData, userCurrency);
 
+      // 🎯 استخراج كود الثيم بأمان لمنع استلام كائنات فارغة ({})
+      const storeSettings = rawData.store.settings as Record<string, unknown> | null;
+      const themeCode =
+        (typeof storeSettings?.theme === 'string' && storeSettings.theme) ||
+        (typeof rawData.store.theme === 'string' && rawData.store.theme) ||
+        'default';
+
       return {
-        storeInfo: { name: rawData.store.name, slug: rawData.store.slug },
+        storeInfo: { 
+          name: rawData.store.name, 
+          slug: rawData.store.slug,
+          theme: themeCode,
+        },
         header: adaptHeader(rawData.store),
         hero: adaptedPage.hero,
         categories: adaptedPage.categories,

@@ -1,11 +1,8 @@
-// src/lib/validations/order.ts
-
 import { z } from 'zod';
 
 // ╔════════════════════════════════════════════════════════════╗
-// ║  📦 ORDER – نظام التحقق من الطلبات                         ║
-// ║  📌 القيم مُعرّفة هنا لتطابق الـ Schema مباشرةً.           ║
-// ║     التحقق من الملكية (IDOR) وعزل البيانات يتم في الخدمة.   ║
+// ║  📦 ORDER – نظام التحقق من الطلبات (Edge-Native v3.6)       ║
+// ║  📌 متوافق مع Drizzle Schema + Double-Cache Isolation Engine ║
 // ╚════════════════════════════════════════════════════════════╝
 
 // ============================================================
@@ -42,9 +39,9 @@ const MAX_ITEMS = 100;
 const MAX_QUANTITY = 999;
 
 // ============================================================
-// 🏠 عنوان الشحن (متطابق مع ShippingAddress من الـ Schema)
+// 🏠 عنوان الشحن (ShippingAddress Schema)
 // ============================================================
-const shippingAddressSchema = z.object({
+export const shippingAddressSchema = z.object({
   recipientName: z.string().trim().min(1, 'اسم المستلم مطلوب').max(255),
   recipientPhone: z
     .string()
@@ -67,21 +64,24 @@ const shippingAddressSchema = z.object({
   postalCode: z.string().trim().max(20).optional(),
   landmark: z.string().trim().max(500).optional(),
   notes: z.string().trim().max(500).optional(),
-  // ✅ إضافة دعم للـ Latitude/Longitude (موجود في الـ Schema)
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
 });
 
 // ============================================================
-// 🛒 عنصر الطلب (يجب أن يتطابق مع schema/order-items.ts)
+// 🛒 عنصر الطلب (OrderItem Schema)
 // ============================================================
-const orderItemSchema = z.object({
-  productId: z.string().uuid('معرف المنتج غير صالح'),
+export const orderItemSchema = z.object({
+  productId: z.string().uuid({ message: 'معرف المنتج غير صالح (UUID)' }),
   quantity: z
     .number()
     .int('الكمية يجب أن تكون عدداً صحيحاً')
     .min(1, 'الكمية يجب أن تكون 1 على الأقل')
     .max(MAX_QUANTITY, `الكمية القصوى هي ${MAX_QUANTITY}`),
+  priceInt: z
+    .number()
+    .int('السعر يجب أن يكون عدداً صحيحاً بالقرش/السنت')
+    .nonnegative('السعر لا يمكن أن يكون سالباً'),
   variantSku: z
     .string()
     .trim()
@@ -93,42 +93,81 @@ const orderItemSchema = z.object({
 });
 
 // ============================================================
-// 🆕 CREATE ORDER – إنشاء طلب جديد
+// 🆕 CREATE ORDER – إنشاء طلب جديد (Edge Double-Cache Protocol)
 // ============================================================
 export const createOrderSchema = z.object({
-  storeId: z.string().uuid('معرف المتجر غير صالح'),
+  idempotencyKey: z.string().uuid({ message: 'مفتاح عدم التكرار (Idempotency Key) غير صالح' }),
+  storeId: z.string().uuid({ message: 'معرف المتجر غير صالح' }),
   items: z
     .array(orderItemSchema)
     .min(1, 'يجب أن يحتوي الطلب على عنصر واحد على الأقل')
     .max(MAX_ITEMS, `الحد الأقصى للعناصر هو ${MAX_ITEMS}`),
+  totalAmountInt: z
+    .number()
+    .int('المبلغ الإجمالي يجب أن يكون بالقرش/السنت (Integer)')
+    .nonnegative(),
   shippingAddress: shippingAddressSchema,
-  // ✅ جعل paymentMethod اختيارياً لأن الطلب قد يكون pending بدون طريقة دفع
-  paymentMethod: z.enum(PAYMENT_METHODS).optional(),
+  paymentMethod: z.enum(PAYMENT_METHODS).default('cod'),
   couponCode: z.string().trim().max(50).optional(),
   customerNotes: z.string().trim().max(1000).optional(),
-}).strict();
+}).strict()
+.refine((data) => {
+  // 1. منع تكرار نفس المنتج جوة نفس السلة
+  const productIds = data.items.map((item) => item.productId);
+  return new Set(productIds).size === productIds.length;
+}, {
+  message: 'غير مسموح بتكرار نفس المنتج في السلة، قم بزيادة الكمية بدلاً من ذلك',
+  path: ['items'],
+})
+.refine((data) => {
+  // 2. Math Integrity Check: مطابقة المجموع المالي على الـ Edge
+  const calculatedTotal = data.items.reduce(
+    (sum, item) => sum + item.priceInt * item.quantity,
+    0
+  );
+  return calculatedTotal === data.totalAmountInt;
+}, {
+  message: 'المبلغ الإجمالي غير مطابق لمجموع أسعار المنتجات (تنبيه تلاعب مالي)',
+  path: ['totalAmountInt'],
+});
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 // ============================================================
 // ✏️ UPDATE ORDER – تحديث حالة الطلب
 // ============================================================
-export const updateOrderSchema = z.object({
-  status: z.enum(ORDER_STATUSES).optional(),
-  paymentStatus: z.enum(PAYMENT_STATUSES).optional(),
-  adminNotes: z.string().trim().max(1000).nullable().optional(),
-  cancelReason: z.string().trim().max(500).optional(),
-}).strict().refine(
-  (data) => {
-    if (data.status === 'cancelled' && !data.cancelReason) {
-      return false;
+export const updateOrderSchema = z
+  .object({
+    status: z.enum(ORDER_STATUSES).optional(),
+    paymentStatus: z.enum(PAYMENT_STATUSES).optional(),
+    adminNotes: z.string().trim().max(1000).nullable().optional(),
+    cancelReason: z.string().trim().max(500).optional(),
+  })
+  .strict()
+  .refine(
+    (data) => {
+      if (data.status === 'cancelled' && !data.cancelReason) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: 'يجب إرسال سبب الإلغاء عند إلغاء الطلب',
+      path: ['cancelReason'],
     }
-    return true;
-  },
-  {
-    message: 'يجب إرسال سبب الإلغاء عند إلغاء الطلب',
-    path: ['cancelReason'],
-  }
-);
+  );
 
 export type UpdateOrderInput = z.infer<typeof updateOrderSchema>;
+
+// ============================================================
+// 🔒 SECURITY UTILS – حماية الاستخراج ومنع الـ IDOR
+// ============================================================
+/**
+  استخراج الـ storeId أوتوماتيكياً من اسم الدومين (Hostname)
+  لمنع التلاعب واستبدال الـ storeId من العميل.
+ */
+export function extractStoreIdFromHost(request: Request): string | null {
+  const host = request.headers.get('host') || '';
+  const subdomain = host.split('.')[0];
+  return subdomain && subdomain !== 'www' && subdomain !== 'localhost' ? subdomain : null;
+}

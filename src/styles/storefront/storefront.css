@@ -1,0 +1,542 @@
+/* ============================================================
+   📄  المسار: styles/storefront/storefront.css
+   🛍️  الوظيفة: الأنماط الأساسية لمتجر العميل (Storefront)
+   🔒  المبدأ: أنماط ثابتة تعتمد على CSS Variables من النواة
+   💡  ملاحظة: تُحقن مع CSS Variables الخاصة بالثيم في الـ Edge
+   ============================================================ */
+
+/* ═══════════════════════════════════════════════════════════
+   1️⃣  ROOT LAYOUT — تخطيط الصفحة الأساسي
+   ═══════════════════════════════════════════════════════════ */
+
+/* الهيكل الرئيسي */
+.storefront-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background-color: var(--colors-background-default, #ffffff);
+  color: var(--colors-text-primary, #111827);
+  font-family: var(--typography-font-family, 'Inter', sans-serif);
+}
+
+/* الرأس */
+.storefront-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-index-sticky, 100);
+  background-color: var(--colors-background-paper, #f8fafc);
+  border-bottom: 1px solid var(--colors-border-subtle, #e5e7eb);
+  padding: var(--spacing-md, 16px) var(--layout-container-padding, 16px);
+  height: var(--layout-header-height, 64px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* المحتوى الرئيسي */
+.storefront-main {
+  flex: 1;
+  padding: var(--spacing-lg, 24px) var(--layout-container-padding, 16px);
+  max-width: var(--layout-max-width, 1280px);
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* التذييل */
+.storefront-footer {
+  background-color: var(--colors-background-elevated, #f1f5f9);
+  border-top: 1px solid var(--colors-border-subtle, #e5e7eb);
+  padding: var(--spacing-lg, 24px) var(--layout-container-padding, 16px);
+  text-align: center;
+  color: var(--colors-text-secondary, #4b5563);
+  font-size: var(--typography-font-size-sm, 0.875rem);
+  height: var(--layout-footer-height, 80px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   2️⃣  PRODUCT GRID — شبكة المنتجات
+   ═══════════════════════════════════════════════════════════ */
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--spacing-lg, 24px);
+  margin: var(--spacing-lg, 24px) 0;
+}
+
+/* بطاقة المنتج */
+.product-card {
+  background-color: var(--colors-background-paper, #ffffff);
+  border-radius: var(--card-border-radius, var(--radius-lg, 12px));
+  box-shadow: var(--card-shadow, var(--shadow-md, 0 4px 6px rgba(0,0,0,0.07)));
+  padding: var(--card-padding, var(--spacing-md, 16px));
+  transition: transform var(--transition-base, 250ms) var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)),
+              box-shadow var(--transition-base, 250ms) var(--ease-out, ease);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.product-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg, 0 10px 15px rgba(0,0,0,0.1));
+}
+
+.product-card__image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--radius-sm, 4px);
+  background-color: var(--colors-background-elevated, #f1f5f9);
+  margin-bottom: var(--spacing-sm, 8px);
+}
+
+.product-card__title {
+  font-size: var(--typography-font-size-md, 1rem);
+  font-weight: var(--typography-font-weight-medium, 500);
+  margin: 0 0 var(--spacing-xs, 4px);
+  line-height: var(--typography-line-height-tight, 1.2);
+  display: -webkit-box;
+  display: -moz-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  box-orient: vertical;
+  overflow: hidden;
+}
+
+.product-card__price {
+  font-size: var(--typography-font-size-lg, 1.125rem);
+  font-weight: var(--typography-font-weight-bold, 700);
+  color: var(--colors-primary-main, #6366f1);
+  margin: var(--spacing-xs, 4px) 0;
+}
+
+.product-card__description {
+  font-size: var(--typography-font-size-sm, 0.875rem);
+  color: var(--colors-text-secondary, #4b5563);
+  flex: 1;
+  display: -webkit-box;
+  display: -moz-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: var(--spacing-sm, 8px);
+}
+
+.product-card__actions {
+  display: flex;
+  gap: var(--spacing-sm, 8px);
+  margin-top: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   3️⃣  BUTTONS — الأزرار
+   ═══════════════════════════════════════════════════════════ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--button-border-radius, var(--radius-md, 8px));
+  padding: var(--button-padding-medium, 12px 24px);
+  font-size: var(--typography-font-size-md, 1rem);
+  font-weight: var(--typography-font-weight-medium, 500);
+  line-height: 1;
+  transition: background-color var(--transition-fast, 150ms) var(--ease-out, ease),
+              color var(--transition-fast, 150ms) var(--ease-out, ease),
+              box-shadow var(--transition-fast, 150ms) var(--ease-out, ease),
+              transform var(--transition-fast, 150ms) var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+  background: transparent;
+  color: var(--colors-text-primary, #111827);
+}
+
+.btn--primary {
+  background-color: var(--colors-primary-main, #6366f1);
+  color: var(--colors-primary-contrast, #ffffff);
+}
+
+.btn--primary:hover {
+  background-color: var(--colors-primary-dark, #4f46e5);
+  box-shadow: var(--shadow-md, 0 4px 6px rgba(0,0,0,0.07));
+}
+
+.btn--secondary {
+  background-color: var(--colors-secondary-main, #8b5cf6);
+  color: var(--colors-secondary-contrast, #ffffff);
+}
+
+.btn--secondary:hover {
+  background-color: var(--colors-secondary-dark, #7c3aed);
+}
+
+.btn--outline {
+  background: transparent;
+  border: 2px solid var(--colors-border-strong, #d1d5db);
+  color: var(--colors-text-primary, #111827);
+}
+
+.btn--outline:hover {
+  border-color: var(--colors-primary-main, #6366f1);
+  color: var(--colors-primary-main, #6366f1);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--colors-text-secondary, #4b5563);
+}
+
+.btn--ghost:hover {
+  background-color: var(--colors-background-elevated, #f1f5f9);
+  color: var(--colors-text-primary, #111827);
+}
+
+.btn--small {
+  padding: var(--button-padding-small, 8px 16px);
+  font-size: var(--typography-font-size-sm, 0.875rem);
+}
+
+.btn--large {
+  padding: var(--button-padding-large, 16px 32px);
+  font-size: var(--typography-font-size-lg, 1.125rem);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   4️⃣  FORMS — عناصر النماذج
+   ═══════════════════════════════════════════════════════════ */
+
+.input {
+  width: 100%;
+  padding: var(--spacing-sm, 8px) var(--spacing-md, 16px);
+  border: 1px solid var(--colors-border-subtle, #e5e7eb);
+  border-radius: var(--radius-md, 8px);
+  background-color: var(--colors-background-paper, #ffffff);
+  color: var(--colors-text-primary, #111827);
+  font-size: var(--typography-font-size-md, 1rem);
+  transition: border-color var(--transition-fast, 150ms) var(--ease-out, ease),
+              box-shadow var(--transition-fast, 150ms) var(--ease-out, ease);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--colors-primary-main, #6366f1);
+  box-shadow: 0 0 0 3px var(--colors-border-glow, rgba(99,102,241,0.3));
+}
+
+.input--error {
+  border-color: var(--colors-danger-main, #ef4444);
+}
+
+.input--error:focus {
+  box-shadow: 0 0 0 3px rgba(239,68,68,0.3);
+}
+
+.label {
+  display: block;
+  font-size: var(--typography-font-size-sm, 0.875rem);
+  font-weight: var(--typography-font-weight-medium, 500);
+  color: var(--colors-text-secondary, #4b5563);
+  margin-bottom: var(--spacing-xs, 4px);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   5️⃣  CART — السلة
+   ═══════════════════════════════════════════════════════════ */
+
+/* خلفية تعتيم الشاشة للـ Cart Drawer */
+.cart-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: calc(var(--z-index-modal, 400) - 1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast, 150ms) ease;
+}
+
+.cart-backdrop[data-state="open"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cart-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 100%;
+  max-width: 420px;
+  height: 100%;
+  background-color: var(--colors-background-paper, #ffffff);
+  box-shadow: var(--shadow-xl, 0 20px 25px rgba(0,0,0,0.1));
+  z-index: var(--z-index-modal, 400);
+  transform: translateX(100%);
+  transition: transform var(--transition-slow, 350ms) var(--ease-in-out, ease);
+  display: flex;
+  flex-direction: column;
+}
+
+.cart-drawer[data-state="open"] {
+  transform: translateX(0);
+}
+
+/* RTL */
+[dir="rtl"] .cart-drawer {
+  right: auto;
+  left: 0;
+  transform: translateX(-100%);
+}
+
+[dir="rtl"] .cart-drawer[data-state="open"] {
+  transform: translateX(0);
+}
+
+.cart-drawer__header {
+  padding: var(--spacing-md, 16px);
+  border-bottom: 1px solid var(--colors-border-subtle, #e5e7eb);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cart-drawer__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-md, 16px);
+}
+
+.cart-item {
+  display: flex;
+  gap: var(--spacing-md, 16px);
+  padding: var(--spacing-sm, 8px) 0;
+  border-bottom: 1px solid var(--colors-border-subtle, #e5e7eb);
+}
+
+.cart-item__image {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.cart-item__details {
+  flex: 1;
+}
+
+.cart-item__title {
+  font-weight: var(--typography-font-weight-medium, 500);
+  margin: 0 0 var(--spacing-xs, 4px);
+}
+
+.cart-item__price {
+  color: var(--colors-primary-main, #6366f1);
+  font-weight: var(--typography-font-weight-bold, 700);
+}
+
+.cart-item__quantity {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+  margin-top: var(--spacing-xs, 4px);
+}
+
+.cart-drawer__footer {
+  padding: var(--spacing-md, 16px);
+  border-top: 1px solid var(--colors-border-subtle, #e5e7eb);
+  background-color: var(--colors-background-elevated, #f8fafc);
+}
+
+.cart-drawer__total {
+  display: flex;
+  justify-content: space-between;
+  font-weight: var(--typography-font-weight-bold, 700);
+  font-size: var(--typography-font-size-lg, 1.125rem);
+  margin-bottom: var(--spacing-md, 16px);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   6️⃣  CHECKOUT — صفحة الدفع
+   ═══════════════════════════════════════════════════════════ */
+
+.checkout-form {
+  display: grid;
+  gap: var(--spacing-lg, 24px);
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.checkout-form__section {
+  background-color: var(--colors-background-paper, #ffffff);
+  border-radius: var(--radius-lg, 12px);
+  padding: var(--spacing-lg, 24px);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.1));
+}
+
+.checkout-form__section-title {
+  font-size: var(--typography-font-size-lg, 1.125rem);
+  font-weight: var(--typography-font-weight-semibold, 600);
+  margin-bottom: var(--spacing-md, 16px);
+}
+
+.checkout-form__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md, 16px);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   7️⃣  RESPONSIVE — التجاوب مع الشاشات المختلفة
+   ═══════════════════════════════════════════════════════════ */
+
+/* الهواتف */
+@media (max-width: 640px) {
+  .product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: var(--spacing-md, 16px);
+  }
+
+  .storefront-header {
+    height: 56px;
+    padding: var(--spacing-sm, 8px) var(--spacing-md, 16px);
+  }
+
+  .storefront-main {
+    padding: var(--spacing-md, 16px);
+  }
+
+  .checkout-form__row {
+    grid-template-columns: 1fr;
+  }
+
+  .cart-drawer {
+    max-width: 100%;
+  }
+
+  .btn {
+    min-height: 44px;
+  }
+}
+
+/* الأجهزة اللوحية */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+}
+
+/* الشاشات الكبيرة */
+@media (min-width: 1025px) {
+  .product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   8️⃣  UTILITIES — أدوات مساعدة
+   ═══════════════════════════════════════════════════════════ */
+
+.text-center {
+  text-align: center;
+}
+
+.text-muted {
+  color: var(--colors-text-muted, #9ca3af);
+}
+
+.mt-1 { margin-top: var(--spacing-xs, 4px); }
+.mt-2 { margin-top: var(--spacing-sm, 8px); }
+.mt-3 { margin-top: var(--spacing-md, 16px); }
+.mt-4 { margin-top: var(--spacing-lg, 24px); }
+.mb-1 { margin-bottom: var(--spacing-xs, 4px); }
+.mb-2 { margin-bottom: var(--spacing-sm, 8px); }
+.mb-3 { margin-bottom: var(--spacing-md, 16px); }
+.mb-4 { margin-bottom: var(--spacing-lg, 24px); }
+
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-2 { gap: var(--spacing-sm, 8px); }
+.gap-3 { gap: var(--spacing-md, 16px); }
+
+.w-full { width: 100%; }
+.max-w-full { max-width: 100%; }
+
+/* ═══════════════════════════════════════════════════════════
+   9️⃣  ANIMATIONS — حركات خفيفة
+   ═══════════════════════════════════════════════════════════ */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.product-card {
+  animation: fadeIn 0.4s var(--ease-out, ease) forwards;
+}
+
+.product-card:nth-child(2) { animation-delay: 0.05s; }
+.product-card:nth-child(3) { animation-delay: 0.10s; }
+.product-card:nth-child(4) { animation-delay: 0.15s; }
+.product-card:nth-child(5) { animation-delay: 0.20s; }
+.product-card:nth-child(6) { animation-delay: 0.25s; }
+
+/* ═══════════════════════════════════════════════════════════
+   🔟  REDUCED MOTION — احترام تفضيلات المستخدم
+   ═══════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  .product-card {
+    animation: none;
+  }
+  .product-card:hover {
+    transform: none;
+  }
+  .cart-drawer {
+    transition: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PRINT — تحسين الطباعة
+   ═══════════════════════════════════════════════════════════ */
+
+@media print {
+  .storefront-header,
+  .storefront-footer,
+  .product-card__actions,
+  .cart-drawer,
+  .cart-backdrop {
+    display: none !important;
+  }
+
+  .storefront-main {
+    padding: 0;
+    max-width: 100%;
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-md, 16px);
+  }
+
+  .product-card {
+    box-shadow: none;
+    border: 1px solid #ddd;
+    break-inside: avoid;
+  }
+}

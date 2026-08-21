@@ -9,22 +9,16 @@ const bundleAnalyzer = withBundleAnalyzer({
 });
 
 const nextConfig: NextConfig = {
-  // 🌐 السماح للشبكة المحلية بالاتصال بـ Dev Server بدون حظر Cross-Origin
   allowedDevOrigins: [
     '192.168.1.13',
     'localhost',
     '127.0.0.1',
   ],
 
-  // ❌ تم إزالة output: 'standalone' لمنع التعارض مع @opennextjs/cloudflare
-
-  // 1. تفعيل الضغط التلقائي للـ Output (Gzip / Brotli)
   compress: true,
 
-  // 2. إدارة العناوين الهيكلية (HTTP Cache Control) للـ Static Assets والـ HTML
   async headers() {
     return [
-      // ⚡ كاش أبدي لملفات الـ Build المرفقة بـ Hashes (JS & CSS)
       {
         source: '/_next/static/(.*)',
         headers: [
@@ -34,7 +28,6 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      // ⚡ قاعدة شاملة تغطي أي مسار (عربي مشفر %D8، إنجليزي، أو أي لغة)
       {
         source: '/:path*',
         headers: [
@@ -55,7 +48,6 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  // ⚡ Tree-shaking وتحسين استيراد المكتبات الثقيلة لتقليل حجم الـ Chunks
   experimental: {
     optimizePackageImports: [
       'lucide-react',

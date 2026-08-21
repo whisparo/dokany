@@ -475,3 +475,21 @@ src/features/
     │   └── product-data-fetcher.ts
     └── orchestrators/
         └── product-details-orchestrator.ts
+        features/
+└── storefront-order-confirmation/
+    ├── actions/
+    │   └── order-confirmation.actions.ts
+    ├── adapters/
+    │   └── order-confirmation-page.adapter.ts
+    ├── components/
+    │   
+    │       ├── OrderStatusBanner.tsx
+    │       ├── OrderSummaryCard.tsx
+    │       ├── OrderItemsList.tsx
+    │       ├── ShippingAddressCard.tsx
+    │       ├── OrderConfirmation.theme.ts
+    │       └── index.ts
+    ├── data/
+    │   └── order-confirmation-data-fetcher.ts
+    └── orchestrators/
+        └── order-confirmation.orchestrator.ts

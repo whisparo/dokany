@@ -9,10 +9,9 @@ import type { RawOrderItemInput } from '@/lib/services/order-service';
 
 import { enforceRateLimit } from '@/lib/rate-limit-client';
 import { handleActionError } from '@/lib/error-handler';
-
-// ============================================================
-// 📋 Types
-// ============================================================
+import { getOrWarmupStock, deductStockCache, rollbackStockCache } from '@/lib/cache/edge-stock-cache';
+import { TelegramBusinessChannel } from '@/lib/alerts/channels/telegram-business';
+import type { AlertEvent } from '@/lib/alerts/types';
 
 export interface ShippingAddress {
   street: string;
@@ -38,7 +37,6 @@ export interface CheckoutFormSubmission {
   currency?: string;
   paymentMethod?: string;
   shippingMethod?: string;
-  /** ⚠️ إلزامي: لازم ييجي من الـ Client عشان الـ Idempotency يشتغل صح */
   idempotencyKey: string;
 }
 
@@ -50,16 +48,11 @@ export interface CheckoutActionResult {
   redirectTo?: string;
 }
 
-// ============================================================
-// 🎯 Main Action
-// ============================================================
-
 export async function handleCheckoutSubmit(
   storeSlug: string,
   storeId: string,
   payload: CheckoutFormSubmission
 ): Promise<CheckoutActionResult> {
-  // ✅ Validation مبكر قبل أي عملية
   if (!payload.idempotencyKey || payload.idempotencyKey.trim() === '') {
     return {
       success: false,
@@ -72,37 +65,59 @@ export async function handleCheckoutSubmit(
   }
 
   try {
-    // ═══════════════════════════════════════════════════════════
     // 🛡️ 1. Rate Limiting
-    // ═══════════════════════════════════════════════════════════
     await enforceRateLimit({
       action: 'checkout',
       storeId: storeId,
     });
 
-    // ✅ جلب الـ Context كاملاً للاستفادة من waitUntil
     const cfContext = await getCloudflareContext();
     const env = cfContext.env;
     const waitUntil = cfContext.ctx?.waitUntil?.bind(cfContext.ctx);
 
-    // ═══════════════════════════════════════════════════════════
-    // 👤 2. جلب أو إنشاء العميل
-    // ═══════════════════════════════════════════════════════════
+    // ⚡ 2. تجهيز المنتجات المعالجة وتحويل المبالغ إلى أعداد صحيحة (Cents/Integers)
+    const processedItems: { productId: string; qty: number; unitPriceCents: number }[] = [];
+
+    for (const item of payload.items) {
+      const qty = typeof item.orderedQty === 'number' ? item.orderedQty : Number(item.orderedQty) || 1;
+      const unitPriceCents = Math.round((typeof item.price === 'number' ? item.price : Number(item.price) || 0) * 100);
+
+      if (qty <= 0) {
+        return { success: false, error: 'كميات المنتجات غير صالحة' };
+      }
+
+      processedItems.push({
+        productId: item.productId,
+        qty,
+        unitPriceCents,
+      });
+    }
+
+    // ⚡ 3. فحص الكاش بالتوازي (Parallel Cache Check) لتجنب الـ Sequential Latency
+    const stockChecks = await Promise.all(
+      processedItems.map(async (item) => {
+        const availableStock = await getOrWarmupStock(env, storeId, item.productId);
+        return { productId: item.productId, availableStock, requiredQty: item.qty };
+      })
+    );
+
+    const insufficientItem = stockChecks.find((check) => check.availableStock < check.requiredQty);
+    if (insufficientItem) {
+      return {
+        success: false,
+        error: 'عذراً، الكمية المطلوبة لبعض المنتجات غير متوفرة حالياً.',
+      };
+    }
+
+    // 👤 4. إدارة العميل
     const customer = await CustomerService.findOrCreateCustomer(env, {
       name: payload.customer.name,
       phone: payload.customer.phone,
       email: payload.customer.email,
     });
 
-    // ═══════════════════════════════════════════════════════════
-    // 🧮 3. حساب الإجماليات (بـ Cents للحماية من أخطاء الفاصلة)
-    // ═══════════════════════════════════════════════════════════
-    const subtotalCents = payload.items.reduce((acc, item) => {
-      const price = typeof item.price === 'number' ? item.price : Number(item.price) || 0;
-      const qty = typeof item.orderedQty === 'number' ? item.orderedQty : Number(item.orderedQty) || 0;
-      return acc + Math.round(price * 100 * qty);
-    }, 0);
-
+    // 🧮 5. الحسابات المالية الدقيقة
+    const subtotalCents = processedItems.reduce((acc, item) => acc + item.unitPriceCents * item.qty, 0);
     const shippingCostCents = Math.round((payload.shippingCost || 0) * 100);
     const taxAmountCents = Math.round((payload.taxAmount || 0) * 100);
     const discountCents = Math.round((payload.discountAmount || 0) * 100);
@@ -112,14 +127,28 @@ export async function handleCheckoutSubmit(
       subtotalCents + shippingCostCents + taxAmountCents - Math.min(discountCents, subtotalCents)
     );
 
-    // ═══════════════════════════════════════════════════════════
-    // 🔑 4. Idempotency Key
-    // ═══════════════════════════════════════════════════════════
-    const idempotencyKey = payload.idempotencyKey;
+    // 📉 6. الخصم التراكمي المحمي مع تتبع التراجع (Rollback Tracker)
+    const successfullyDeducted: { productId: string; qty: number }[] = [];
 
-    // ═══════════════════════════════════════════════════════════
-    // 📦 5. بناء OrderInput
-    // ═══════════════════════════════════════════════════════════
+    try {
+      for (const item of processedItems) {
+        await deductStockCache(env, storeId, item.productId, item.qty);
+        successfullyDeducted.push({ productId: item.productId, qty: item.qty });
+      }
+    } catch (deductErr) {
+      // 🔄 التراجع التراكمي فور حدوث خطأ أثناء خصم أحد المنتجات
+      await Promise.all(
+        successfullyDeducted.map((deducted) =>
+          rollbackStockCache(env, storeId, deducted.productId, deducted.qty)
+        )
+      );
+      return {
+        success: false,
+        error: 'حدث خطأ أثناء تحديث مخزون المنتجات، يرجى إعادة المحاولة.',
+      };
+    }
+
+    // 📦 7. بناء بيانات الطلب وإرساله للـ Pipeline
     const orderInput: OrderInput = {
       id: crypto.randomUUID(),
       storeId: storeId,
@@ -141,21 +170,57 @@ export async function handleCheckoutSubmit(
       rawItems: payload.items,
     };
 
-    // ═══════════════════════════════════════════════════════════
-    // 🚀 6. تنفيذ الطلب (مع Idempotency + Atomic Reservation + waitUntil)
-    // ═══════════════════════════════════════════════════════════
-    const createdOrder = await processOrder(env, orderInput, idempotencyKey, waitUntil);
+    let createdOrder;
+    try {
+      createdOrder = await processOrder(env, orderInput, payload.idempotencyKey, waitUntil);
+    } catch (processErr: unknown) {
+      // 🔄 التراجع في حال فشل معالجة الطلب
+      await Promise.all(
+        successfullyDeducted.map((deducted) =>
+          rollbackStockCache(env, storeId, deducted.productId, deducted.qty)
+        )
+      );
+      throw processErr;
+    }
 
     if (!createdOrder) {
+      await Promise.all(
+        successfullyDeducted.map((deducted) =>
+          rollbackStockCache(env, storeId, deducted.productId, deducted.qty)
+        )
+      );
       return {
         success: false,
         error: 'فشل في إتمام الطلب، يرجى المحاولة لاحقاً',
       };
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // 🎯 7. إرجاع URL للـ redirect
-    // ═══════════════════════════════════════════════════════════
+    // 📣 8. التنبيهات الجانبية في الخلفية (Non-blocking)
+    if (waitUntil) {
+      const telegramChannel = new TelegramBusinessChannel();
+      const alertEvent: AlertEvent<'NEW_ORDER'> = {
+        id: crypto.randomUUID(),
+        type: 'NEW_ORDER',
+        severity: 'INFO',
+        timestamp: Date.now(),
+        payload: {
+          storeId: storeId,
+          orderId: createdOrder.id,
+          customerName: payload.customer.name,
+          totalAmount: totalCents,
+          currency: payload.currency || 'EGP',
+          itemsCount: payload.items.length,
+        },
+      };
+
+      waitUntil(
+        telegramChannel
+          .send(alertEvent, env)
+          .catch((err: unknown) => console.error('[Telegram Alert Error]:', err))
+      );
+    }
+
+    // 🎯 9. التوجيه لصفحة التأكيد
     const decodedSlug = decodeURIComponent(storeSlug);
     const redirectUrl = `/${decodedSlug}/order-confirmation?orderId=${createdOrder.id}&orderNumber=${createdOrder.orderNumber}`;
 
@@ -167,7 +232,6 @@ export async function handleCheckoutSubmit(
     };
   } catch (err: unknown) {
     console.error('[Checkout] Submission Error:', err);
-
     return {
       success: false,
       error: handleActionError(err),

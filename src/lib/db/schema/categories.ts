@@ -42,11 +42,11 @@ export const categories = sqliteTable(
 
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
 
-    // ✅ تحويل مصفوفة وسائط JSON بدعم Drizzle Runtime
+    // ✅ تعديل Drizzle Runtime النظيف لـ JSON Array المتوافق مع D1
     mediaIds: text('media_ids', { mode: 'json' })
       .$type<string[]>()
       .notNull()
-      .default(sql`'[]'`),
+      .default([]),
 
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
     deletedBy: text('deleted_by'),

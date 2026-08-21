@@ -47,18 +47,22 @@ export const CURRENCIES = [
 // 📌 الثوابت
 const PROVIDER_MAX = 50;
 const TRANSACTION_ID_MAX = 255;
+const MAX_SAFE_AMOUNT = BigInt(2_147_483_647); // الحد الأقصى المسموح للقروش
 
 // ============================================================
 // 🆕 CREATE PAYMENT – إنشاء دفعة جديدة
 // ============================================================
 export const createPaymentSchema = z.object({
-  orderId: z.string().uuid('معرف الطلب غير صالح'),
-  storeId: z.string().uuid('معرف المتجر غير صالح'),
+  orderId: z.uuid({ message: 'معرف الطلب غير صالح' }),
+  storeId: z.uuid({ message: 'معرف المتجر غير صالح' }),
   amount: z
     .string()
     .trim()
     .regex(/^\d+$/, 'المبلغ يجب أن يكون رقماً صحيحاً (بالقروش)')
-    .refine((val) => BigInt(val) > 0, 'المبلغ يجب أن يكون أكبر من صفر'),
+    .refine((val) => {
+      const bVal = BigInt(val);
+      return bVal > 0 && bVal <= MAX_SAFE_AMOUNT;
+    }, 'المبلغ يجب أن يكون أكبر من صفر ولا يتجاوز الحد الأقصى المسموح به'),
   currency: z.enum(CURRENCIES).default('EGP'),
   method: z.enum(PAYMENT_METHODS),
   provider: z.string().trim().max(PROVIDER_MAX).optional(),
@@ -84,7 +88,10 @@ export const updatePaymentSchema = z.object({
     .string()
     .trim()
     .regex(/^\d+$/, 'مبلغ الاسترداد يجب أن يكون رقماً صحيحاً (بالقروش)')
-    .refine((val) => BigInt(val) > 0, 'مبلغ الاسترداد يجب أن يكون أكبر من صفر')
+    .refine((val) => {
+      const bVal = BigInt(val);
+      return bVal > 0 && bVal <= MAX_SAFE_AMOUNT;
+    }, 'مبلغ الاسترداد يجب أن يكون أكبر من صفر ولا يتجاوز الحد الأقصى المسموح به')
     .optional(),
   refundReason: z.string().trim().max(500).optional(),
   refundedAt: z.coerce
