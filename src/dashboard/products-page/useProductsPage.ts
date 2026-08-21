@@ -17,6 +17,9 @@ export function useProductsPage() {
   const router = useRouter();
   const { data: session } = useSession();
 
+  // 1. استخراج storeId
+  const storeId = (session?.user as { merchantId?: string })?.merchantId || '';
+
   // حالة الفلترة والصفحات
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebounce(search, 500);
@@ -37,7 +40,7 @@ export function useProductsPage() {
 
   // جلب خيارات الأقسام
   const { data: categoriesData, isLoading: categoriesLoading } = useQuery({
-    queryKey: ['categoryFilterOptions'],
+    queryKey: ['categoryFilterOptions', storeId],
     queryFn: async () => {
       const result = await getCategoryFilterOptionsQuery();
       if (!result.success) {
@@ -45,13 +48,13 @@ export function useProductsPage() {
       }
       return result.data || [];
     },
+    enabled: !!storeId,
     staleTime: 1000 * 60 * 5,
   });
 
   // جلب المنتجات
-  // جلب المنتجات
   const { data: productsData, isLoading: productsLoading } = useQuery({
-    queryKey: ['products', selectedCategoryId, debouncedSearch, page],
+    queryKey: ['products', storeId, selectedCategoryId, debouncedSearch, page],
     queryFn: async () => {
       const result = await listProductsAction({
         page,
@@ -63,17 +66,15 @@ export function useProductsPage() {
         sortOrder: 'desc',
       });
 
-      // التحقق الأمني من الـ Error State بأسلوب Safe Type Guard
       if (result && 'success' in result && result.success === false) {
         throw new Error((result as { message?: string }).message || 'فشل جلب المنتجات');
       }
 
       return result;
     },
+    enabled: !!storeId,
     staleTime: 1000 * 30,
   });
-  // استخراج storeId / merchantId بأمان من الـ session
-  const storeId = (session?.user as { merchantId?: string })?.merchantId || '';
 
   // Mutations
   const { deleteProduct, updateStock } = useProductMutations(storeId);
@@ -107,6 +108,10 @@ export function useProductsPage() {
     [updateStock]
   );
 
+  const navigateToNewProduct = useCallback(() => {
+    router.push('/dashboard/products/new');
+  }, [router]);
+
   return {
     state: {
       search,
@@ -124,7 +129,10 @@ export function useProductsPage() {
       setPage,
       handleDelete,
       handleStockUpdate,
-      navigateToNewProduct: () => router.push('/dashboard/products/new'),
+      navigateToNewProduct,
     },
   };
 }
+
+// تصدير النوع بشكل مباشر ونظيف لحل مشكلة الـ index.ts
+export type UseProductsPageReturn = ReturnType<typeof useProductsPage>;

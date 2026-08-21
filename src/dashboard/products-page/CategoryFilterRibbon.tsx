@@ -2,8 +2,9 @@
 
 'use client';
 
-import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { useLocale } from 'next-intl';
+
 import Button from '@/components/shared/Button';
 import { Badge } from '@/components/shared/Badge/Badge';
 import {
@@ -27,7 +28,8 @@ export function CategoryFilterRibbon({
   onSelect,
   isLoading,
 }: CategoryFilterRibbonProps) {
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const locale = useLocale();
+  const isRTL = locale === 'ar';
 
   if (isLoading) {
     return (
@@ -76,11 +78,7 @@ export function CategoryFilterRibbon({
 
         if (hasChildren) {
           return (
-            <DropdownMenu
-              key={category.id}
-              open={openDropdown === category.id}
-              onOpenChange={(open: boolean) => setOpenDropdown(open ? category.id : null)}
-            >
+            <DropdownMenu key={category.id}>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant={isActive ? 'primary' : 'outline'}
@@ -94,25 +92,34 @@ export function CategoryFilterRibbon({
                   <ChevronDown className="ms-1 h-3 w-3" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-48">
-                <DropdownMenuItem onClick={() => onSelect(category.id)}>
+              <DropdownMenuContent align={isRTL ? 'end' : 'start'} className="w-52">
+                <DropdownMenuItem
+                  onClick={() => onSelect(category.id)}
+                  className={isParentSelected ? 'bg-accent font-medium' : ''}
+                >
                   {category.name} (الكل)
                 </DropdownMenuItem>
-                {category.children?.map((child) => (
-                  <DropdownMenuItem
-                    key={child.id}
-                    onClick={() => onSelect(child.id)}
-                    className="flex items-center justify-between ps-4"
-                  >
-                    <span className="flex items-center gap-1">
-                      <span className="text-muted-foreground">└</span>
-                      {child.name}
-                    </span>
-                    <Badge variant="secondary" className="ms-auto">
-                      {child.productsCount || 0}
-                    </Badge>
-                  </DropdownMenuItem>
-                ))}
+
+                {category.children?.map((child) => {
+                  const isSelected = selectedCategoryId === child.id;
+                  return (
+                    <DropdownMenuItem
+                      key={child.id}
+                      onClick={() => onSelect(child.id)}
+                      className={`flex items-center justify-between ps-4 ${
+                        isSelected ? 'bg-accent font-medium text-primary' : ''
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground rtl:rotate-90">└</span>
+                        {child.name}
+                      </span>
+                      <Badge variant="secondary" className="ms-auto">
+                        {child.productsCount || 0}
+                      </Badge>
+                    </DropdownMenuItem>
+                  );
+                })}
               </DropdownMenuContent>
             </DropdownMenu>
           );

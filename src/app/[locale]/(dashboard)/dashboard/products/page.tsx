@@ -34,18 +34,19 @@ export default function ProductsPage() {
       {/* Search & Actions Bar */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="بحث في المنتجات..."
             value={state.search}
             onChange={(e) => actions.setSearch(e.target.value)}
-            className="pr-9 pl-9"
+            className="ps-9 pe-9"
           />
           {state.search && (
             <button
               type="button"
               onClick={() => actions.setSearch('')}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="مسح البحث"
             >
               <X className="h-4 w-4" />
             </button>
@@ -90,7 +91,7 @@ export default function ProductsPage() {
             >
               السابق
             </Button>
-            <span className="text-sm font-medium px-2">
+            <span className="text-sm font-medium px-2 font-mono">
               {state.page} من {state.pagination.totalPages}
             </span>
             <Button

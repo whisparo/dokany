@@ -22,7 +22,7 @@
     }
   ],
   "triggers": {
-    "crons": ["0 * * * *"]
+    "crons": ["*/5 * * * *"]
   },
   "vars": {
     "NEXT_PUBLIC_APP_URL": "https://www.dokany.workers.dev",

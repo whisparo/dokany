@@ -36,6 +36,13 @@
       "when": 1786818076892,
       "tag": "0004_previous_nightmare",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1787336843827,
+      "tag": "0005_dark_silhouette",
+      "breakpoints": true
     }
   ]
 }

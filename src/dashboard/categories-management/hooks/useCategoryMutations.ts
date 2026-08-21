@@ -31,41 +31,9 @@ import type {
 // ============================================================
 
 interface MutationContext {
-  previousList?: CategoryListResult;
+  previousLists?: [readonly unknown[], CategoryListResult | undefined][];
   previousTree?: CategoryTree[];
   previousCategory?: Category;
-  optimisticId?: string;
-}
-
-function updateCategoryInList(
-  list: CategoryListResult | undefined,
-  categoryId: string,
-  updates: Partial<Category>
-): CategoryListResult | undefined {
-  if (!list?.data) return list;
-
-  return {
-    ...list,
-    data: list.data.map((c) =>
-      c.id === categoryId ? { ...c, ...updates, updatedAt: new Date() } : c
-    ),
-  };
-}
-
-function removeCategoryFromList(
-  list: CategoryListResult | undefined,
-  categoryId: string
-): CategoryListResult | undefined {
-  if (!list?.data) return list;
-
-  return {
-    ...list,
-    data: list.data.filter((c) => c.id !== categoryId),
-    pagination: {
-      ...list.pagination,
-      total: Math.max(0, list.pagination.total - 1),
-    },
-  };
 }
 
 // ============================================================
@@ -88,57 +56,62 @@ export function useCreateCategory(storeId: string) {
       await queryClient.cancelQueries({ queryKey: ['categories', storeId] });
       await queryClient.cancelQueries({ queryKey: ['categories-tree', storeId] });
 
-      const previousList = queryClient.getQueryData<CategoryListResult>(['categories', storeId]);
+      const previousLists = queryClient.getQueriesData<CategoryListResult>({
+        queryKey: ['categories', storeId],
+      });
       const previousTree = queryClient.getQueryData<CategoryTree[]>(['categories-tree', storeId]);
 
+      // 1. تعريف المتغير optimisticId
       const optimisticId = `optimistic_${Date.now()}`;
-      const optimisticCategory: Partial<Category> = {
+
+      // 2. تكوين الـ Optimistic Object بالكامل بدون أي ناقص في الحقول
+      const optimisticCategory: Category = {
         id: optimisticId,
         storeId,
         parentId: input.parentId || null,
         name: input.name,
         slug: input.slug || 'optimistic-slug',
         description: input.description || null,
+        image: null,
+        level: input.parentId ? 1 : 0,
+        path: null,
+        mediaIds: [],
         order: input.order || 0,
         productsCount: 0,
         isActive: input.isActive ?? true,
+        deletedAt: null,
+        deletedBy: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      if (previousList?.data) {
-        queryClient.setQueryData(['categories', storeId], {
-          ...previousList,
-          data: [optimisticCategory as Category, ...previousList.data],
-          pagination: {
-            ...previousList.pagination,
-            total: previousList.pagination.total + 1,
-          },
-        });
-      }
-
-      return { previousList, previousTree, optimisticId };
-    },
-
-    onSuccess: (data, variables, context) => {
-      toast.success(data.message || 'تم إضافة القسم بنجاح');
-
-      if (data.data && context?.optimisticId) {
-        const currentList = queryClient.getQueryData<CategoryListResult>(['categories', storeId]);
-        if (currentList?.data) {
-          queryClient.setQueryData(['categories', storeId], {
-            ...currentList,
-            data: currentList.data.map((item) =>
-              item.id === context.optimisticId ? data.data! : item
-            ),
-          });
+      queryClient.setQueriesData<CategoryListResult>(
+        { queryKey: ['categories', storeId] },
+        (old) => {
+          if (!old?.data) return old;
+          return {
+            ...old,
+            data: [optimisticCategory, ...old.data],
+            pagination: {
+              ...old.pagination,
+              total: old.pagination.total + 1,
+            },
+          };
         }
-      }
+      );
+
+      return { previousLists, previousTree };
     },
 
-    onError: (error, variables, context) => {
-      if (context?.previousList) {
-        queryClient.setQueryData(['categories', storeId], context.previousList);
+    onSuccess: (data) => {
+      toast.success(data.message || 'تم إضافة القسم بنجاح');
+    },
+
+    onError: (error, _variables, context) => {
+      if (context?.previousLists) {
+        context.previousLists.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
       }
       if (context?.previousTree) {
         queryClient.setQueryData(['categories-tree', storeId], context.previousTree);
@@ -150,6 +123,7 @@ export function useCreateCategory(storeId: string) {
       queryClient.invalidateQueries({ queryKey: ['categories', storeId] });
       queryClient.invalidateQueries({ queryKey: ['categories-tree', storeId] });
       queryClient.invalidateQueries({ queryKey: ['categories-flat', storeId] });
+      queryClient.invalidateQueries({ queryKey: ['store-snapshot', storeId] });
     },
   });
 }
@@ -173,30 +147,39 @@ export function useUpdateCategory(storeId: string) {
     },
 
     onMutate: async (variables) => {
+      const { categoryId, input } = variables;
       await queryClient.cancelQueries({ queryKey: ['categories', storeId] });
       await queryClient.cancelQueries({ queryKey: ['categories-tree', storeId] });
-      await queryClient.cancelQueries({ queryKey: ['category', variables.categoryId] });
+      await queryClient.cancelQueries({ queryKey: ['category', categoryId] });
 
-      const previousList = queryClient.getQueryData<CategoryListResult>(['categories', storeId]);
+      const previousLists = queryClient.getQueriesData<CategoryListResult>({
+        queryKey: ['categories', storeId],
+      });
       const previousTree = queryClient.getQueryData<CategoryTree[]>(['categories-tree', storeId]);
-      const previousCategory = queryClient.getQueryData<Category>(['category', variables.categoryId]);
-
-      if (previousList) {
-        queryClient.setQueryData(
-          ['categories', storeId],
-          updateCategoryInList(previousList, variables.categoryId, variables.input)
-        );
-      }
+      const previousCategory = queryClient.getQueryData<Category>(['category', categoryId]);
 
       if (previousCategory) {
-        queryClient.setQueryData(['category', variables.categoryId], {
+        queryClient.setQueryData<Category>(['category', categoryId], {
           ...previousCategory,
-          ...variables.input,
+          ...input,
           updatedAt: new Date(),
         });
       }
 
-      return { previousList, previousTree, previousCategory };
+      queryClient.setQueriesData<CategoryListResult>(
+        { queryKey: ['categories', storeId] },
+        (old) => {
+          if (!old?.data) return old;
+          return {
+            ...old,
+            data: old.data.map((c) =>
+              c.id === categoryId ? { ...c, ...input, updatedAt: new Date() } : c
+            ),
+          };
+        }
+      );
+
+      return { previousLists, previousTree, previousCategory };
     },
 
     onSuccess: (data) => {
@@ -204,8 +187,10 @@ export function useUpdateCategory(storeId: string) {
     },
 
     onError: (error, variables, context) => {
-      if (context?.previousList) {
-        queryClient.setQueryData(['categories', storeId], context.previousList);
+      if (context?.previousLists) {
+        context.previousLists.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
       }
       if (context?.previousTree) {
         queryClient.setQueryData(['categories-tree', storeId], context.previousTree);
@@ -216,7 +201,7 @@ export function useUpdateCategory(storeId: string) {
       toast.error(error.message || 'فشل تحديث القسم');
     },
 
-    onSettled: (data, error, variables) => {
+    onSettled: (_data, _error, variables) => {
       queryClient.invalidateQueries({ queryKey: ['categories', storeId] });
       queryClient.invalidateQueries({ queryKey: ['categories-tree', storeId] });
       queryClient.invalidateQueries({ queryKey: ['category', variables.categoryId] });
@@ -244,29 +229,42 @@ export function useDeleteCategory(storeId: string) {
     },
 
     onMutate: async (variables) => {
+      const { categoryId } = variables;
       await queryClient.cancelQueries({ queryKey: ['categories', storeId] });
       await queryClient.cancelQueries({ queryKey: ['categories-tree', storeId] });
 
-      const previousList = queryClient.getQueryData<CategoryListResult>(['categories', storeId]);
+      const previousLists = queryClient.getQueriesData<CategoryListResult>({
+        queryKey: ['categories', storeId],
+      });
       const previousTree = queryClient.getQueryData<CategoryTree[]>(['categories-tree', storeId]);
 
-      if (previousList) {
-        queryClient.setQueryData(
-          ['categories', storeId],
-          removeCategoryFromList(previousList, variables.categoryId)
-        );
-      }
+      queryClient.setQueriesData<CategoryListResult>(
+        { queryKey: ['categories', storeId] },
+        (old) => {
+          if (!old?.data) return old;
+          return {
+            ...old,
+            data: old.data.filter((c) => c.id !== categoryId),
+            pagination: {
+              ...old.pagination,
+              total: Math.max(0, old.pagination.total - 1),
+            },
+          };
+        }
+      );
 
-      return { previousList, previousTree };
+      return { previousLists, previousTree };
     },
 
     onSuccess: (data) => {
       toast.success(data.message || 'تم حذف القسم بنجاح');
     },
 
-    onError: (error, variables, context) => {
-      if (context?.previousList) {
-        queryClient.setQueryData(['categories', storeId], context.previousList);
+    onError: (error, _variables, context) => {
+      if (context?.previousLists) {
+        context.previousLists.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
       }
       if (context?.previousTree) {
         queryClient.setQueryData(['categories-tree', storeId], context.previousTree);
@@ -278,6 +276,7 @@ export function useDeleteCategory(storeId: string) {
       queryClient.invalidateQueries({ queryKey: ['categories', storeId] });
       queryClient.invalidateQueries({ queryKey: ['categories-tree', storeId] });
       queryClient.invalidateQueries({ queryKey: ['categories-flat', storeId] });
+      queryClient.invalidateQueries({ queryKey: ['store-snapshot', storeId] });
     },
   });
 }
@@ -304,31 +303,39 @@ export function useBulkDeleteCategories(storeId: string) {
       await queryClient.cancelQueries({ queryKey: ['categories', storeId] });
       await queryClient.cancelQueries({ queryKey: ['categories-tree', storeId] });
 
-      const previousList = queryClient.getQueryData<CategoryListResult>(['categories', storeId]);
+      const previousLists = queryClient.getQueriesData<CategoryListResult>({
+        queryKey: ['categories', storeId],
+      });
       const previousTree = queryClient.getQueryData<CategoryTree[]>(['categories-tree', storeId]);
+      const idsToDelete = new Set(variables.input.categoryIds);
 
-      if (previousList?.data) {
-        const idsToDelete = new Set(variables.input.categoryIds);
-        queryClient.setQueryData(['categories', storeId], {
-          ...previousList,
-          data: previousList.data.filter((c) => !idsToDelete.has(c.id)),
-          pagination: {
-            ...previousList.pagination,
-            total: Math.max(0, previousList.pagination.total - variables.input.categoryIds.length),
-          },
-        });
-      }
+      queryClient.setQueriesData<CategoryListResult>(
+        { queryKey: ['categories', storeId] },
+        (old) => {
+          if (!old?.data) return old;
+          return {
+            ...old,
+            data: old.data.filter((c) => !idsToDelete.has(c.id)),
+            pagination: {
+              ...old.pagination,
+              total: Math.max(0, old.pagination.total - variables.input.categoryIds.length),
+            },
+          };
+        }
+      );
 
-      return { previousList, previousTree };
+      return { previousLists, previousTree };
     },
 
     onSuccess: (data) => {
-      toast.success(data.message || `تم حذف الأقسام بنجاح`);
+      toast.success(data.message || 'تم حذف الأقسام بنجاح');
     },
 
-    onError: (error, variables, context) => {
-      if (context?.previousList) {
-        queryClient.setQueryData(['categories', storeId], context.previousList);
+    onError: (error, _variables, context) => {
+      if (context?.previousLists) {
+        context.previousLists.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
       }
       if (context?.previousTree) {
         queryClient.setQueryData(['categories-tree', storeId], context.previousTree);
@@ -340,6 +347,7 @@ export function useBulkDeleteCategories(storeId: string) {
       queryClient.invalidateQueries({ queryKey: ['categories', storeId] });
       queryClient.invalidateQueries({ queryKey: ['categories-tree', storeId] });
       queryClient.invalidateQueries({ queryKey: ['categories-flat', storeId] });
+      queryClient.invalidateQueries({ queryKey: ['store-snapshot', storeId] });
     },
   });
 }
@@ -366,41 +374,45 @@ export function useReorderCategories(storeId: string) {
       await queryClient.cancelQueries({ queryKey: ['categories', storeId] });
       await queryClient.cancelQueries({ queryKey: ['categories-tree', storeId] });
 
-      const previousList = queryClient.getQueryData<CategoryListResult>(['categories', storeId]);
+      const previousLists = queryClient.getQueriesData<CategoryListResult>({
+        queryKey: ['categories', storeId],
+      });
       const previousTree = queryClient.getQueryData<CategoryTree[]>(['categories-tree', storeId]);
 
-      if (previousList?.data) {
-        const categoryMap = new Map<string, Category>(
-          previousList.data.map((c) => [c.id, c])
-        );
+      queryClient.setQueriesData<CategoryListResult>(
+        { queryKey: ['categories', storeId] },
+        (old) => {
+          if (!old?.data) return old;
+          const categoryMap = new Map<string, Category>(old.data.map((c) => [c.id, c]));
 
-        const reordered = variables.input.categoryIds
-          .map((id, index) => {
-            const cat = categoryMap.get(id);
-            return cat ? { ...cat, order: index, updatedAt: new Date() } : null;
-          })
-          .filter((c): c is Category => c !== null);
+          const reordered = variables.input.categoryIds
+            .map((id, index) => {
+              const cat = categoryMap.get(id);
+              return cat ? { ...cat, order: index, updatedAt: new Date() } : null;
+            })
+            .filter((c): c is Category => c !== null);
 
-        const others = previousList.data.filter(
-          (c) => !variables.input.categoryIds.includes(c.id)
-        );
+          const others = old.data.filter((c) => !variables.input.categoryIds.includes(c.id));
 
-        queryClient.setQueryData(['categories', storeId], {
-          ...previousList,
-          data: [...reordered, ...others],
-        });
-      }
+          return {
+            ...old,
+            data: [...reordered, ...others],
+          };
+        }
+      );
 
-      return { previousList, previousTree };
+      return { previousLists, previousTree };
     },
 
     onSuccess: (data) => {
       toast.success(data.message || 'تم إعادة ترتيب الأقسام بنجاح');
     },
 
-    onError: (error, variables, context) => {
-      if (context?.previousList) {
-        queryClient.setQueryData(['categories', storeId], context.previousList);
+    onError: (error, _variables, context) => {
+      if (context?.previousLists) {
+        context.previousLists.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
       }
       if (context?.previousTree) {
         queryClient.setQueryData(['categories-tree', storeId], context.previousTree);
@@ -435,32 +447,39 @@ export function useMoveCategory(storeId: string) {
     },
 
     onMutate: async (variables) => {
+      const { categoryId, newParentId } = variables.input;
       await queryClient.cancelQueries({ queryKey: ['categories', storeId] });
       await queryClient.cancelQueries({ queryKey: ['categories-tree', storeId] });
-      await queryClient.cancelQueries({ queryKey: ['category', variables.input.categoryId] });
+      await queryClient.cancelQueries({ queryKey: ['category', categoryId] });
 
-      const previousList = queryClient.getQueryData<CategoryListResult>(['categories', storeId]);
+      const previousLists = queryClient.getQueriesData<CategoryListResult>({
+        queryKey: ['categories', storeId],
+      });
       const previousTree = queryClient.getQueryData<CategoryTree[]>(['categories-tree', storeId]);
-      const previousCategory = queryClient.getQueryData<Category>(['category', variables.input.categoryId]);
-
-      if (previousList) {
-        queryClient.setQueryData(
-          ['categories', storeId],
-          updateCategoryInList(previousList, variables.input.categoryId, {
-            parentId: variables.input.newParentId,
-          })
-        );
-      }
+      const previousCategory = queryClient.getQueryData<Category>(['category', categoryId]);
 
       if (previousCategory) {
-        queryClient.setQueryData(['category', variables.input.categoryId], {
+        queryClient.setQueryData<Category>(['category', categoryId], {
           ...previousCategory,
-          parentId: variables.input.newParentId,
+          parentId: newParentId,
           updatedAt: new Date(),
         });
       }
 
-      return { previousList, previousTree, previousCategory };
+      queryClient.setQueriesData<CategoryListResult>(
+        { queryKey: ['categories', storeId] },
+        (old) => {
+          if (!old?.data) return old;
+          return {
+            ...old,
+            data: old.data.map((c) =>
+              c.id === categoryId ? { ...c, parentId: newParentId, updatedAt: new Date() } : c
+            ),
+          };
+        }
+      );
+
+      return { previousLists, previousTree, previousCategory };
     },
 
     onSuccess: (data) => {
@@ -468,8 +487,10 @@ export function useMoveCategory(storeId: string) {
     },
 
     onError: (error, variables, context) => {
-      if (context?.previousList) {
-        queryClient.setQueryData(['categories', storeId], context.previousList);
+      if (context?.previousLists) {
+        context.previousLists.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
       }
       if (context?.previousTree) {
         queryClient.setQueryData(['categories-tree', storeId], context.previousTree);

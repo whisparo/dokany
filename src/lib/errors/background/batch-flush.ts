@@ -21,6 +21,10 @@ export interface ProcessedOrderPayload {
   [key: string]: unknown;
 }
 
+export interface BatchFlushOptions {
+  batchSize?: number;
+}
+
 export interface BatchFlushResult {
   totalProcessed: number;
   successCount: number;
@@ -35,9 +39,15 @@ export interface BatchFlushResult {
  */
 export async function processBatchFlush(
   env: Env,
-  batchSize: number = 200
+  optionsOrBatchSize: BatchFlushOptions | number = 200
 ): Promise<BatchFlushResult> {
   const startTime = performance.now();
+  
+  // مرونة في استقبال الـ Options سواء Object أو Number مباشر
+  const batchSize = typeof optionsOrBatchSize === 'number' 
+    ? optionsOrBatchSize 
+    : (optionsOrBatchSize?.batchSize ?? 200);
+
   let totalProcessed = 0;
   let successCount = 0;
   let failureCount = 0;
@@ -64,7 +74,7 @@ export async function processBatchFlush(
 
     const allKeys: KeyItem[] = [];
 
-    // 1️⃣ جلب المفاتيح مع تحديد نوع listRes صراحة
+    // 1️⃣ جلب المفاتيح مع Retry Logic
     let listAttempts = 0;
     while (listAttempts < 3) {
       try {
@@ -109,29 +119,40 @@ export async function processBatchFlush(
       const stmts: D1PreparedStatement[] = [];
       const keysToDelete: string[] = [];
 
-      for (const keyObj of chunkKeys) {
-        const rawData = await kvInstance.get(keyObj.name);
-        if (!rawData) continue;
+      // ⚡ تحسين الأداء: قراءة الدفعة بالتوازي عبر Concurrent Fetching
+      const READ_CHUNK_SIZE = 25;
+      for (let j = 0; j < chunkKeys.length; j += READ_CHUNK_SIZE) {
+        const subChunk = chunkKeys.slice(j, j + READ_CHUNK_SIZE);
+        const rawResults = await Promise.all(
+          subChunk.map((k) => kvInstance.get(k.name))
+        );
 
-        try {
-          const data: ProcessedOrderPayload = JSON.parse(rawData);
+        for (let idx = 0; idx < subChunk.length; idx++) {
+          const rawData = rawResults[idx];
+          const keyObj = subChunk[idx];
 
-          stmts.push(
-            env.DB.prepare(
-              `INSERT INTO buffered_orders (id, store_id, idempotency_key, total_amount_int, payload, status)
-               VALUES (?, ?, ?, ?, ?, 'FLUSHED')
-               ON CONFLICT(idempotency_key) DO NOTHING;`
-            ).bind(
-              crypto.randomUUID(),
-              data.storeId || 'default',
-              data.idempotencyKey,
-              data.totalAmountInt,
-              rawData
-            )
-          );
-          keysToDelete.push(keyObj.name);
-        } catch (e) {
-          console.error(`[BatchFlush] Failed to parse payload for key: ${keyObj.name}`, e);
+          if (!rawData) continue;
+
+          try {
+            const data: ProcessedOrderPayload = JSON.parse(rawData);
+
+            stmts.push(
+              env.DB.prepare(
+                `INSERT INTO buffered_orders (id, store_id, idempotency_key, total_amount_int, payload, status)
+                 VALUES (?, ?, ?, ?, ?, 'FLUSHED')
+                 ON CONFLICT(idempotency_key) DO NOTHING;`
+              ).bind(
+                crypto.randomUUID(),
+                data.storeId || 'default',
+                data.idempotencyKey,
+                data.totalAmountInt,
+                rawData
+              )
+            );
+            keysToDelete.push(keyObj.name);
+          } catch (e) {
+            console.error(`[BatchFlush] Failed to parse payload for key: ${keyObj.name}`, e);
+          }
         }
       }
 
@@ -139,7 +160,7 @@ export async function processBatchFlush(
 
       totalProcessed += stmts.length;
 
-      // 3️⃣ Retry Loop بـ Exponential Backoff
+      // 3️⃣ Retry Loop بـ Exponential Backoff للكتابة في D1
       let dbSuccess = false;
       let retryDelay = 500;
 
@@ -161,8 +182,8 @@ export async function processBatchFlush(
       if (dbSuccess) {
         successCount += stmts.length;
 
-        // مسح المفاتيح على مجموعات صغيرة تجنباً لـ Subrequest Rate Limits
-        const DELETE_CHUNK_SIZE = 10;
+        // مسح المفاتيح على مجموعات تجنباً لـ Subrequest Rate Limits
+        const DELETE_CHUNK_SIZE = 15;
         for (let k = 0; k < keysToDelete.length; k += DELETE_CHUNK_SIZE) {
           const chunk = keysToDelete.slice(k, k + DELETE_CHUNK_SIZE);
           await Promise.all(chunk.map((key) => kvInstance.delete(key)));

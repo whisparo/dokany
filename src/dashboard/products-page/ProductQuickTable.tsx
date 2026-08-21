@@ -36,7 +36,6 @@ import {
 } from '@/components/shared/Dialog/Dialog';
 import type { Product } from '@/lib/db/schema/products';
 
-// تعريض النوع ليتوافق مع بيانات الـ API/UI بدون تعارض مع سكيما الداتابيز
 export type ProductQuickTableItem = Omit<Product, 'images'> & {
   images?: Array<{ url: string }> | unknown;
 };
@@ -99,21 +98,23 @@ export function ProductQuickTable({
             <TableRow>
               <TableHead className="w-[200px]">المنتج</TableHead>
               <TableHead>القسم</TableHead>
-              <TableHead className="text-left">السعر</TableHead>
-              <TableHead className="text-left">المخزون</TableHead>
-              <TableHead className="text-left">الحالة</TableHead>
-              <TableHead className="w-[100px] text-left">إجراءات</TableHead>
+              <TableHead className="text-start">السعر</TableHead>
+              <TableHead className="text-start">المخزون</TableHead>
+              <TableHead className="text-start">الحالة</TableHead>
+              <TableHead className="w-[100px] text-end">إجراءات</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {products.map((product) => {
-              // استخراج رابط الصورة بأمان بغض النظر عن شكل الـ JSON
               const firstImage = Array.isArray(product.images)
                 ? (product.images[0] as { url?: string } | undefined)?.url
                 : undefined;
 
               const lowThreshold = product.lowStockThreshold ?? 5;
               const isLowStock = product.stock <= lowThreshold;
+
+              // تحويل القيمة الصحيحة (Integer) المنسوبة للـ Main Units إلى قيمة عشرية للعرض
+              const displayPrice = (product.price / 100).toFixed(2);
 
               return (
                 <TableRow key={product.id}>
@@ -141,10 +142,10 @@ export function ProductQuickTable({
                     </div>
                   </TableCell>
                   <TableCell>{product.categoryId || 'بدون قسم'}</TableCell>
-                  <TableCell className="text-left font-mono">
-                    {(product.price / 100).toFixed(2)} ريال
+                  <TableCell className="text-start font-mono">
+                    {displayPrice} ريال
                   </TableCell>
-                  <TableCell className="text-left">
+                  <TableCell className="text-start">
                     {editingStock?.id === product.id ? (
                       <div className="flex items-center gap-1">
                         <Input
@@ -205,14 +206,14 @@ export function ProductQuickTable({
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="text-left">
+                  <TableCell className="text-start">
                     {product.isPublished ? (
                       <Badge variant="success">منشور</Badge>
                     ) : (
                       <Badge variant="secondary">مسودة</Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-left">
+                  <TableCell className="text-end">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0">

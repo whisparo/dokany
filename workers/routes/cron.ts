@@ -28,7 +28,6 @@ function verifyCronAuth(c: any) {
   const clientSecret =
     c.req.header('X-Cron-Secret') || c.req.header('x-internal-secret') || '';
 
-  // 🧹 تم مسح QSTASH_TOKEN - الاعتماد فقط على أسرار كلاودفلير الداخلية
   const validSecrets = [
     c.env.CRON_SECRET,
     c.env.INTERNAL_API_SECRET,
@@ -85,6 +84,7 @@ cronRouter.post('/cron/flush-orders', (c) =>
     async () => {
       verifyCronAuth(c);
 
+      // ✅ التمرير الصحيح للخيارات مع الحفاظ على الحد الأقصى لكل دفعة
       const result = await processBatchFlush(c.env, {
         batchSize: 200,
       });

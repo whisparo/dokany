@@ -42,36 +42,13 @@ interface ProductListQueryData {
 }
 
 interface MutationContext {
-  previousList?: ProductListQueryData;
+  previousLists?: [readonly unknown[], ProductListQueryData | undefined][];
   previousProduct?: Product;
-  optimisticId?: string;
 }
 
 // ============================================================
 // 🧰 دوال مساعدة (Internal Helpers)
 // ============================================================
-
-function removeOptimisticProduct(
-  queryClient: ReturnType<typeof useQueryClient>,
-  storeId: string,
-  optimisticId: string
-) {
-  const currentData = queryClient.getQueryData<ProductListQueryData>([
-    'products',
-    storeId,
-  ]);
-
-  if (currentData?.data.some((p: Product) => p.id === optimisticId)) {
-    queryClient.setQueryData<ProductListQueryData>(['products', storeId], {
-      ...currentData,
-      data: currentData.data.filter((p: Product) => p.id !== optimisticId),
-      pagination: {
-        ...currentData.pagination,
-        total: Math.max(0, currentData.pagination.total - 1),
-      },
-    });
-  }
-}
 
 function parseDimension(val: number | undefined | null): string | null {
   if (val === undefined || val === null) return null;
@@ -100,12 +77,13 @@ export function useCreateProduct(storeId: string) {
     },
 
     onMutate: async (input: CreateProductInput) => {
+      // 1. إيقاف أي كويريز شغالة للـ Products
       await queryClient.cancelQueries({ queryKey: ['products', storeId] });
 
-      const previousList = queryClient.getQueryData<ProductListQueryData>([
-        'products',
-        storeId,
-      ]);
+      // 2. أخذ Snapshot من كل القوائم المخزنة للـ Store ده (لـ Rollback في حالة الخطأ)
+      const previousLists = queryClient.getQueriesData<ProductListQueryData>({
+        queryKey: ['products', storeId],
+      });
 
       const optimisticId = `optimistic_${Date.now()}`;
       const optimisticProduct: Product = {
@@ -146,29 +124,27 @@ export function useCreateProduct(storeId: string) {
         updatedAt: new Date(),
       };
 
-      if (previousList) {
-        queryClient.setQueryData<ProductListQueryData>(['products', storeId], {
-          ...previousList,
-          data: [optimisticProduct, ...previousList.data],
-          pagination: {
-            ...previousList.pagination,
-            total: previousList.pagination.total + 1,
-          },
-        });
-      }
+      // 3. تحديث التفاؤلي لكل القوائم المخزنة لـ storeId بغض النظر عن الفلاتر والصفحات
+      queryClient.setQueriesData<ProductListQueryData>(
+        { queryKey: ['products', storeId] },
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            data: [optimisticProduct, ...old.data],
+            pagination: {
+              ...old.pagination,
+              total: old.pagination.total + 1,
+            },
+          };
+        }
+      );
 
-      return { previousList, optimisticId };
+      return { previousLists };
     },
 
-    onSuccess: (
-      data: ServerActionResult<Product>,
-      _variables: CreateProductInput,
-      context?: MutationContext
-    ) => {
+    onSuccess: (data: ServerActionResult<Product>) => {
       toast.success(data.message || 'تم إضافة المنتج بنجاح');
-      if (context?.optimisticId) {
-        removeOptimisticProduct(queryClient, storeId, context.optimisticId);
-      }
     },
 
     onError: (
@@ -176,8 +152,11 @@ export function useCreateProduct(storeId: string) {
       _variables: CreateProductInput,
       context?: MutationContext
     ) => {
-      if (context?.previousList) {
-        queryClient.setQueryData<ProductListQueryData>(['products', storeId], context.previousList);
+      // إرجاع كافة القوائم لوضعها السابق
+      if (context?.previousLists) {
+        context.previousLists.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
       }
       toast.error(error.message || 'فشل إنشاء المنتج');
     },
@@ -223,10 +202,9 @@ export function useUpdateProduct(storeId: string) {
       await queryClient.cancelQueries({ queryKey: ['products', storeId] });
 
       const previousProduct = queryClient.getQueryData<Product>(['product', productId]);
-      const previousList = queryClient.getQueryData<ProductListQueryData>([
-        'products',
-        storeId,
-      ]);
+      const previousLists = queryClient.getQueriesData<ProductListQueryData>({
+        queryKey: ['products', storeId],
+      });
 
       const { weight, length, width, height, metadata, ...restInput } = input;
 
@@ -251,27 +229,31 @@ export function useUpdateProduct(storeId: string) {
         queryClient.setQueryData<Product>(['product', productId], updatedProduct);
       }
 
-      if (previousList) {
-        queryClient.setQueryData<ProductListQueryData>(['products', storeId], {
-          ...previousList,
-          data: previousList.data.map((p: Product): Product =>
-            p.id === productId
-              ? {
-                  ...p,
-                  ...restInput,
-                  ...formattedDimensions,
-                  metadata: metadata
-                    ? (metadata as ProductMetadata)
-                    : p.metadata,
-                  updatedAt: new Date(),
-                  version: p.version + 1,
-                }
-              : p
-          ),
-        });
-      }
+      queryClient.setQueriesData<ProductListQueryData>(
+        { queryKey: ['products', storeId] },
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            data: old.data.map((p: Product): Product =>
+              p.id === productId
+                ? {
+                    ...p,
+                    ...restInput,
+                    ...formattedDimensions,
+                    metadata: metadata
+                      ? (metadata as ProductMetadata)
+                      : p.metadata,
+                    updatedAt: new Date(),
+                    version: p.version + 1,
+                  }
+                : p
+            ),
+          };
+        }
+      );
 
-      return { previousProduct, previousList };
+      return { previousProduct, previousLists };
     },
 
     onSuccess: (data: ServerActionResult<Product>) => {
@@ -286,8 +268,10 @@ export function useUpdateProduct(storeId: string) {
       if (context?.previousProduct) {
         queryClient.setQueryData<Product>(['product', variables.productId], context.previousProduct);
       }
-      if (context?.previousList) {
-        queryClient.setQueryData<ProductListQueryData>(['products', storeId], context.previousList);
+      if (context?.previousLists) {
+        context.previousLists.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
       }
       toast.error(error.message || 'فشل تحديث المنتج');
     },
@@ -330,23 +314,26 @@ export function useDeleteProduct(storeId: string) {
     onMutate: async (productId: string) => {
       await queryClient.cancelQueries({ queryKey: ['products', storeId] });
 
-      const previousList = queryClient.getQueryData<ProductListQueryData>([
-        'products',
-        storeId,
-      ]);
+      const previousLists = queryClient.getQueriesData<ProductListQueryData>({
+        queryKey: ['products', storeId],
+      });
 
-      if (previousList) {
-        queryClient.setQueryData<ProductListQueryData>(['products', storeId], {
-          ...previousList,
-          data: previousList.data.filter((p: Product) => p.id !== productId),
-          pagination: {
-            ...previousList.pagination,
-            total: Math.max(0, previousList.pagination.total - 1),
-          },
-        });
-      }
+      queryClient.setQueriesData<ProductListQueryData>(
+        { queryKey: ['products', storeId] },
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            data: old.data.filter((p: Product) => p.id !== productId),
+            pagination: {
+              ...old.pagination,
+              total: Math.max(0, old.pagination.total - 1),
+            },
+          };
+        }
+      );
 
-      return { previousList };
+      return { previousLists };
     },
 
     onSuccess: (data: ServerActionResult) => {
@@ -358,8 +345,10 @@ export function useDeleteProduct(storeId: string) {
       _productId: string,
       context?: MutationContext
     ) => {
-      if (context?.previousList) {
-        queryClient.setQueryData<ProductListQueryData>(['products', storeId], context.previousList);
+      if (context?.previousLists) {
+        context.previousLists.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
       }
       toast.error(error.message || 'فشل حذف المنتج');
     },
@@ -410,10 +399,9 @@ export function useUpdateStock(storeId: string) {
       await queryClient.cancelQueries({ queryKey: ['products', storeId] });
 
       const previousProduct = queryClient.getQueryData<Product>(['product', productId]);
-      const previousList = queryClient.getQueryData<ProductListQueryData>([
-        'products',
-        storeId,
-      ]);
+      const previousLists = queryClient.getQueriesData<ProductListQueryData>({
+        queryKey: ['products', storeId],
+      });
 
       if (previousProduct) {
         queryClient.setQueryData<Product>(['product', productId], {
@@ -424,18 +412,22 @@ export function useUpdateStock(storeId: string) {
         });
       }
 
-      if (previousList) {
-        queryClient.setQueryData<ProductListQueryData>(['products', storeId], {
-          ...previousList,
-          data: previousList.data.map((p: Product) =>
-            p.id === productId
-              ? { ...p, stock: newStock, updatedAt: new Date(), version: p.version + 1 }
-              : p
-          ),
-        });
-      }
+      queryClient.setQueriesData<ProductListQueryData>(
+        { queryKey: ['products', storeId] },
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            data: old.data.map((p: Product) =>
+              p.id === productId
+                ? { ...p, stock: newStock, updatedAt: new Date(), version: p.version + 1 }
+                : p
+            ),
+          };
+        }
+      );
 
-      return { previousProduct, previousList };
+      return { previousProduct, previousLists };
     },
 
     onSuccess: (data: StockResult) => {
@@ -450,8 +442,10 @@ export function useUpdateStock(storeId: string) {
       if (context?.previousProduct) {
         queryClient.setQueryData<Product>(['product', variables.productId], context.previousProduct);
       }
-      if (context?.previousList) {
-        queryClient.setQueryData<ProductListQueryData>(['products', storeId], context.previousList);
+      if (context?.previousLists) {
+        context.previousLists.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
       }
       toast.error(error.message || 'فشل تحديث المخزون');
     },

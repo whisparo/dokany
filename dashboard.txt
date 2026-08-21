@@ -779,3 +779,36 @@ Layer 1 (Client/Browser Cache): مزامنة الـ KV Snapshot مع متصفح 
 كتابة Unit Tests للـ Index Gateways والتأكد من تحويل واستخراج الأخطاء عبر الـ Telegram Error Adapter بدون توقف الـ Service.
 
 فحص سلامة الـ Composite Indexes وتدفق الـ Correlation ID عبر المسارات المعزولة.
+
+
+
+
+
+
+
+
+
+
+
+
+
+Plaintext
+src/dashboard/orders-management/
+├── components/          # الـ UI Components الخاصة بالموديول ده فقط
+│   └── index.ts        # بيصدر المكونات المباشرة
+├── hooks/               # الـ Custom Hooks والـ React Query Mutators
+│   └── index.ts        # بيصدر الـ Hooks والـ Types الخاصة بيها
+├── server/              # الـ Server Actions & Database Queries
+│   └── index.ts        # بيصدر الـ Actions فقط (بيئة سيرفر ناصعة)
+└── types/               # Pure Types Script
+    └── index.ts        # الأنواع والـ Schemas
+القواعد الـ 3 لمنع أي لخبطة مستقبلاً:
+ممنوع إنشاء index.ts رئيسي جوه الفولدر الأب (orders-management/index.ts) يجمع بين السيرفر والكلاينت.
+
+الاستيراد بيمشي صريح:
+
+لو محتاج Server Action تستورد من @/dashboard/orders-management/server
+
+لو محتاج Components تستورد من @/dashboard/orders-management/components
+
+صفحات الـ Route خفيفة دائماً: الفولدر اللي بيعبر عن الصفحة زي orders-page جواه الـ UI والـ Page Hook (useOrdersPage) اللي بيبسط الصفحة ويوصلها بالـ Management modules.

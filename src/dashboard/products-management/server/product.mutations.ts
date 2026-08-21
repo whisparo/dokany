@@ -21,6 +21,7 @@ import {
   sanitizeProductInput,
   prepareProductInsertData,
   prepareProductUpdateData,
+  checkSkuExists,
 } from './product.helpers';
 
 // ============================================================
@@ -47,6 +48,23 @@ export async function createProductAction(input: CreateProductInput) {
       validatedData.cost,
       validatedData.minPrice
     );
+
+    // 🔍 فحص عدم تكرار الـ SKU
+    if (validatedData.sku) {
+      const skuExists = await checkSkuExists(validatedData.sku, storeId);
+      if (skuExists) {
+        throw new SystemError({
+          code: 'PRODUCT_SKU_EXISTS',
+          userMessage: 'رمز المنتج (SKU) مستخدم بالفعل لمنتج آخر',
+          technicalMessage: `Duplicate SKU: ${validatedData.sku}`,
+          category: 'business',
+          severity: 'warning',
+          retryable: true,
+          shouldAlert: false,
+          metadata: { sku: validatedData.sku, storeId },
+        });
+      }
+    }
 
     const { db } = await getAppDb();
     const slug =
@@ -75,15 +93,20 @@ export async function createProductAction(input: CreateProductInput) {
       slug,
     });
 
-    const [result] = await db.insert(products).values(newProduct).returning();
+    // ⚛️ إدخال المنتج والـ Stats داخل Atomic Transaction واحدة
+    const result = await db.transaction(async (tx) => {
+      const [insertedProduct] = await tx.insert(products).values(newProduct).returning();
 
-    await db.insert(productStats).values({
-      id: crypto.randomUUID(),
-      productId: result.id,
-      viewsCount: 0,
-      salesCount: 0,
-      reviewsCount: 0,
-      rating: 0,
+      await tx.insert(productStats).values({
+        id: crypto.randomUUID(),
+        productId: insertedProduct.id,
+        viewsCount: 0,
+        salesCount: 0,
+        reviewsCount: 0,
+        rating: 0,
+      });
+
+      return insertedProduct;
     });
 
     await invalidateStoreSnapshot(storeId);
