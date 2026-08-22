@@ -19,6 +19,7 @@ export interface MediaQueuePayload {
 export interface Env {
   // Database & Storage KV
   DB: D1Database;
+  BUFFER_KV: KVNamespace; // 👈 تم إضافة BUFFER_KV للـ Snapshots
   CUSTOM_DOMAINS_KV?: KVNamespace;
 
   // Authentication & Internal Security

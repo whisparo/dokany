@@ -98,6 +98,31 @@ export async function getOrWarmupStock(
 }
 
 /**
+ * 🎯 جلب المخزون لمجموعة من المنتجات بالتوازي (Bulk Fetch)
+ */
+export async function getMultipleStocks(
+  env: Env,
+  storeId: string,
+  productIds: string[]
+): Promise<Map<string, number>> {
+  const stockMap = new Map<string, number>();
+
+  if (productIds.length === 0) {
+    return stockMap;
+  }
+
+  const stocks = await Promise.all(
+    productIds.map((id) => getOrWarmupStock(env, storeId, id))
+  );
+
+  productIds.forEach((id, index) => {
+    stockMap.set(id, stocks[index] ?? 0);
+  });
+
+  return stockMap;
+}
+
+/**
  * خصم المخزون مؤقتاً في الـ KV
  */
 export async function deductStockCache(

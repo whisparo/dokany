@@ -3,9 +3,17 @@
 import { Hono } from 'hono';
 import type { Env } from '../../src/lib/env';
 import { safeExecute, SystemError } from '../../src/lib/errors';
+import { processErrorQueueHandler } from '../../src/lib/errors/background/processor';
 
 export const errorsRouter = new Hono<{ Bindings: Env }>();
 
+// 🎯 المعالج الخلفي الفعلي للأخطاء (يُستدعى دورياً عبر QStash)
+errorsRouter.post('/errors/process', async (c) => {
+  const result = await processErrorQueueHandler(c.env as any);
+  return c.json(result, 200);
+});
+
+// 🧪 مسار الاختبار والتأكد من تليجرام و B2
 errorsRouter.get('/errors/test-telegram', (c) =>
   safeExecute(async () => {
     // 1. تجهيز بيئة تليجرام للتأكد من المكونات

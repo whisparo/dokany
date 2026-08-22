@@ -93,6 +93,12 @@ snapshotRouter.get('/store/:storeSlug/snapshot', (c) =>
       });
     }
 
+    // الاعتماد على التاريخ كـ Version لو القيمة المسجلة هي 1 أو غير معرفة
+    const activeVersion =
+      store.snapshotVersion && store.snapshotVersion > 1
+        ? store.snapshotVersion
+        : Date.now();
+
     // ═══════════════════════════════════════════════════════════
     // 2️⃣ جلب التصنيفات والمنتجات بالتوازي وبحقول محددة لتقليل memory overhead
     // ═══════════════════════════════════════════════════════════
@@ -151,7 +157,7 @@ snapshotRouter.get('/store/:storeSlug/snapshot', (c) =>
     // ═══════════════════════════════════════════════════════════
     // 3️⃣ ETag Validation (قبل تشكيل الـ Snapshot JSON الكبير)
     // ═══════════════════════════════════════════════════════════
-    const etag = `"v${store.snapshotVersion}"`;
+    const etag = `"v${activeVersion}"`;
     const ifNoneMatch = c.req.header('If-None-Match');
 
     if (ifNoneMatch === etag) {
@@ -168,7 +174,7 @@ snapshotRouter.get('/store/:storeSlug/snapshot', (c) =>
     // 4️⃣ بناء الـ Snapshot لمعالجة الحقول النصية المتداخلة
     // ═══════════════════════════════════════════════════════════
     const snapshot = {
-      version: store.snapshotVersion,
+      version: activeVersion,
       storeId: store.id,
       generatedAt: Date.now(),
       store: {
@@ -261,8 +267,12 @@ snapshotRouter.get('/store/:storeSlug/version', (c) =>
       });
     }
 
-    const version = store.snapshotVersion;
-    const etag = `"v${store.snapshotVersion}"`;
+    const activeVersion =
+      store.snapshotVersion && store.snapshotVersion > 1
+        ? store.snapshotVersion
+        : Date.now();
+
+    const etag = `"v${activeVersion}"`;
     const ifNoneMatch = c.req.header('If-None-Match');
 
     if (ifNoneMatch === etag) {
@@ -278,7 +288,7 @@ snapshotRouter.get('/store/:storeSlug/version', (c) =>
     return c.json(
       {
         storeId: store.id,
-        version,
+        version: activeVersion,
         checkedAt: Date.now(),
       },
       200,
